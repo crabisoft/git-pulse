@@ -1,0 +1,27 @@
+# ─── Build ───────────────────────────────────────────────────────────
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package.json package-lock.json* tsconfig.base.json ./
+COPY packages/shared/package.json packages/shared/
+COPY back/package.json back/
+RUN npm install
+COPY packages/shared packages/shared
+COPY back back
+RUN npm run build -w @repo/shared \
+  && npm run prisma:generate -w @repo/back \
+  && npm run build -w @repo/back
+
+# ─── Runtime ─────────────────────────────────────────────────────────
+FROM node:20-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/packages/shared/dist ./packages/shared/dist
+COPY --from=build /app/packages/shared/package.json ./packages/shared/
+COPY --from=build /app/back/dist ./back/dist
+COPY --from=build /app/back/prisma ./back/prisma
+COPY --from=build /app/back/package.json ./back/
+EXPOSE 3001
+# Apply versioned migrations (back/prisma/migrations) then start.
+# migrate deploy is non-interactive and idempotent — safe for prod.
+CMD ["sh", "-c", "npm run prisma:deploy -w @repo/back && node back/dist/main.js"]

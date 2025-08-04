@@ -1,0 +1,88 @@
+// Prisma schema — Phase 1 core + Phase 2 seeds (EnvRule, MetricSnapshot).
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SourceKind {
+  github
+  gitlab
+}
+
+enum AuthKind {
+  token
+  app
+}
+
+/// A Git data source (GitHub or GitLab) with its tracking scope.
+model Source {
+  id        String     @id @default(uuid())
+  name      String
+  kind      SourceKind
+  baseUrl   String
+  authKind  AuthKind
+  /// ScopeRules payload: { owner, include[], exclude[] }.
+  scope     Json
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  credential Credential?
+  envRules   EnvRule[]
+  snapshots  MetricSnapshot[]
+}
+
+/// Access secret for a source, encrypted at rest (AES-256-GCM envelope).
+/// Plaintext is never stored — see CryptoService.
+model Credential {
+  id         String   @id @default(uuid())
+  source     Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId   String   @unique
+  ciphertext Bytes
+  iv         Bytes
+  authTag    Bytes
+  /// Master key version that encrypted this secret (for rotation).
+  keyVersion Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+enum EnvRuleKind {
+  simple
+  meta
+}
+
+/// RegEx-based environment classification rule (Phase 2).
+/// simple: extracts attributes via named groups (type, client, ...).
+/// meta:   groups every environment matching the pattern.
+model EnvRule {
+  id         String      @id @default(uuid())
+  source     Source      @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId   String
+  name       String
+  pattern    String
+  kind       EnvRuleKind
+  /// Client-defined priority (lower wins).
+  priority   Int         @default(100)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@index([sourceId, priority])
+}
+
+/// Historized metric snapshot (Phase 2) — the basis for DORA trends.
+model MetricSnapshot {
+  id         String   @id @default(uuid())
+  source     Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId   String
+  metric     String
+  value      Float
+  /// Aggregation dimensions (env type, client, repo, ...).
+  dimensions Json
+  capturedAt DateTime @default(now())
+
+  @@index([sourceId, metric, capturedAt])
+}

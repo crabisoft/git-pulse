@@ -1,0 +1,30 @@
+{
+  "name": "git-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Dashboard self-hosted de monitoring GitHub/GitLab (DORA, release notes IA, connecteurs paramétrables)",
+  "workspaces": [
+    "packages/*",
+    "back",
+    "front"
+  ],
+  "scripts": {
+    "build": "npm run build -w @repo/shared && npm run build -w @repo/back && npm run build -w @repo/front",
+    "build:shared": "npm run build -w @repo/shared",
+    "dev:back": "npm run dev -w @repo/back",
+    "dev:front": "npm run dev -w @repo/front",
+    "docker:dev": "sh .docker/compose.sh dev up",
+    "docker:dev:down": "sh .docker/compose.sh dev down",
+    "docker:prod": "sh .docker/compose.sh prod up --build",
+    "docker:prod:down": "sh .docker/compose.sh prod down",
+    "docker:logs": "sh .docker/compose.sh dev logs -f",
+    "db:migrate": "cd back && prisma migrate dev",
+    "db:deploy": "cd back && prisma migrate deploy",
+    "db:studio": "cd back && prisma studio",
+    "lint": "echo \"(lint placeholder)\"",
+    "typecheck": "npm run typecheck -w @repo/shared && npm run typecheck -w @repo/back && npm run typecheck -w @repo/front"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

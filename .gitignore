@@ -1,0 +1,25 @@
+node_modules/
+dist/
+build/
+coverage/
+
+# Local env & secrets — NEVER commit
+.env
+.env.local
+*.local
+# ...but the Docker defaults file IS versioned (no real secrets in it)
+!.docker/.env
+data/
+*.key
+!/*.key.example
+
+# Prisma generated client
+back/src/generated/
+.prisma/
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.log

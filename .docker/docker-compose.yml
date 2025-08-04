@@ -1,0 +1,37 @@
+# Shared infrastructure base — db + redis.
+# Combined with a mode override:
+#   dev  → docker-compose.dev.yml  (watch / HMR, source mounted as a volume)
+#   prod → docker-compose.prod.yml (built images, nginx)
+# Use the wrapper: npm run docker:dev | npm run docker:prod
+#
+# Variables come from .docker/.env, overridden by .docker/.env.local.
+services:
+  db:
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dashboard}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dashboard}
+      POSTGRES_DB: ${POSTGRES_DB:-dashboard}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dashboard}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: ${REDIS_IMAGE:-redis:7-alpine}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  db-data:
+  master-key:
