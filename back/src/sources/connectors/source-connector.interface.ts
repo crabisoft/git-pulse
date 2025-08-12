@@ -3,6 +3,7 @@ import type {
   Pipeline,
   Deployment,
   ScopeRules,
+  ConnectionTestResult,
 } from '@repo/shared';
 
 /** Resolved connection context (decrypted secret) handed to a connector. */
@@ -21,7 +22,7 @@ export interface ConnectorContext {
 export interface SourceConnector {
   readonly kind: string;
 
-  testConnection(ctx: ConnectorContext): Promise<{ ok: boolean; message: string }>;
+  testConnection(ctx: ConnectorContext): Promise<ConnectionTestResult>;
 
   /** Repos/projects in scope, after include/exclude is applied. */
   listRepositories(ctx: ConnectorContext): Promise<string[]>;

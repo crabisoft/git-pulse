@@ -59,8 +59,9 @@ a:hover { text-decoration: underline; }
 }
 .tab:hover { background: var(--surface-2); }
 .tab.active { background: var(--accent); color: #fff; }
-.source-picker {
-  margin-left: auto; padding: 7px 10px; border-radius: 8px;
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.source-picker, .lang-select {
+  padding: 7px 10px; border-radius: 8px;
   border: 1px solid var(--line); background: var(--surface); color: var(--ink);
 }
 

@@ -81,6 +81,20 @@ export interface Deployment {
   createdAt: string;
 }
 
+// ─── Localizable messages ────────────────────────────────────────────
+
+/** A message identified by an i18n code, translated on the frontend. */
+export interface CodedMessage {
+  code: string;
+  params?: Record<string, string | number>;
+}
+
+/** Result of a source connection test. */
+export interface ConnectionTestResult {
+  ok: boolean;
+  message: CodedMessage;
+}
+
 // ─── Aggregated dashboard responses ──────────────────────────────────
 
 export interface DashboardLive {
@@ -94,5 +108,5 @@ export interface DashboardLive {
     runningPipelines: number;
   };
   /** Non-blocking errors collected while fetching. */
-  warnings: string[];
+  warnings: CodedMessage[];
 }

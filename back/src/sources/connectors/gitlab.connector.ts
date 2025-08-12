@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Gitlab } from '@gitbeaker/rest';
-import type { PullRequest, Pipeline, Deployment, PipelineStatus } from '@repo/shared';
+import type {
+  PullRequest,
+  Pipeline,
+  Deployment,
+  PipelineStatus,
+  ConnectionTestResult,
+} from '@repo/shared';
 import type { ConnectorContext, SourceConnector } from './source-connector.interface';
 import { applyScope, ageHours } from './scope.util';
 
@@ -19,13 +25,13 @@ export class GitLabConnector implements SourceConnector {
     });
   }
 
-  async testConnection(ctx: ConnectorContext) {
+  async testConnection(ctx: ConnectorContext): Promise<ConnectionTestResult> {
     try {
       const gl = this.client(ctx);
       await gl.Groups.show(ctx.scope.owner);
-      return { ok: true, message: `Connexion GitLab OK pour le groupe "${ctx.scope.owner}".` };
+      return { ok: true, message: { code: 'sources.test.ok', params: { owner: ctx.scope.owner } } };
     } catch (e) {
-      return { ok: false, message: `Échec de connexion GitLab : ${asMessage(e)}` };
+      return { ok: false, message: { code: 'sources.test.failed', params: { error: asMessage(e) } } };
     }
   }
 

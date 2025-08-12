@@ -1,5 +1,6 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, HttpStatus } from '@nestjs/common';
 import type { SourceKind } from '@repo/shared';
+import { CodedException } from '../../common/coded-exception';
 import type { SourceConnector } from './source-connector.interface';
 import { GitHubConnector } from './github.connector';
 import { GitLabConnector } from './gitlab.connector';
@@ -19,7 +20,7 @@ export class ConnectorFactory {
       case 'gitlab':
         return this.gitlab;
       default:
-        throw new BadRequestException(`Type de source non supporté : ${kind}`);
+        throw new CodedException('errors.source.unsupportedKind', HttpStatus.BAD_REQUEST, { kind });
     }
   }
 }

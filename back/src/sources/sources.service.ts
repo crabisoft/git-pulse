@@ -1,5 +1,6 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import type { ScopeRules, SourceKind, SourcePublic } from '@repo/shared';
+import { Injectable, HttpStatus } from '@nestjs/common';
+import type { ScopeRules, SourceKind, SourcePublic, ConnectionTestResult } from '@repo/shared';
+import { CodedException } from '../common/coded-exception';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../crypto/crypto.service';
 import type { ConnectorContext } from './connectors/source-connector.interface';
@@ -43,18 +44,18 @@ export class SourcesService {
 
   async findOne(id: string): Promise<SourcePublic> {
     const source = await this.prisma.source.findUnique({ where: { id } });
-    if (!source) throw new NotFoundException(`Source ${id} introuvable`);
+    if (!source) throw new CodedException('errors.source.notFound', HttpStatus.NOT_FOUND, { id });
     return toPublic(source);
   }
 
   async remove(id: string): Promise<void> {
     await this.prisma.source.delete({ where: { id } }).catch(() => {
-      throw new NotFoundException(`Source ${id} introuvable`);
+      throw new CodedException('errors.source.notFound', HttpStatus.NOT_FOUND, { id });
     });
   }
 
   /** Tests the connection, decrypting the secret on the fly. */
-  async testConnection(id: string): Promise<{ ok: boolean; message: string }> {
+  async testConnection(id: string): Promise<ConnectionTestResult> {
     const { ctx, kind } = await this.resolveContext(id);
     return this.connectors.for(kind).testConnection(ctx);
   }
@@ -70,9 +71,9 @@ export class SourcesService {
       where: { id },
       include: { credential: true },
     });
-    if (!source) throw new NotFoundException(`Source ${id} introuvable`);
+    if (!source) throw new CodedException('errors.source.notFound', HttpStatus.NOT_FOUND, { id });
     if (!source.credential) {
-      throw new NotFoundException(`Aucun secret enregistré pour la source ${id}`);
+      throw new CodedException('errors.source.noCredential', HttpStatus.NOT_FOUND, { id });
     }
     const token = this.crypto.decrypt({
       ciphertext: source.credential.ciphertext,

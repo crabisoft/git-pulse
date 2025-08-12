@@ -1,8 +1,10 @@
 import { useEffect, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { DashboardLive, PipelineStatus } from '@repo/shared';
-import { api } from '../api';
+import { api, apiErrorInfo } from '../api';
 
 export function DashboardPage({ sourceId }: { sourceId: string }) {
+  const { t } = useTranslation();
   const [data, setData] = useState<DashboardLive | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -13,11 +15,12 @@ export function DashboardPage({ sourceId }: { sourceId: string }) {
     try {
       setData(await api.live(sourceId));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const { code, params } = apiErrorInfo(e);
+      setError(t(code, params));
     } finally {
       setLoading(false);
     }
-  }, [sourceId]);
+  }, [sourceId, t]);
 
   useEffect(() => {
     void load();
@@ -26,9 +29,9 @@ export function DashboardPage({ sourceId }: { sourceId: string }) {
   return (
     <div>
       <div className="page-head">
-        <h2>Vue live</h2>
+        <h2>{t('dashboard.title')}</h2>
         <button className="btn" onClick={load} disabled={loading}>
-          {loading ? 'Actualisation…' : '↻ Actualiser'}
+          {loading ? t('common.refreshing') : `↻ ${t('common.refresh')}`}
         </button>
       </div>
 
@@ -37,33 +40,41 @@ export function DashboardPage({ sourceId }: { sourceId: string }) {
       {data && (
         <>
           <div className="tiles">
-            <Tile label="PR / MR ouvertes" value={data.summary.openPrs} />
-            <Tile label="PR / MR bloquées" value={data.summary.stalePrs} tone="warn" />
-            <Tile label="Pipelines en échec" value={data.summary.failedPipelines} tone="crit" />
-            <Tile label="Pipelines en cours" value={data.summary.runningPipelines} tone="accent" />
+            <Tile label={t('dashboard.tiles.openPrs')} value={data.summary.openPrs} />
+            <Tile label={t('dashboard.tiles.stalePrs')} value={data.summary.stalePrs} tone="warn" />
+            <Tile
+              label={t('dashboard.tiles.failedPipelines')}
+              value={data.summary.failedPipelines}
+              tone="crit"
+            />
+            <Tile
+              label={t('dashboard.tiles.runningPipelines')}
+              value={data.summary.runningPipelines}
+              tone="accent"
+            />
           </div>
 
           {data.warnings.length > 0 && (
             <div className="banner warn">
               {data.warnings.map((w, i) => (
-                <div key={i}>⚠ {w}</div>
+                <div key={i}>⚠ {t(w.code, w.params)}</div>
               ))}
             </div>
           )}
 
           <div className="grid-2">
             <section className="panel">
-              <h3>Pull / Merge Requests</h3>
+              <h3>{t('dashboard.prs.title')}</h3>
               {data.pullRequests.length === 0 ? (
-                <p className="muted">Aucune PR/MR ouverte.</p>
+                <p className="muted">{t('dashboard.prs.empty')}</p>
               ) : (
                 <table className="data">
                   <thead>
                     <tr>
-                      <th>Repo</th>
-                      <th>Titre</th>
-                      <th>Auteur</th>
-                      <th className="num">Âge (h)</th>
+                      <th>{t('dashboard.cols.repo')}</th>
+                      <th>{t('dashboard.cols.title')}</th>
+                      <th>{t('dashboard.cols.author')}</th>
+                      <th className="num">{t('dashboard.cols.ageH')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -85,16 +96,16 @@ export function DashboardPage({ sourceId }: { sourceId: string }) {
             </section>
 
             <section className="panel">
-              <h3>Pipelines récents</h3>
+              <h3>{t('dashboard.pipelines.title')}</h3>
               {data.pipelines.length === 0 ? (
-                <p className="muted">Aucun pipeline.</p>
+                <p className="muted">{t('dashboard.pipelines.empty')}</p>
               ) : (
                 <table className="data">
                   <thead>
                     <tr>
-                      <th>Repo</th>
-                      <th>Ref</th>
-                      <th>Statut</th>
+                      <th>{t('dashboard.cols.repo')}</th>
+                      <th>{t('dashboard.cols.ref')}</th>
+                      <th>{t('dashboard.cols.status')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -135,16 +146,7 @@ function Tile({
   );
 }
 
-const STATUS_LABEL: Record<PipelineStatus, string> = {
-  success: 'Succès',
-  failed: 'Échec',
-  running: 'En cours',
-  pending: 'En attente',
-  canceled: 'Annulé',
-  skipped: 'Ignoré',
-  unknown: 'Inconnu',
-};
-
 function StatusPill({ status }: { status: PipelineStatus }) {
-  return <span className={`pill status-${status}`}>{STATUS_LABEL[status]}</span>;
+  const { t } = useTranslation();
+  return <span className={`pill status-${status}`}>{t(`status.${status}`)}</span>;
 }

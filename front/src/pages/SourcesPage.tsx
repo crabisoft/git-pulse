@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import type { SourcePublic } from '@repo/shared';
-import { api, type CreateSourceInput } from '../api';
+import { useTranslation } from 'react-i18next';
+import type { SourcePublic, ConnectionTestResult } from '@repo/shared';
+import { api, apiErrorInfo, type CreateSourceInput } from '../api';
 
 const EMPTY: CreateSourceInput = {
   name: '',
@@ -18,10 +19,11 @@ export function SourcesPage({
   sources: SourcePublic[];
   onChange: () => Promise<void>;
 }) {
+  const { t } = useTranslation();
   const [form, setForm] = useState<CreateSourceInput>(EMPTY);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
-  const [tested, setTested] = useState<Record<string, string>>({});
+  const [tested, setTested] = useState<Record<string, ConnectionTestResult | 'pending'>>({});
 
   const set = <K extends keyof CreateSourceInput>(k: K, v: CreateSourceInput[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
@@ -33,69 +35,84 @@ export function SourcesPage({
     try {
       await api.createSource(form);
       setForm(EMPTY);
-      setMsg({ kind: 'ok', text: 'Source ajoutée.' });
+      setMsg({ kind: 'ok', text: t('sources.added') });
       await onChange();
     } catch (err) {
-      setMsg({ kind: 'err', text: err instanceof Error ? err.message : String(err) });
+      const { code, params } = apiErrorInfo(err);
+      setMsg({ kind: 'err', text: t(code, params) });
     } finally {
       setBusy(false);
     }
   }
 
   async function test(id: string) {
-    setTested((t) => ({ ...t, [id]: '…' }));
+    setTested((cur) => ({ ...cur, [id]: 'pending' }));
     try {
       const r = await api.testSource(id);
-      setTested((t) => ({ ...t, [id]: (r.ok ? '✓ ' : '✗ ') + r.message }));
+      setTested((cur) => ({ ...cur, [id]: r }));
     } catch (err) {
-      setTested((t) => ({ ...t, [id]: '✗ ' + (err instanceof Error ? err.message : String(err)) }));
+      setTested((cur) => ({ ...cur, [id]: { ok: false, message: apiErrorInfo(err) } }));
     }
   }
 
   async function remove(id: string) {
-    await api.deleteSource(id);
-    await onChange();
+    try {
+      await api.deleteSource(id);
+      await onChange();
+    } catch (err) {
+      const { code, params } = apiErrorInfo(err);
+      setMsg({ kind: 'err', text: t(code, params) });
+    }
   }
 
   return (
     <div className="grid-2">
       <section className="panel">
-        <h2>Sources configurées</h2>
-        {sources.length === 0 && <p className="muted">Aucune source pour l'instant.</p>}
+        <h2>{t('sources.listTitle')}</h2>
+        {sources.length === 0 && <p className="muted">{t('sources.listEmpty')}</p>}
         <ul className="source-list">
-          {sources.map((s) => (
-            <li key={s.id} className="source-row">
-              <div>
-                <div className="source-name">
-                  {s.name} <span className={`kind-badge ${s.kind}`}>{s.kind}</span>
+          {sources.map((s) => {
+            const ts = tested[s.id];
+            return (
+              <li key={s.id} className="source-row">
+                <div>
+                  <div className="source-name">
+                    {s.name} <span className={`kind-badge ${s.kind}`}>{s.kind}</span>
+                  </div>
+                  <div className="source-meta">
+                    {s.baseUrl} · {s.scope.owner} · {t('sources.auth')}: {s.authKind}
+                  </div>
+                  {ts && (
+                    <div className="source-test">
+                      {ts === 'pending'
+                        ? '…'
+                        : `${ts.ok ? '✓' : '✗'} ${t(ts.message.code, ts.message.params)}`}
+                    </div>
+                  )}
                 </div>
-                <div className="source-meta">
-                  {s.baseUrl} · {s.scope.owner} · auth: {s.authKind}
+                <div className="row-actions">
+                  <button className="btn" onClick={() => test(s.id)}>
+                    {t('common.test')}
+                  </button>
+                  <button className="btn danger" onClick={() => remove(s.id)}>
+                    {t('common.delete')}
+                  </button>
                 </div>
-                {tested[s.id] && <div className="source-test">{tested[s.id]}</div>}
-              </div>
-              <div className="row-actions">
-                <button className="btn" onClick={() => test(s.id)}>
-                  Tester
-                </button>
-                <button className="btn danger" onClick={() => remove(s.id)}>
-                  Supprimer
-                </button>
-              </div>
-            </li>
-          ))}
+              </li>
+            );
+          })}
         </ul>
       </section>
 
       <section className="panel">
-        <h2>Ajouter une source</h2>
+        <h2>{t('sources.addTitle')}</h2>
         <form onSubmit={submit} className="form">
           <label>
-            Nom
+            {t('sources.form.name')}
             <input value={form.name} onChange={(e) => set('name', e.target.value)} required />
           </label>
           <label>
-            Plateforme
+            {t('sources.form.platform')}
             <select
               value={form.kind}
               onChange={(e) => {
@@ -109,11 +126,12 @@ export function SourcesPage({
             </select>
           </label>
           <label>
-            URL de base <span className="hint">(self-hosted / Enterprise supporté)</span>
+            {t('sources.form.baseUrl')}{' '}
+            <span className="hint">{t('sources.form.baseUrlHint')}</span>
             <input value={form.baseUrl} onChange={(e) => set('baseUrl', e.target.value)} required />
           </label>
           <label>
-            {form.kind === 'github' ? 'Organisation' : 'Groupe'}
+            {form.kind === 'github' ? t('sources.form.org') : t('sources.form.group')}
             <input
               value={form.scope.owner}
               onChange={(e) => set('scope', { ...form.scope, owner: e.target.value })}
@@ -121,17 +139,18 @@ export function SourcesPage({
             />
           </label>
           <label>
-            Authentification
+            {t('sources.form.auth')}
             <select
               value={form.authKind}
               onChange={(e) => set('authKind', e.target.value as CreateSourceInput['authKind'])}
             >
-              <option value="token">Token partagé</option>
-              <option value="app">App (OAuth / GitHub App)</option>
+              <option value="token">{t('sources.form.authToken')}</option>
+              <option value="app">{t('sources.form.authApp')}</option>
             </select>
           </label>
           <label>
-            Secret <span className="hint">(chiffré au repos, jamais réaffiché)</span>
+            {t('sources.form.secret')}{' '}
+            <span className="hint">{t('sources.form.secretHint')}</span>
             <input
               type="password"
               value={form.secret}
@@ -142,7 +161,7 @@ export function SourcesPage({
           </label>
           {msg && <div className={`banner ${msg.kind === 'ok' ? 'ok' : 'error'}`}>{msg.text}</div>}
           <button className="btn primary" disabled={busy} type="submit">
-            {busy ? 'Ajout…' : 'Ajouter la source'}
+            {busy ? t('sources.form.submitting') : t('sources.form.submit')}
           </button>
         </form>
       </section>

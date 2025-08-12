@@ -1,0 +1,99 @@
+{
+  "brand": {
+    "subtitle": "GitHub · GitLab"
+  },
+  "nav": {
+    "dashboard": "Dashboard",
+    "sources": "Sources"
+  },
+  "language": {
+    "label": "Language"
+  },
+  "common": {
+    "apiError": "API error: {{error}}",
+    "test": "Test",
+    "delete": "Delete",
+    "refresh": "Refresh",
+    "refreshing": "Refreshing…"
+  },
+  "errors": {
+    "http": "Request failed ({{status}}): {{detail}}",
+    "internal": "Internal server error.",
+    "network": "Network error: {{error}}",
+    "source": {
+      "notFound": "Source not found.",
+      "noCredential": "No secret stored for this source.",
+      "unsupportedKind": "Unsupported source type: {{kind}}"
+    }
+  },
+  "empty": {
+    "title": "No source configured",
+    "text": "Add a GitHub or GitLab source to see the live dashboard.",
+    "cta": "Configure a source"
+  },
+  "dashboard": {
+    "title": "Live view",
+    "tiles": {
+      "openPrs": "Open PRs / MRs",
+      "stalePrs": "Stale PRs / MRs",
+      "failedPipelines": "Failed pipelines",
+      "runningPipelines": "Running pipelines"
+    },
+    "prs": {
+      "title": "Pull / Merge Requests",
+      "empty": "No open PR/MR."
+    },
+    "pipelines": {
+      "title": "Recent pipelines",
+      "empty": "No pipeline."
+    },
+    "cols": {
+      "repo": "Repo",
+      "title": "Title",
+      "author": "Author",
+      "ageH": "Age (h)",
+      "ref": "Ref",
+      "status": "Status"
+    },
+    "warn": {
+      "reposFailed": "Repository discovery failed: {{error}}",
+      "prsFailed": "Failed to load PRs/MRs: {{error}}",
+      "pipelinesFailed": "Failed to load pipelines: {{error}}"
+    }
+  },
+  "status": {
+    "success": "Success",
+    "failed": "Failed",
+    "running": "Running",
+    "pending": "Pending",
+    "canceled": "Canceled",
+    "skipped": "Skipped",
+    "unknown": "Unknown"
+  },
+  "sources": {
+    "listTitle": "Configured sources",
+    "listEmpty": "No source yet.",
+    "auth": "auth",
+    "addTitle": "Add a source",
+    "added": "Source added.",
+    "test": {
+      "ok": "Connected to \"{{owner}}\".",
+      "failed": "Connection failed: {{error}}"
+    },
+    "form": {
+      "name": "Name",
+      "platform": "Platform",
+      "baseUrl": "Base URL",
+      "baseUrlHint": "(self-hosted / Enterprise supported)",
+      "org": "Organization",
+      "group": "Group",
+      "auth": "Authentication",
+      "authToken": "Shared token",
+      "authApp": "App (OAuth / GitHub App)",
+      "secret": "Secret",
+      "secretHint": "(encrypted at rest, never shown again)",
+      "submit": "Add source",
+      "submitting": "Adding…"
+    }
+  }
+}

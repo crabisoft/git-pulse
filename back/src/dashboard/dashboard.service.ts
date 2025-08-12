@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { DashboardLive, PullRequest, Pipeline } from '@repo/shared';
+import type { DashboardLive, PullRequest, Pipeline, CodedMessage } from '@repo/shared';
 import { SourcesService } from '../sources/sources.service';
 import { ConnectorFactory } from '../sources/connectors/connector.factory';
 
@@ -19,22 +19,22 @@ export class DashboardService {
   async live(sourceId: string): Promise<DashboardLive> {
     const { ctx, kind } = await this.sources.resolveContext(sourceId);
     const connector = this.connectors.for(kind);
-    const warnings: string[] = [];
+    const warnings: CodedMessage[] = [];
 
     const repos = await connector.listRepositories(ctx).catch((e) => {
-      warnings.push(`Découverte des repos échouée : ${asMessage(e)}`);
+      warnings.push({ code: 'dashboard.warn.reposFailed', params: { error: asMessage(e) } });
       return [] as string[];
     });
 
     const pullRequests = await safe(
       () => connector.listPullRequests(ctx, repos),
       warnings,
-      'PR/MR',
+      'dashboard.warn.prsFailed',
     );
     const pipelines = await safe(
       () => connector.listPipelines(ctx, repos),
       warnings,
-      'pipelines',
+      'dashboard.warn.pipelinesFailed',
     );
 
     return {
@@ -47,11 +47,15 @@ export class DashboardService {
   }
 }
 
-async function safe<T>(fn: () => Promise<T[]>, warnings: string[], label: string): Promise<T[]> {
+async function safe<T>(
+  fn: () => Promise<T[]>,
+  warnings: CodedMessage[],
+  code: string,
+): Promise<T[]> {
   try {
     return await fn();
   } catch (e) {
-    warnings.push(`Collecte ${label} échouée : ${asMessage(e)}`);
+    warnings.push({ code, params: { error: asMessage(e) } });
     return [];
   }
 }

@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Octokit } from '@octokit/rest';
-import type { PullRequest, Pipeline, Deployment, PipelineStatus } from '@repo/shared';
+import type {
+  PullRequest,
+  Pipeline,
+  Deployment,
+  PipelineStatus,
+  ConnectionTestResult,
+} from '@repo/shared';
 import type { ConnectorContext, SourceConnector } from './source-connector.interface';
 import { applyScope, ageHours } from './scope.util';
 
@@ -19,13 +25,13 @@ export class GitHubConnector implements SourceConnector {
     return new Octokit({ auth: ctx.token, baseUrl });
   }
 
-  async testConnection(ctx: ConnectorContext) {
+  async testConnection(ctx: ConnectorContext): Promise<ConnectionTestResult> {
     try {
       const gh = this.client(ctx);
       await gh.rest.users.getAuthenticated();
-      return { ok: true, message: `Connexion GitHub OK pour l'org "${ctx.scope.owner}".` };
+      return { ok: true, message: { code: 'sources.test.ok', params: { owner: ctx.scope.owner } } };
     } catch (e) {
-      return { ok: false, message: `Échec de connexion GitHub : ${asMessage(e)}` };
+      return { ok: false, message: { code: 'sources.test.failed', params: { error: asMessage(e) } } };
     }
   }
 

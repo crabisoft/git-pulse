@@ -1,0 +1,99 @@
+{
+  "brand": {
+    "subtitle": "GitHub · GitLab"
+  },
+  "nav": {
+    "dashboard": "Tableau de bord",
+    "sources": "Sources"
+  },
+  "language": {
+    "label": "Langue"
+  },
+  "common": {
+    "apiError": "Erreur API : {{error}}",
+    "test": "Tester",
+    "delete": "Supprimer",
+    "refresh": "Actualiser",
+    "refreshing": "Actualisation…"
+  },
+  "errors": {
+    "http": "Échec de la requête ({{status}}) : {{detail}}",
+    "internal": "Erreur interne du serveur.",
+    "network": "Erreur réseau : {{error}}",
+    "source": {
+      "notFound": "Source introuvable.",
+      "noCredential": "Aucun secret enregistré pour cette source.",
+      "unsupportedKind": "Type de source non supporté : {{kind}}"
+    }
+  },
+  "empty": {
+    "title": "Aucune source configurée",
+    "text": "Ajoutez une source GitHub ou GitLab pour afficher le tableau de bord live.",
+    "cta": "Configurer une source"
+  },
+  "dashboard": {
+    "title": "Vue live",
+    "tiles": {
+      "openPrs": "PR / MR ouvertes",
+      "stalePrs": "PR / MR bloquées",
+      "failedPipelines": "Pipelines en échec",
+      "runningPipelines": "Pipelines en cours"
+    },
+    "prs": {
+      "title": "Pull / Merge Requests",
+      "empty": "Aucune PR/MR ouverte."
+    },
+    "pipelines": {
+      "title": "Pipelines récents",
+      "empty": "Aucun pipeline."
+    },
+    "cols": {
+      "repo": "Repo",
+      "title": "Titre",
+      "author": "Auteur",
+      "ageH": "Âge (h)",
+      "ref": "Ref",
+      "status": "Statut"
+    },
+    "warn": {
+      "reposFailed": "Découverte des repos échouée : {{error}}",
+      "prsFailed": "Collecte des PR/MR échouée : {{error}}",
+      "pipelinesFailed": "Collecte des pipelines échouée : {{error}}"
+    }
+  },
+  "status": {
+    "success": "Succès",
+    "failed": "Échec",
+    "running": "En cours",
+    "pending": "En attente",
+    "canceled": "Annulé",
+    "skipped": "Ignoré",
+    "unknown": "Inconnu"
+  },
+  "sources": {
+    "listTitle": "Sources configurées",
+    "listEmpty": "Aucune source pour l'instant.",
+    "auth": "auth",
+    "addTitle": "Ajouter une source",
+    "added": "Source ajoutée.",
+    "test": {
+      "ok": "Connexion OK pour « {{owner}} ».",
+      "failed": "Échec de connexion : {{error}}"
+    },
+    "form": {
+      "name": "Nom",
+      "platform": "Plateforme",
+      "baseUrl": "URL de base",
+      "baseUrlHint": "(self-hosted / Enterprise supporté)",
+      "org": "Organisation",
+      "group": "Groupe",
+      "auth": "Authentification",
+      "authToken": "Token partagé",
+      "authApp": "App (OAuth / GitHub App)",
+      "secret": "Secret",
+      "secretHint": "(chiffré au repos, jamais réaffiché)",
+      "submit": "Ajouter la source",
+      "submitting": "Ajout…"
+    }
+  }
+}
