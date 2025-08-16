@@ -1,6 +1,7 @@
 // Prisma schema — Phase 1 core + Phase 2 seeds (EnvRule, MetricSnapshot).
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {

@@ -13,7 +13,7 @@
     "build:shared": "npm run build -w @repo/shared",
     "dev:back": "npm run dev -w @repo/back",
     "dev:front": "npm run dev -w @repo/front",
-    "docker:dev": "sh .docker/compose.sh dev up",
+    "docker:dev": "sh .docker/compose.sh dev up --build",
     "docker:dev:down": "sh .docker/compose.sh dev down",
     "docker:prod": "sh .docker/compose.sh prod up --build",
     "docker:prod:down": "sh .docker/compose.sh prod down",

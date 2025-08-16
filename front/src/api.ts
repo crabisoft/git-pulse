@@ -5,7 +5,9 @@ import type {
   CodedMessage,
 } from '@repo/shared';
 
-const BASE = (import.meta.env.VITE_API_URL ?? 'http://localhost:3001') + '/api';
+// Relative by default (same-origin, via the Vite dev proxy / nginx). An absolute
+// VITE_API_URL can override it when the API lives on another origin.
+const BASE = (import.meta.env.VITE_API_URL ?? '') + '/api';
 
 /** Error carrying an i18n code + params, thrown by the API client. */
 export class ApiError extends Error {
@@ -52,7 +54,8 @@ export interface CreateSourceInput {
   kind: 'github' | 'gitlab';
   baseUrl: string;
   authKind: 'token' | 'app';
-  secret: string;
+  secret?: string;
+  app?: { appId: string; privateKey: string; installationId: string };
   scope: { owner: string; include?: string[]; exclude?: string[] };
 }
 

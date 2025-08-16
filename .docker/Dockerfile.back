@@ -1,6 +1,9 @@
 # ─── Build ───────────────────────────────────────────────────────────
-FROM node:20-alpine AS build
+FROM node:20-slim AS build
 WORKDIR /app
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json* tsconfig.base.json ./
 COPY packages/shared/package.json packages/shared/
 COPY back/package.json back/
@@ -12,8 +15,11 @@ RUN npm run build -w @repo/shared \
   && npm run build -w @repo/back
 
 # ─── Runtime ─────────────────────────────────────────────────────────
-FROM node:20-alpine AS runtime
+FROM node:20-slim AS runtime
 WORKDIR /app
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/packages/shared/dist ./packages/shared/dist

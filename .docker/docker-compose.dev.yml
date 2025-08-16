@@ -3,11 +3,17 @@
 #   front : Vite dev server with HMR
 # Usage: npm run docker:dev
 #
-# node_modules lives in a named volume (musl/alpine binaries) so it does not
-# clash with the host node_modules mounted through ..:/app.
+# Both services share a small image (node:20-slim + openssl) so Prisma finds
+# libssl. node_modules lives in a named volume (not the host's) mounted over
+# the bind-mounted code.
 services:
   back:
-    image: ${NODE_IMAGE:-node:20-alpine}
+    build: &dev-build
+      context: ..
+      dockerfile: .docker/Dockerfile.dev
+      args:
+        NODE_IMAGE: ${NODE_IMAGE:-node:20-slim}
+    image: git-dashboard-dev
     working_dir: /app
     command: >
       sh -c "npm install
@@ -24,6 +30,10 @@ services:
     volumes:
       - ..:/app
       - back-node-modules:/app/node_modules
+      # Build outputs in named volumes so the container never writes (as root)
+      # into the host working tree.
+      - back-dist:/app/back/dist
+      - shared-dist:/app/packages/shared/dist
       - master-key:/data
     ports:
       - "${API_PORT:-3001}:${API_PORT:-3001}"
@@ -34,15 +44,16 @@ services:
         condition: service_healthy
 
   front:
-    image: ${NODE_IMAGE:-node:20-alpine}
+    build: *dev-build
+    image: git-dashboard-dev
     working_dir: /app
     command: >
       sh -c "npm install
-      && npm run build:shared
       && cd front
       && npx vite --host 0.0.0.0 --port ${WEB_PORT_DEV:-5173}"
     environment:
-      VITE_API_URL: ${VITE_API_URL:-http://localhost:3001}
+      # Same-origin in the browser; Vite proxies /api to the back service.
+      VITE_PROXY_TARGET: http://back:3001
     volumes:
       - ..:/app
       - front-node-modules:/app/node_modules
@@ -54,3 +65,5 @@ services:
 volumes:
   back-node-modules:
   front-node-modules:
+  back-dist:
+  shared-dist:
