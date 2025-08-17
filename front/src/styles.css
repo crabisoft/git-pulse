@@ -76,6 +76,37 @@ a:hover { text-decoration: underline; }
 .tile.crit .tile-value { color: var(--crit); }
 .tile.accent .tile-value { color: var(--accent); }
 
+/* Repo filter (multi-select dropdown) */
+.repo-filter { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; }
+.repo-filter-label { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.multiselect { position: relative; }
+.multiselect-btn {
+  display: inline-flex; align-items: center; justify-content: space-between; gap: 10px; min-width: 190px;
+  padding: 7px 11px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--surface); color: var(--ink); cursor: pointer; font-size: .88rem;
+}
+.multiselect-btn:hover { background: var(--surface-2); }
+.multiselect-btn .caret { color: var(--muted); font-size: .7rem; }
+.multiselect-panel {
+  position: absolute; top: calc(100% + 4px); left: 0; z-index: 20;
+  min-width: 230px; max-height: 300px; overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, .18); padding: 6px;
+}
+.multiselect-actions { display: flex; gap: 6px; padding: 2px 4px 8px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.multiselect-actions button {
+  flex: 1; padding: 5px 8px; font-size: .76rem; border-radius: 6px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+}
+.multiselect-actions button:hover { background: var(--surface-2); }
+.multiselect-panel ul { list-style: none; margin: 0; padding: 0; }
+.multiselect-panel label {
+  display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px;
+  cursor: pointer; font-size: .84rem; font-family: var(--mono);
+}
+.multiselect-panel label:hover { background: var(--surface-2); }
+.multiselect-panel input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; }
+
 /* Panels & layout */
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 @media (max-width: 860px) { .grid-2 { grid-template-columns: 1fr; } }
@@ -107,11 +138,12 @@ tr.stale td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
 /* Forms */
 .form { display: flex; flex-direction: column; gap: 12px; }
 .form label { display: flex; flex-direction: column; gap: 5px; font-size: .85rem; color: var(--muted); }
-.form input, .form select {
+.form input, .form select, .form textarea {
   padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px;
   background: var(--surface); color: var(--ink); font-size: .92rem; font-family: var(--sans);
 }
-.form input:focus, .form select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.form textarea { font-family: var(--mono); font-size: .82rem; resize: vertical; }
+.form input:focus, .form select:focus, .form textarea:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
 .hint { color: var(--muted); font-weight: 400; font-size: .74rem; }
 
 /* Buttons */

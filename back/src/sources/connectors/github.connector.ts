@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Octokit } from '@octokit/rest';
+import { createAppAuth } from '@octokit/auth-app';
 import type {
   PullRequest,
   Pipeline,
@@ -22,13 +23,31 @@ export class GitHubConnector implements SourceConnector {
     const baseUrl = isDotCom
       ? 'https://api.github.com'
       : `${ctx.baseUrl.replace(/\/$/, '')}/api/v3`;
-    return new Octokit({ auth: ctx.token, baseUrl });
+
+    if (ctx.auth.kind === 'app') {
+      // GitHub App: Octokit mints and caches installation tokens on demand.
+      const { appId, privateKey, installationId } = ctx.auth;
+      return new Octokit({
+        authStrategy: createAppAuth,
+        auth: { appId, privateKey, installationId },
+        baseUrl,
+      });
+    }
+    return new Octokit({ auth: ctx.auth.token, baseUrl });
+  }
+
+  /** Web URL of a repository (github.com or GHE). */
+  private repoUrl(ctx: ConnectorContext, repo: string): string {
+    const isDotCom = /(^|\/\/)(www\.)?github\.com/.test(ctx.baseUrl);
+    const root = isDotCom ? 'https://github.com' : ctx.baseUrl.replace(/\/$/, '');
+    return `${root}/${ctx.scope.owner}/${repo}`;
   }
 
   async testConnection(ctx: ConnectorContext): Promise<ConnectionTestResult> {
     try {
       const gh = this.client(ctx);
-      await gh.rest.users.getAuthenticated();
+      // Works for both token and installation auth, and validates scope access.
+      await gh.rest.repos.listForOrg({ org: ctx.scope.owner, per_page: 1 });
       return { ok: true, message: { code: 'sources.test.ok', params: { owner: ctx.scope.owner } } };
     } catch (e) {
       return { ok: false, message: { code: 'sources.test.failed', params: { error: asMessage(e) } } };
@@ -66,6 +85,7 @@ export class GitHubConnector implements SourceConnector {
           state: pr.draft ? 'draft' : 'open',
           author: pr.user?.login ?? 'unknown',
           repo,
+          repoUrl: this.repoUrl(ctx, repo),
           url: pr.html_url,
           createdAt: pr.created_at,
           updatedAt: pr.updated_at,
@@ -93,6 +113,7 @@ export class GitHubConnector implements SourceConnector {
         out.push({
           id: `gh:${repo}:${run.id}`,
           repo,
+          repoUrl: this.repoUrl(ctx, repo),
           ref: run.head_branch ?? run.head_sha.slice(0, 7),
           status: mapGitHubStatus(run.status, run.conclusion),
           url: run.html_url,

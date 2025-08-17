@@ -26,6 +26,21 @@ class ScopeDto {
   exclude?: string[];
 }
 
+/** GitHub App installation credentials (used when authKind is 'app'). */
+class GitHubAppDto {
+  @IsString()
+  @MinLength(1)
+  appId!: string;
+
+  @IsString()
+  @MinLength(1)
+  privateKey!: string;
+
+  @IsString()
+  @MinLength(1)
+  installationId!: string;
+}
+
 export class CreateSourceDto {
   @IsString()
   @MinLength(1)
@@ -40,10 +55,17 @@ export class CreateSourceDto {
   @IsEnum(['token', 'app'] as const)
   authKind!: AuthKind;
 
-  /** Plaintext access secret — encrypted immediately, never returned. */
+  /** Token for token auth. Encrypted immediately, never returned. */
+  @IsOptional()
   @IsString()
   @MinLength(1)
-  secret!: string;
+  secret?: string;
+
+  /** GitHub App credentials for app auth. Encrypted as JSON, never returned. */
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => GitHubAppDto)
+  app?: GitHubAppDto;
 
   @ValidateNested()
   @Type(() => ScopeDto)

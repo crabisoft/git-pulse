@@ -41,6 +41,7 @@ export interface PullRequest {
   state: PullRequestState;
   author: string;
   repo: string;
+  repoUrl: string;
   url: string;
   createdAt: string;
   updatedAt: string;
@@ -63,6 +64,7 @@ export type PipelineStatus =
 export interface Pipeline {
   id: string;
   repo: string;
+  repoUrl: string;
   ref: string;
   status: PipelineStatus;
   url: string;

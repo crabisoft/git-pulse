@@ -6,11 +6,15 @@ import type {
   ConnectionTestResult,
 } from '@repo/shared';
 
-/** Resolved connection context (decrypted secret) handed to a connector. */
+/** Decrypted source credentials, discriminated by auth kind. */
+export type SourceAuth =
+  | { kind: 'token'; token: string }
+  | { kind: 'app'; appId: string; privateKey: string; installationId: string };
+
+/** Resolved connection context (decrypted credentials) handed to a connector. */
 export interface ConnectorContext {
   baseUrl: string;
-  /** Plaintext access secret (token, or App installation token). */
-  token: string;
+  auth: SourceAuth;
   scope: ScopeRules;
 }
 

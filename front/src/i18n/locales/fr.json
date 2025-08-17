@@ -23,7 +23,9 @@
     "source": {
       "notFound": "Source introuvable.",
       "noCredential": "Aucun secret enregistré pour cette source.",
-      "unsupportedKind": "Type de source non supporté : {{kind}}"
+      "unsupportedKind": "Type de source non supporté : {{kind}}",
+      "missingToken": "Un token est requis.",
+      "missingAppCredentials": "Les identifiants de la GitHub App sont requis."
     }
   },
   "empty": {
@@ -33,6 +35,13 @@
   },
   "dashboard": {
     "title": "Vue live",
+    "filter": {
+      "repos": "Dépôts",
+      "all": "Tous les dépôts",
+      "selected": "{{count}} sélectionné(s)",
+      "selectAll": "Tout sélectionner",
+      "clear": "Effacer"
+    },
     "tiles": {
       "openPrs": "PR / MR ouvertes",
       "stalePrs": "PR / MR bloquées",
@@ -53,7 +62,8 @@
       "author": "Auteur",
       "ageH": "Âge (h)",
       "ref": "Ref",
-      "status": "Statut"
+      "status": "Statut",
+      "duration": "Durée"
     },
     "warn": {
       "reposFailed": "Découverte des repos échouée : {{error}}",
@@ -89,9 +99,13 @@
       "group": "Groupe",
       "auth": "Authentification",
       "authToken": "Token partagé",
-      "authApp": "App (OAuth / GitHub App)",
+      "authApp": "GitHub App",
       "secret": "Secret",
       "secretHint": "(chiffré au repos, jamais réaffiché)",
+      "appId": "App ID",
+      "installationId": "Installation ID",
+      "privateKey": "Clé privée (PEM)",
+      "privateKeyHint": "(collez le contenu du .pem)",
       "submit": "Ajouter la source",
       "submitting": "Ajout…"
     }

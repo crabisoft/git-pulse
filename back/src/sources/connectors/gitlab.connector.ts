@@ -19,10 +19,18 @@ export class GitLabConnector implements SourceConnector {
   private readonly logger = new Logger(GitLabConnector.name);
 
   private client(ctx: ConnectorContext): GitlabClient {
+    if (ctx.auth.kind !== 'token') {
+      throw new Error('GitLab supports token authentication only.');
+    }
     return new Gitlab({
       host: ctx.baseUrl.replace(/\/$/, ''),
-      token: ctx.token,
+      token: ctx.auth.token,
     });
+  }
+
+  /** Web URL of a project from its path_with_namespace. */
+  private repoUrl(ctx: ConnectorContext, repo: string): string {
+    return `${ctx.baseUrl.replace(/\/$/, '')}/${repo}`;
   }
 
   async testConnection(ctx: ConnectorContext): Promise<ConnectionTestResult> {
@@ -65,6 +73,7 @@ export class GitLabConnector implements SourceConnector {
           state: (mr.draft as boolean) ? 'draft' : 'open',
           author: (mr.author as { username?: string })?.username ?? 'unknown',
           repo,
+          repoUrl: this.repoUrl(ctx, repo),
           url: mr.web_url as string,
           createdAt,
           updatedAt: mr.updated_at as string,
@@ -86,6 +95,7 @@ export class GitLabConnector implements SourceConnector {
         out.push({
           id: `gl:${repo}:${p.id}`,
           repo,
+          repoUrl: this.repoUrl(ctx, repo),
           ref: p.ref as string,
           status: mapGitLabStatus(p.status as string),
           url: p.web_url as string,

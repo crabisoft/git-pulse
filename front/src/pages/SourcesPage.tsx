@@ -3,14 +3,49 @@ import { useTranslation } from 'react-i18next';
 import type { SourcePublic, ConnectionTestResult } from '@repo/shared';
 import { api, apiErrorInfo, type CreateSourceInput } from '../api';
 
-const EMPTY: CreateSourceInput = {
+interface FormState {
+  name: string;
+  kind: 'github' | 'gitlab';
+  baseUrl: string;
+  authKind: 'token' | 'app';
+  owner: string;
+  secret: string;
+  appId: string;
+  privateKey: string;
+  installationId: string;
+}
+
+const EMPTY: FormState = {
   name: '',
   kind: 'github',
   baseUrl: 'https://github.com',
   authKind: 'token',
+  owner: '',
   secret: '',
-  scope: { owner: '' },
+  appId: '',
+  privateKey: '',
+  installationId: '',
 };
+
+function toInput(form: FormState): CreateSourceInput {
+  const base = {
+    name: form.name,
+    kind: form.kind,
+    baseUrl: form.baseUrl,
+    authKind: form.authKind,
+    scope: { owner: form.owner },
+  };
+  return form.authKind === 'app'
+    ? {
+        ...base,
+        app: {
+          appId: form.appId,
+          privateKey: form.privateKey,
+          installationId: form.installationId,
+        },
+      }
+    : { ...base, secret: form.secret };
+}
 
 export function SourcesPage({
   sources,
@@ -20,20 +55,30 @@ export function SourcesPage({
   onChange: () => Promise<void>;
 }) {
   const { t } = useTranslation();
-  const [form, setForm] = useState<CreateSourceInput>(EMPTY);
+  const [form, setForm] = useState<FormState>(EMPTY);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [tested, setTested] = useState<Record<string, ConnectionTestResult | 'pending'>>({});
 
-  const set = <K extends keyof CreateSourceInput>(k: K, v: CreateSourceInput[K]) =>
+  const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
+
+  function changeKind(kind: FormState['kind']) {
+    setForm((f) => ({
+      ...f,
+      kind,
+      baseUrl: kind === 'github' ? 'https://github.com' : 'https://gitlab.com',
+      // GitLab supports token auth only.
+      authKind: kind === 'gitlab' ? 'token' : f.authKind,
+    }));
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setMsg(null);
     try {
-      await api.createSource(form);
+      await api.createSource(toInput(form));
       setForm(EMPTY);
       setMsg({ kind: 'ok', text: t('sources.added') });
       await onChange();
@@ -113,14 +158,7 @@ export function SourcesPage({
           </label>
           <label>
             {t('sources.form.platform')}
-            <select
-              value={form.kind}
-              onChange={(e) => {
-                const kind = e.target.value as CreateSourceInput['kind'];
-                set('kind', kind);
-                set('baseUrl', kind === 'github' ? 'https://github.com' : 'https://gitlab.com');
-              }}
-            >
+            <select value={form.kind} onChange={(e) => changeKind(e.target.value as FormState['kind'])}>
               <option value="github">GitHub</option>
               <option value="gitlab">GitLab</option>
             </select>
@@ -132,33 +170,59 @@ export function SourcesPage({
           </label>
           <label>
             {form.kind === 'github' ? t('sources.form.org') : t('sources.form.group')}
-            <input
-              value={form.scope.owner}
-              onChange={(e) => set('scope', { ...form.scope, owner: e.target.value })}
-              required
-            />
+            <input value={form.owner} onChange={(e) => set('owner', e.target.value)} required />
           </label>
           <label>
             {t('sources.form.auth')}
             <select
               value={form.authKind}
-              onChange={(e) => set('authKind', e.target.value as CreateSourceInput['authKind'])}
+              onChange={(e) => set('authKind', e.target.value as FormState['authKind'])}
             >
               <option value="token">{t('sources.form.authToken')}</option>
-              <option value="app">{t('sources.form.authApp')}</option>
+              {form.kind === 'github' && <option value="app">{t('sources.form.authApp')}</option>}
             </select>
           </label>
-          <label>
-            {t('sources.form.secret')}{' '}
-            <span className="hint">{t('sources.form.secretHint')}</span>
-            <input
-              type="password"
-              value={form.secret}
-              onChange={(e) => set('secret', e.target.value)}
-              required
-              autoComplete="off"
-            />
-          </label>
+
+          {form.authKind === 'token' ? (
+            <label>
+              {t('sources.form.secret')}{' '}
+              <span className="hint">{t('sources.form.secretHint')}</span>
+              <input
+                type="password"
+                value={form.secret}
+                onChange={(e) => set('secret', e.target.value)}
+                required
+                autoComplete="off"
+              />
+            </label>
+          ) : (
+            <>
+              <label>
+                {t('sources.form.appId')}
+                <input value={form.appId} onChange={(e) => set('appId', e.target.value)} required />
+              </label>
+              <label>
+                {t('sources.form.installationId')}
+                <input
+                  value={form.installationId}
+                  onChange={(e) => set('installationId', e.target.value)}
+                  required
+                />
+              </label>
+              <label>
+                {t('sources.form.privateKey')}{' '}
+                <span className="hint">{t('sources.form.privateKeyHint')}</span>
+                <textarea
+                  value={form.privateKey}
+                  onChange={(e) => set('privateKey', e.target.value)}
+                  required
+                  rows={5}
+                  autoComplete="off"
+                />
+              </label>
+            </>
+          )}
+
           {msg && <div className={`banner ${msg.kind === 'ok' ? 'ok' : 'error'}`}>{msg.text}</div>}
           <button className="btn primary" disabled={busy} type="submit">
             {busy ? t('sources.form.submitting') : t('sources.form.submit')}

@@ -23,7 +23,9 @@
     "source": {
       "notFound": "Source not found.",
       "noCredential": "No secret stored for this source.",
-      "unsupportedKind": "Unsupported source type: {{kind}}"
+      "unsupportedKind": "Unsupported source type: {{kind}}",
+      "missingToken": "A token is required.",
+      "missingAppCredentials": "GitHub App credentials are required."
     }
   },
   "empty": {
@@ -33,6 +35,13 @@
   },
   "dashboard": {
     "title": "Live view",
+    "filter": {
+      "repos": "Repositories",
+      "all": "All repositories",
+      "selected": "{{count}} selected",
+      "selectAll": "Select all",
+      "clear": "Clear"
+    },
     "tiles": {
       "openPrs": "Open PRs / MRs",
       "stalePrs": "Stale PRs / MRs",
@@ -53,7 +62,8 @@
       "author": "Author",
       "ageH": "Age (h)",
       "ref": "Ref",
-      "status": "Status"
+      "status": "Status",
+      "duration": "Duration"
     },
     "warn": {
       "reposFailed": "Repository discovery failed: {{error}}",
@@ -89,9 +99,13 @@
       "group": "Group",
       "auth": "Authentication",
       "authToken": "Shared token",
-      "authApp": "App (OAuth / GitHub App)",
+      "authApp": "GitHub App",
       "secret": "Secret",
       "secretHint": "(encrypted at rest, never shown again)",
+      "appId": "App ID",
+      "installationId": "Installation ID",
+      "privateKey": "Private key (PEM)",
+      "privateKeyHint": "(paste the .pem contents)",
       "submit": "Add source",
       "submitting": "Adding…"
     }
