@@ -7,5 +7,6 @@ import { SourcesModule } from '../sources/sources.module';
   imports: [SourcesModule],
   controllers: [DashboardController],
   providers: [DashboardService],
+  exports: [DashboardService],
 })
 export class DashboardModule {}

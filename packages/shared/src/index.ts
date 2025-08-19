@@ -97,6 +97,63 @@ export interface ConnectionTestResult {
   message: CodedMessage;
 }
 
+// ─── Environment classification (Phase 2) ────────────────────────────
+
+export type EnvRuleKind = 'simple' | 'meta';
+
+/** A RegEx-based environment classification rule. */
+export interface EnvRulePublic {
+  id: string;
+  sourceId: string;
+  name: string;
+  pattern: string;
+  kind: EnvRuleKind;
+  priority: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+// ─── DORA (Phase 2) ──────────────────────────────────────────────────
+
+export type DoraMetric =
+  | 'deployment_frequency'
+  | 'lead_time'
+  | 'change_failure_rate'
+  | 'mttr'
+  | 'coding_time'
+  | 'pickup_time'
+  | 'review_time';
+
+/** A computed DORA metric for one dimension combination. */
+export interface DoraResult {
+  metric: DoraMetric;
+  /** count for frequency, seconds for durations, 0..1 ratio for CFR. */
+  value: number;
+  unit: 'count' | 'seconds' | 'ratio';
+  dimensions: Record<string, string>;
+  /** Number of events the value is derived from. */
+  sampleSize: number;
+}
+
+/** A historized metric point (basis for time-series trends). */
+export interface MetricSnapshotPublic {
+  id: string;
+  sourceId: string;
+  metric: string;
+  value: number;
+  dimensions: Record<string, string>;
+  capturedAt: string;
+}
+
+/** An environment name resolved against a set of rules. */
+export interface ClassifiedEnvironment {
+  name: string;
+  /** Attributes extracted from named capture groups (e.g. type, client). */
+  attributes: Record<string, string>;
+  /** Meta-environments this environment belongs to (cumulative). */
+  metaEnvironments: string[];
+}
+
 // ─── Aggregated dashboard responses ──────────────────────────────────
 
 export interface DashboardLive {

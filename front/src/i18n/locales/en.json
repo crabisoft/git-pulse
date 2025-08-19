@@ -26,6 +26,10 @@
       "unsupportedKind": "Unsupported source type: {{kind}}",
       "missingToken": "A token is required.",
       "missingAppCredentials": "GitHub App credentials are required."
+    },
+    "envRule": {
+      "notFound": "Rule not found.",
+      "invalidPattern": "Invalid regular expression: {{pattern}}"
     }
   },
   "empty": {
