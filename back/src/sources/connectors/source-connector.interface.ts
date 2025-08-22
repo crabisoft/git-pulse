@@ -2,6 +2,7 @@ import type {
   PullRequest,
   Pipeline,
   Deployment,
+  MergedPullRequest,
   ScopeRules,
   ConnectionTestResult,
 } from '@repo/shared';
@@ -36,4 +37,11 @@ export interface SourceConnector {
   listPipelines(ctx: ConnectorContext, repos: string[]): Promise<Pipeline[]>;
 
   listDeployments(ctx: ConnectorContext, repos: string[]): Promise<Deployment[]>;
+
+  /** Merged PRs/MRs updated since the given ISO date (for lead time). */
+  listMergedPullRequests(
+    ctx: ConnectorContext,
+    repos: string[],
+    since: string,
+  ): Promise<MergedPullRequest[]>;
 }

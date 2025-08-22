@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { MetricSnapshotPublic } from '@repo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { DashboardService } from '../dashboard/dashboard.service';
+import { DoraService } from '../dora/dora.service';
 
 interface HistoryQuery {
   metric?: string;
@@ -11,9 +12,12 @@ interface HistoryQuery {
 
 @Injectable()
 export class CollectorService {
+  private readonly logger = new Logger(CollectorService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly dashboard: DashboardService,
+    private readonly dora: DoraService,
   ) {}
 
   /** Fetch live data for a source and persist metric snapshots. */
@@ -33,6 +37,13 @@ export class CollectorService {
         }),
       ),
     );
+
+    // DORA collection is heavier (many API calls) and best-effort: a failure
+    // here must not drop the summary snapshots above.
+    await this.dora.snapshot(sourceId).catch((e) => {
+      this.logger.warn(`Snapshot DORA échoué pour ${sourceId} : ${asMessage(e)}`);
+    });
+
     return created.map(toPublic);
   }
 
@@ -56,6 +67,10 @@ export class CollectorService {
     });
     return rows.map(toPublic);
   }
+}
+
+function asMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
 }
 
 function toPublic(r: {

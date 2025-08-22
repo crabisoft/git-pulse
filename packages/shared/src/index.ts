@@ -83,6 +83,16 @@ export interface Deployment {
   createdAt: string;
 }
 
+/** A merged PR/MR with the timestamps needed to derive lead time. */
+export interface MergedPullRequest {
+  id: string;
+  repo: string;
+  openedAt: string;
+  firstCommitAt: string | null;
+  firstReviewAt: string | null;
+  mergedAt: string;
+}
+
 // ─── Localizable messages ────────────────────────────────────────────
 
 /** A message identified by an i18n code, translated on the frontend. */

@@ -5,6 +5,7 @@ import { CryptoModule } from './crypto/crypto.module';
 import { SourcesModule } from './sources/sources.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { EnvRulesModule } from './env-rules/env-rules.module';
+import { DoraModule } from './dora/dora.module';
 import { CollectionModule } from './collection/collection.module';
 
 @Module({
@@ -15,6 +16,7 @@ import { CollectionModule } from './collection/collection.module';
     SourcesModule,
     DashboardModule,
     EnvRulesModule,
+    DoraModule,
     CollectionModule,
   ],
 })

@@ -4,6 +4,7 @@ import type {
   PullRequest,
   Pipeline,
   Deployment,
+  MergedPullRequest,
   PipelineStatus,
   ConnectionTestResult,
 } from '@repo/shared';
@@ -126,6 +127,48 @@ export class GitLabConnector implements SourceConnector {
       }
     }
     return out;
+  }
+
+  async listMergedPullRequests(
+    ctx: ConnectorContext,
+    repos: string[],
+    since: string,
+  ): Promise<MergedPullRequest[]> {
+    const gl = this.client(ctx);
+    const sinceMs = new Date(since).getTime();
+    const out: MergedPullRequest[] = [];
+    for (const repo of repos) {
+      const mrs = await gl.MergeRequests.all({
+        projectId: repo,
+        state: 'merged',
+        updatedAfter: since,
+        perPage: 50,
+      });
+      for (const mr of mrs) {
+        const mergedAt = mr.merged_at as string | null;
+        if (!mergedAt || new Date(mergedAt).getTime() < sinceMs) continue;
+        out.push({
+          id: `gl:${repo}:${mr.iid}`,
+          repo,
+          openedAt: mr.created_at as string,
+          firstCommitAt: await this.firstCommitAt(gl, repo, mr.iid as number),
+          // GitLab has no GitHub-style reviews; pickup/review are not derived.
+          firstReviewAt: null,
+          mergedAt,
+        });
+      }
+    }
+    return out;
+  }
+
+  private async firstCommitAt(gl: GitlabClient, repo: string, iid: number): Promise<string | null> {
+    const commits = await gl.MergeRequests.allCommits(repo, iid);
+    if (commits.length === 0) return null;
+    const oldest = commits.reduce((min, c) => {
+      const t = new Date(c.created_at as string).getTime();
+      return t < min ? t : min;
+    }, Number.POSITIVE_INFINITY);
+    return Number.isFinite(oldest) ? new Date(oldest).toISOString() : null;
   }
 }
 

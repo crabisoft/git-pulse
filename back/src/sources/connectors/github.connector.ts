@@ -5,6 +5,7 @@ import type {
   PullRequest,
   Pipeline,
   Deployment,
+  MergedPullRequest,
   PipelineStatus,
   ConnectionTestResult,
 } from '@repo/shared';
@@ -144,13 +145,107 @@ export class GitHubConnector implements SourceConnector {
           repo,
           environment: d.environment,
           ref: d.ref,
-          // Real status needs a deployment_statuses call — Phase 2.
-          status: 'unknown',
+          status: await this.deploymentStatus(gh, ctx.scope.owner, repo, d.id),
           createdAt: d.created_at,
         });
       }
     }
     return out;
+  }
+
+  async listMergedPullRequests(
+    ctx: ConnectorContext,
+    repos: string[],
+    since: string,
+  ): Promise<MergedPullRequest[]> {
+    const gh = this.client(ctx);
+    const sinceMs = new Date(since).getTime();
+    const out: MergedPullRequest[] = [];
+    for (const repo of repos) {
+      const prs = await gh.rest.pulls.list({
+        owner: ctx.scope.owner,
+        repo,
+        state: 'closed',
+        sort: 'updated',
+        direction: 'desc',
+        per_page: 50,
+      });
+      for (const pr of prs.data) {
+        if (!pr.merged_at || new Date(pr.merged_at).getTime() < sinceMs) continue;
+        const [firstCommitAt, firstReviewAt] = await Promise.all([
+          this.firstCommitAt(gh, ctx.scope.owner, repo, pr.number),
+          this.firstReviewAt(gh, ctx.scope.owner, repo, pr.number),
+        ]);
+        out.push({
+          id: `gh:${repo}:${pr.number}`,
+          repo,
+          openedAt: pr.created_at,
+          firstCommitAt,
+          firstReviewAt,
+          mergedAt: pr.merged_at,
+        });
+      }
+    }
+    return out;
+  }
+
+  private async deploymentStatus(
+    gh: Octokit,
+    owner: string,
+    repo: string,
+    deploymentId: number,
+  ): Promise<PipelineStatus> {
+    const statuses = await gh.rest.repos.listDeploymentStatuses({
+      owner,
+      repo,
+      deployment_id: deploymentId,
+      per_page: 1,
+    });
+    switch (statuses.data[0]?.state) {
+      case 'success':
+        return 'success';
+      case 'failure':
+      case 'error':
+        return 'failed';
+      case 'in_progress':
+        return 'running';
+      case 'queued':
+      case 'pending':
+        return 'pending';
+      default:
+        return 'unknown';
+    }
+  }
+
+  private async firstCommitAt(
+    gh: Octokit,
+    owner: string,
+    repo: string,
+    pullNumber: number,
+  ): Promise<string | null> {
+    const commits = await gh.rest.pulls.listCommits({
+      owner,
+      repo,
+      pull_number: pullNumber,
+      per_page: 1,
+    });
+    const commit = commits.data[0]?.commit;
+    return commit?.author?.date ?? commit?.committer?.date ?? null;
+  }
+
+  private async firstReviewAt(
+    gh: Octokit,
+    owner: string,
+    repo: string,
+    pullNumber: number,
+  ): Promise<string | null> {
+    const reviews = await gh.rest.pulls.listReviews({
+      owner,
+      repo,
+      pull_number: pullNumber,
+      per_page: 1,
+    });
+    return reviews.data[0]?.submitted_at ?? null;
   }
 }
 

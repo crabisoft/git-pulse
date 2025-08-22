@@ -6,6 +6,7 @@ import { CollectionScheduler } from './collection.scheduler';
 import { CollectionController } from './collection.controller';
 import { SourcesModule } from '../sources/sources.module';
 import { DashboardModule } from '../dashboard/dashboard.module';
+import { DoraModule } from '../dora/dora.module';
 import { redisConnection } from './redis.util';
 
 @Module({
@@ -14,6 +15,7 @@ import { redisConnection } from './redis.util';
     BullModule.registerQueue({ name: 'collection' }),
     SourcesModule,
     DashboardModule,
+    DoraModule,
   ],
   controllers: [CollectionController],
   providers: [CollectorService, CollectionProcessor, CollectionScheduler],
