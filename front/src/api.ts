@@ -3,6 +3,10 @@ import type {
   DashboardLive,
   ConnectionTestResult,
   CodedMessage,
+  EnvRulePublic,
+  ClassifiedEnvironment,
+  DoraResult,
+  MetricSnapshotPublic,
 } from '@repo/shared';
 
 // Relative by default (same-origin, via the Vite dev proxy / nginx). An absolute
@@ -59,6 +63,13 @@ export interface CreateSourceInput {
   scope: { owner: string; include?: string[]; exclude?: string[] };
 }
 
+export interface CreateEnvRuleInput {
+  name: string;
+  pattern: string;
+  kind: 'simple' | 'meta';
+  priority?: number;
+}
+
 export const api = {
   listSources: () => request<SourcePublic[]>('/sources'),
   createSource: (input: CreateSourceInput) =>
@@ -67,4 +78,21 @@ export const api = {
   testSource: (id: string) =>
     request<ConnectionTestResult>(`/sources/${id}/test`, { method: 'POST' }),
   live: (sourceId: string) => request<DashboardLive>(`/dashboard/${sourceId}/live`),
+
+  listEnvRules: (sourceId: string) =>
+    request<EnvRulePublic[]>(`/sources/${sourceId}/env-rules`),
+  createEnvRule: (sourceId: string, input: CreateEnvRuleInput) =>
+    request<EnvRulePublic>(`/sources/${sourceId}/env-rules`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  deleteEnvRule: (id: string) => request<void>(`/env-rules/${id}`, { method: 'DELETE' }),
+  classifyEnv: (sourceId: string, name: string) =>
+    request<ClassifiedEnvironment>(`/sources/${sourceId}/env-rules/classify`, {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+
+  dora: (sourceId: string) => request<DoraResult[]>(`/sources/${sourceId}/dora`),
+  metrics: (sourceId: string) => request<MetricSnapshotPublic[]>(`/sources/${sourceId}/metrics`),
 };

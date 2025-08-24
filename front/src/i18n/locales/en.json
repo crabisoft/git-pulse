@@ -4,7 +4,35 @@
   },
   "nav": {
     "dashboard": "Dashboard",
+    "dora": "DORA",
+    "env": "Environments",
     "sources": "Sources"
+  },
+  "envRules": {
+    "listTitle": "Environment rules",
+    "listEmpty": "No rule yet.",
+    "addTitle": "Add a rule",
+    "added": "Rule added.",
+    "kind": { "simple": "simple", "meta": "meta" },
+    "form": {
+      "name": "Name",
+      "pattern": "Pattern (RegEx)",
+      "patternHint": "named groups become attributes, e.g. (?<type>prod)",
+      "kind": "Kind",
+      "priority": "Priority",
+      "priorityHint": "lower wins on attribute conflicts",
+      "submit": "Add rule",
+      "submitting": "Adding…"
+    },
+    "preview": {
+      "title": "Test an environment name",
+      "hint": "Classify a name against the saved rules.",
+      "placeholder": "e.g. prod-acme",
+      "classify": "Classify",
+      "attributes": "Attributes",
+      "metaEnvironments": "Meta-environments",
+      "none": "none"
+    }
   },
   "language": {
     "label": "Language"
@@ -73,6 +101,21 @@
       "reposFailed": "Repository discovery failed: {{error}}",
       "prsFailed": "Failed to load PRs/MRs: {{error}}",
       "pipelinesFailed": "Failed to load pipelines: {{error}}"
+    }
+  },
+  "dora": {
+    "title": "DORA metrics",
+    "empty": "No data yet — configure environment rules and run a collection.",
+    "global": "global",
+    "sample": "{{count}} events",
+    "metric": {
+      "deployment_frequency": "Deployment frequency",
+      "lead_time": "Lead time",
+      "change_failure_rate": "Change failure rate",
+      "mttr": "Time to restore (MTTR)",
+      "coding_time": "Coding time",
+      "pickup_time": "Pickup time",
+      "review_time": "Review time"
     }
   },
   "status": {

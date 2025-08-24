@@ -4,9 +4,11 @@ import type { SourcePublic } from '@repo/shared';
 import { api, apiErrorInfo } from './api';
 import { SourcesPage } from './pages/SourcesPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { DoraPage } from './pages/DoraPage';
+import { EnvRulesPage } from './pages/EnvRulesPage';
 import { SUPPORTED_LANGUAGES, LANGUAGE_LABELS } from './i18n';
 
-type View = 'dashboard' | 'sources';
+type View = 'dashboard' | 'dora' | 'env' | 'sources';
 
 export function App() {
   const { t, i18n } = useTranslation();
@@ -51,6 +53,18 @@ export function App() {
             {t('nav.dashboard')}
           </button>
           <button
+            className={view === 'dora' ? 'tab active' : 'tab'}
+            onClick={() => setView('dora')}
+          >
+            {t('nav.dora')}
+          </button>
+          <button
+            className={view === 'env' ? 'tab active' : 'tab'}
+            onClick={() => setView('env')}
+          >
+            {t('nav.env')}
+          </button>
+          <button
             className={view === 'sources' ? 'tab active' : 'tab'}
             onClick={() => setView('sources')}
           >
@@ -59,7 +73,7 @@ export function App() {
         </nav>
 
         <div className="topbar-right">
-          {sources.length > 0 && view === 'dashboard' && (
+          {sources.length > 0 && view !== 'sources' && (
             <select
               className="source-picker"
               value={selected ?? ''}
@@ -93,6 +107,20 @@ export function App() {
         {view === 'dashboard' &&
           (selected ? (
             <DashboardPage sourceId={selected} />
+          ) : (
+            <EmptyState onGoToSources={() => setView('sources')} />
+          ))}
+
+        {view === 'dora' &&
+          (selected ? (
+            <DoraPage sourceId={selected} />
+          ) : (
+            <EmptyState onGoToSources={() => setView('sources')} />
+          ))}
+
+        {view === 'env' &&
+          (selected ? (
+            <EnvRulesPage sourceId={selected} />
           ) : (
             <EmptyState onGoToSources={() => setView('sources')} />
           ))}

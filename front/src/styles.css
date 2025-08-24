@@ -107,6 +107,33 @@ a:hover { text-decoration: underline; }
 .multiselect-panel label:hover { background: var(--surface-2); }
 .multiselect-panel input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; }
 
+/* Environment rules */
+.rule-kind { font-size: .66rem; padding: 1px 7px; border-radius: 5px; font-family: var(--mono); vertical-align: middle; border: 1px solid var(--line); color: var(--muted); }
+.rule-kind.meta { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent-deep); border-color: transparent; }
+input.mono-input { font-family: var(--mono); font-size: .84rem; }
+.preview-row { display: flex; gap: 8px; margin-bottom: 12px; }
+.preview-row input {
+  flex: 1; padding: 9px 11px; border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); color: var(--ink); font-size: .9rem;
+}
+.classify-result { display: flex; flex-direction: column; gap: 14px; margin-top: 12px; }
+.cr-label { font-family: var(--mono); font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; }
+.pill.attr { font-family: var(--mono); background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); }
+.pill.attr b { color: var(--accent-deep); }
+.pill.meta { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent-deep); }
+
+/* DORA */
+.dora-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+.dora-rows { display: flex; flex-direction: column; }
+.dora-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); }
+.dora-row:last-child { border-bottom: none; }
+.dora-dims { display: flex; gap: 6px; flex-wrap: wrap; }
+.dora-right { display: flex; align-items: center; gap: 12px; }
+.dora-value { font-size: 1.1rem; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 58px; text-align: right; }
+.dora-sample { color: var(--muted); font-size: .74rem; white-space: nowrap; }
+.spark { color: var(--accent); display: block; }
+.spark-empty { color: var(--muted); font-size: .8rem; width: 84px; text-align: center; display: inline-block; }
+
 /* Panels & layout */
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 @media (max-width: 860px) { .grid-2 { grid-template-columns: 1fr; } }

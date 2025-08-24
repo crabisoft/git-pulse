@@ -4,7 +4,35 @@
   },
   "nav": {
     "dashboard": "Tableau de bord",
+    "dora": "DORA",
+    "env": "Environnements",
     "sources": "Sources"
+  },
+  "envRules": {
+    "listTitle": "Règles d'environnement",
+    "listEmpty": "Aucune règle pour l'instant.",
+    "addTitle": "Ajouter une règle",
+    "added": "Règle ajoutée.",
+    "kind": { "simple": "simple", "meta": "méta" },
+    "form": {
+      "name": "Nom",
+      "pattern": "Pattern (RegEx)",
+      "patternHint": "les groupes nommés deviennent des attributs, ex. (?<type>prod)",
+      "kind": "Type",
+      "priority": "Priorité",
+      "priorityHint": "le plus petit gagne en cas de conflit d'attribut",
+      "submit": "Ajouter la règle",
+      "submitting": "Ajout…"
+    },
+    "preview": {
+      "title": "Tester un nom d'environnement",
+      "hint": "Classe un nom selon les règles enregistrées.",
+      "placeholder": "ex. prod-acme",
+      "classify": "Classer",
+      "attributes": "Attributs",
+      "metaEnvironments": "Méta-environnements",
+      "none": "aucun"
+    }
   },
   "language": {
     "label": "Langue"
@@ -73,6 +101,21 @@
       "reposFailed": "Découverte des repos échouée : {{error}}",
       "prsFailed": "Collecte des PR/MR échouée : {{error}}",
       "pipelinesFailed": "Collecte des pipelines échouée : {{error}}"
+    }
+  },
+  "dora": {
+    "title": "Métriques DORA",
+    "empty": "Aucune donnée — configurez des règles d'environnement et lancez une collecte.",
+    "global": "global",
+    "sample": "{{count}} événements",
+    "metric": {
+      "deployment_frequency": "Fréquence de déploiement",
+      "lead_time": "Lead time",
+      "change_failure_rate": "Taux d'échec des changements",
+      "mttr": "Temps de rétablissement (MTTR)",
+      "coding_time": "Temps de codage",
+      "pickup_time": "Temps de prise en charge",
+      "review_time": "Temps de review"
     }
   },
   "status": {
