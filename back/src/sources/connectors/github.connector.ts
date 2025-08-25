@@ -195,25 +195,29 @@ export class GitHubConnector implements SourceConnector {
     repo: string,
     deploymentId: number,
   ): Promise<PipelineStatus> {
-    const statuses = await gh.rest.repos.listDeploymentStatuses({
-      owner,
-      repo,
-      deployment_id: deploymentId,
-      per_page: 1,
-    });
-    switch (statuses.data[0]?.state) {
-      case 'success':
-        return 'success';
-      case 'failure':
-      case 'error':
-        return 'failed';
-      case 'in_progress':
-        return 'running';
-      case 'queued':
-      case 'pending':
-        return 'pending';
-      default:
-        return 'unknown';
+    try {
+      const statuses = await gh.rest.repos.listDeploymentStatuses({
+        owner,
+        repo,
+        deployment_id: deploymentId,
+        per_page: 1,
+      });
+      switch (statuses.data[0]?.state) {
+        case 'success':
+          return 'success';
+        case 'failure':
+        case 'error':
+          return 'failed';
+        case 'in_progress':
+          return 'running';
+        case 'queued':
+        case 'pending':
+          return 'pending';
+        default:
+          return 'unknown';
+      }
+    } catch {
+      return 'unknown';
     }
   }
 
@@ -223,14 +227,18 @@ export class GitHubConnector implements SourceConnector {
     repo: string,
     pullNumber: number,
   ): Promise<string | null> {
-    const commits = await gh.rest.pulls.listCommits({
-      owner,
-      repo,
-      pull_number: pullNumber,
-      per_page: 1,
-    });
-    const commit = commits.data[0]?.commit;
-    return commit?.author?.date ?? commit?.committer?.date ?? null;
+    try {
+      const commits = await gh.rest.pulls.listCommits({
+        owner,
+        repo,
+        pull_number: pullNumber,
+        per_page: 1,
+      });
+      const commit = commits.data[0]?.commit;
+      return commit?.author?.date ?? commit?.committer?.date ?? null;
+    } catch {
+      return null;
+    }
   }
 
   private async firstReviewAt(
@@ -239,13 +247,17 @@ export class GitHubConnector implements SourceConnector {
     repo: string,
     pullNumber: number,
   ): Promise<string | null> {
-    const reviews = await gh.rest.pulls.listReviews({
-      owner,
-      repo,
-      pull_number: pullNumber,
-      per_page: 1,
-    });
-    return reviews.data[0]?.submitted_at ?? null;
+    try {
+      const reviews = await gh.rest.pulls.listReviews({
+        owner,
+        repo,
+        pull_number: pullNumber,
+        per_page: 1,
+      });
+      return reviews.data[0]?.submitted_at ?? null;
+    } catch {
+      return null;
+    }
   }
 }
 

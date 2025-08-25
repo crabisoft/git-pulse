@@ -162,13 +162,17 @@ export class GitLabConnector implements SourceConnector {
   }
 
   private async firstCommitAt(gl: GitlabClient, repo: string, iid: number): Promise<string | null> {
-    const commits = await gl.MergeRequests.allCommits(repo, iid);
-    if (commits.length === 0) return null;
-    const oldest = commits.reduce((min, c) => {
-      const t = new Date(c.created_at as string).getTime();
-      return t < min ? t : min;
-    }, Number.POSITIVE_INFINITY);
-    return Number.isFinite(oldest) ? new Date(oldest).toISOString() : null;
+    try {
+      const commits = await gl.MergeRequests.allCommits(repo, iid);
+      if (commits.length === 0) return null;
+      const oldest = commits.reduce((min, c) => {
+        const t = new Date(c.created_at as string).getTime();
+        return t < min ? t : min;
+      }, Number.POSITIVE_INFINITY);
+      return Number.isFinite(oldest) ? new Date(oldest).toISOString() : null;
+    } catch {
+      return null;
+    }
   }
 }
 

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { Deployment, DoraResult, MergedPullRequest, PipelineStatus } from '@repo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { SourcesService } from '../sources/sources.service';
@@ -17,6 +17,8 @@ const DEFAULT_WINDOW_DAYS = 30;
 
 @Injectable()
 export class DoraService {
+  private readonly logger = new Logger(DoraService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly sources: SourcesService,
@@ -31,9 +33,17 @@ export class DoraService {
     const since = this.windowStart();
     const repos = await connector.listRepositories(ctx);
 
+    // Best-effort: a missing permission on one endpoint yields partial metrics
+    // rather than failing the whole computation.
     const [deployments, mergedPrs] = await Promise.all([
-      connector.listDeployments(ctx, repos),
-      connector.listMergedPullRequests(ctx, repos, since),
+      connector.listDeployments(ctx, repos).catch((e) => {
+        this.logger.warn(`listDeployments échoué (${sourceId}) : ${asMessage(e)}`);
+        return [] as Deployment[];
+      }),
+      connector.listMergedPullRequests(ctx, repos, since).catch((e) => {
+        this.logger.warn(`listMergedPullRequests échoué (${sourceId}) : ${asMessage(e)}`);
+        return [] as MergedPullRequest[];
+      }),
     ]);
 
     const deploymentEvents = await this.toDeploymentEvents(sourceId, deployments, since);
@@ -95,6 +105,10 @@ export class DoraService {
       dimensions: dimensionsByEnv.get(d.environment) ?? {},
     }));
   }
+}
+
+function asMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
 }
 
 function toEventStatus(status: PipelineStatus): DeploymentEvent['status'] {
