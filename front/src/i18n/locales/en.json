@@ -5,8 +5,35 @@
   "nav": {
     "dashboard": "Dashboard",
     "dora": "DORA",
-    "env": "Environments",
-    "sources": "Sources"
+    "settings": "Settings"
+  },
+  "settings": {
+    "title": "Settings",
+    "section": {
+      "general": "General",
+      "sources": "Sources",
+      "env": "Environments"
+    },
+    "desc": {
+      "general": "Collection and thresholds",
+      "sources": "GitHub and GitLab",
+      "env": "Classification rules"
+    },
+    "env": {
+      "noSource": "Add a source to define environment rules."
+    },
+    "general": {
+      "appTitle": "Application",
+      "uiTitle": "Interface",
+      "saved": "Settings saved.",
+      "doraWindowDays": "DORA window (days)",
+      "doraWindowDaysHint": "metrics lookback period",
+      "stalePrHours": "Stale PR threshold (hours)",
+      "stalePrHoursHint": "beyond this age a PR/MR is flagged as stale",
+      "collectCron": "Collection cron",
+      "collectCronHint": "e.g. */15 * * * * (every 15 minutes)",
+      "languageHint": "kept in this browser"
+    }
   },
   "envRules": {
     "listTitle": "Environment rules",
@@ -39,10 +66,17 @@
   },
   "common": {
     "apiError": "API error: {{error}}",
-    "test": "Test",
+    "test": "Test connection",
+    "edit": "Edit",
+    "cancel": "Cancel",
     "delete": "Delete",
     "refresh": "Refresh",
-    "refreshing": "Refreshing…"
+    "refreshing": "Refreshing…",
+    "loading": "Loading…",
+    "save": "Save",
+    "saving": "Saving…",
+    "close": "Close",
+    "help": "Help"
   },
   "errors": {
     "http": "Request failed ({{status}}): {{detail}}",
@@ -53,11 +87,16 @@
       "noCredential": "No secret stored for this source.",
       "unsupportedKind": "Unsupported source type: {{kind}}",
       "missingToken": "A token is required.",
-      "missingAppCredentials": "GitHub App credentials are required."
+      "missingAppCredentials": "GitHub App credentials are required.",
+      "appUnsupported": "GitHub App authentication is not supported by GitLab."
     },
     "envRule": {
       "notFound": "Rule not found.",
       "invalidPattern": "Invalid regular expression: {{pattern}}"
+    },
+    "settings": {
+      "outOfRange": "Invalid value for {{key}}: expected an integer between {{min}} and {{max}}.",
+      "invalidCron": "Invalid cron expression: {{pattern}}"
     }
   },
   "empty": {
@@ -78,7 +117,8 @@
       "openPrs": "Open PRs / MRs",
       "stalePrs": "Stale PRs / MRs",
       "failedPipelines": "Failed pipelines",
-      "runningPipelines": "Running pipelines"
+      "runningPipelines": "Running pipelines",
+      "environments": "Environments"
     },
     "prs": {
       "title": "Pull / Merge Requests",
@@ -88,6 +128,11 @@
       "title": "Recent pipelines",
       "empty": "No pipeline."
     },
+    "environments": {
+      "title": "Discovered environments",
+      "empty": "No deployed environment.",
+      "unclassified": "unclassified"
+    },
     "cols": {
       "repo": "Repo",
       "title": "Title",
@@ -95,12 +140,17 @@
       "ageH": "Age (h)",
       "ref": "Ref",
       "status": "Status",
-      "duration": "Duration"
+      "duration": "Duration",
+      "environment": "Environment",
+      "classification": "Classification",
+      "deployments": "Deployments",
+      "lastDeploy": "Last deployment"
     },
     "warn": {
       "reposFailed": "Repository discovery failed: {{error}}",
       "prsFailed": "Failed to load PRs/MRs: {{error}}",
-      "pipelinesFailed": "Failed to load pipelines: {{error}}"
+      "pipelinesFailed": "Failed to load pipelines: {{error}}",
+      "deploymentsFailed": "Failed to load deployments: {{error}}"
     }
   },
   "dora": {
@@ -108,6 +158,20 @@
     "empty": "No data yet — configure environment rules and run a collection.",
     "global": "global",
     "sample": "{{count}} events",
+    "detail": {
+      "open": "View details",
+      "shown": "showing {{shown}} of {{total}} events",
+      "cols": {
+        "item": "Event",
+        "date": "Date",
+        "duration": "Duration"
+      },
+      "field": {
+        "repo": "repo",
+        "restoredAt": "restored at",
+        "openedAt": "opened at"
+      }
+    },
     "metric": {
       "deployment_frequency": "Deployment frequency",
       "lead_time": "Lead time",
@@ -116,6 +180,15 @@
       "coding_time": "Coding time",
       "pickup_time": "Pickup time",
       "review_time": "Review time"
+    },
+    "help": {
+      "deployment_frequency": "Number of deployments over the lookback window. A high frequency means smaller, less risky batches of change.",
+      "lead_time": "Median time from a PR/MR's first commit to its merge — how long a change takes to be ready to ship.",
+      "change_failure_rate": "Share of failed deployments among those with a known status. Deployments with an undetermined status are excluded.",
+      "mttr": "Median time between a failed deployment and the next successful one on the same environment.",
+      "coding_time": "Median time from the first commit to the PR/MR being opened.",
+      "pickup_time": "Median time from the PR/MR being opened to its first review. Not computed on GitLab, which exposes no reviews.",
+      "review_time": "Median time from the first review to the merge. Not computed on GitLab, which exposes no reviews."
     }
   },
   "status": {
@@ -132,7 +205,10 @@
     "listEmpty": "No source yet.",
     "auth": "auth",
     "addTitle": "Add a source",
+    "editTitle": "Edit \"{{name}}\"",
     "added": "Source added.",
+    "updated": "Source updated.",
+    "confirmDelete": "Delete the source \"{{name}}\"? Its environment rules and metric history will be deleted too.",
     "test": {
       "ok": "Connected to \"{{owner}}\".",
       "failed": "Connection failed: {{error}}"
@@ -149,12 +225,14 @@
       "authApp": "GitHub App",
       "secret": "Secret",
       "secretHint": "(encrypted at rest, never shown again)",
+      "secretKeepHint": "(leave blank to keep the current secret)",
       "appId": "App ID",
       "installationId": "Installation ID",
       "privateKey": "Private key (PEM)",
       "privateKeyHint": "(paste the .pem contents)",
       "submit": "Add source",
-      "submitting": "Adding…"
+      "save": "Save",
+      "submitting": "Saving…"
     }
   }
 }

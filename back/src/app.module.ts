@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
+import { SettingsModule } from './settings/settings.module';
 import { CryptoModule } from './crypto/crypto.module';
 import { SourcesModule } from './sources/sources.module';
 import { DashboardModule } from './dashboard/dashboard.module';
@@ -12,6 +13,7 @@ import { CollectionModule } from './collection/collection.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
+    SettingsModule,
     CryptoModule,
     SourcesModule,
     DashboardModule,

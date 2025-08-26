@@ -1,0 +1,102 @@
+/**
+ * Inline SVG icons — stroke follows the surrounding text colour so buttons keep
+ * their own tone (danger, muted, ...).
+ */
+
+type IconProps = { size?: number };
+
+function Svg({ size = 16, children }: IconProps & { children: React.ReactNode }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {children}
+    </svg>
+  );
+}
+
+export function EditIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 20h9" />
+      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    </Svg>
+  );
+}
+
+export function TestIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M9 2h6" />
+      <path d="M10 2v6.5L4.7 18a2 2 0 0 0 1.7 3h11.2a2 2 0 0 0 1.7-3L14 8.5V2" />
+      <path d="M7 15h10" />
+    </Svg>
+  );
+}
+
+export function DeleteIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M3 6h18" />
+      <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+      <path d="M19 6v14a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V6" />
+      <path d="M10 11v6M14 11v6" />
+    </Svg>
+  );
+}
+
+export function SlidersIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3" />
+      <path d="M1 14h6M9 8h6M17 16h6" />
+    </Svg>
+  );
+}
+
+export function ServerIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="2" y="3" width="20" height="7" rx="2" />
+      <rect x="2" y="14" width="20" height="7" rx="2" />
+      <path d="M6 6.5h.01M6 17.5h.01" />
+    </Svg>
+  );
+}
+
+export function LayersIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="m12 2 9 5-9 5-9-5 9-5Z" />
+      <path d="m3 12 9 5 9-5" />
+      <path d="m3 17 9 5 9-5" />
+    </Svg>
+  );
+}
+
+export function HelpIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.7v.5" />
+      <path d="M12 17h.01" />
+    </Svg>
+  );
+}
+
+export function CancelIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M18 6 6 18M6 6l12 12" />
+    </Svg>
+  );
+}

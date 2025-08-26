@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { DoraResult, DoraMetric, MetricSnapshotPublic } from '@repo/shared';
+import type { DoraResult, DoraMetric, DoraSample, MetricSnapshotPublic } from '@repo/shared';
 import { api, apiErrorInfo } from '../api';
+import { CancelIcon } from '../icons';
+import { HelpTip } from '../HelpTip';
 
 const METRIC_ORDER: DoraMetric[] = [
   'deployment_frequency',
@@ -19,6 +21,7 @@ export function DoraPage({ sourceId }: { sourceId: string }) {
   const [history, setHistory] = useState<MetricSnapshotPublic[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detail, setDetail] = useState<DoraResult | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -67,10 +70,20 @@ export function DoraPage({ sourceId }: { sourceId: string }) {
             if (rows.length === 0) return null;
             return (
               <section key={metric} className="panel">
-                <h3>{t(`dora.metric.${metric}`)}</h3>
+                <h3 className="with-help">
+                  {t(`dora.metric.${metric}`)}
+                  <HelpTip text={t(`dora.help.${metric}`)} />
+                </h3>
                 <div className="dora-rows">
                   {rows.map((r, i) => (
-                    <div key={i} className="dora-row">
+                    <button
+                      key={i}
+                      type="button"
+                      className="dora-row"
+                      onClick={() => setDetail(r)}
+                      title={t('dora.detail.open')}
+                      disabled={r.samples.length === 0}
+                    >
                       <div className="dora-dims">
                         {Object.keys(r.dimensions).length === 0 ? (
                           <span className="muted">{t('dora.global')}</span>
@@ -86,8 +99,11 @@ export function DoraPage({ sourceId }: { sourceId: string }) {
                         <Sparkline values={historyByKey.get(`${metric}|${dimKey(r.dimensions)}`) ?? []} />
                         <span className="dora-value">{formatValue(r)}</span>
                         <span className="dora-sample">{t('dora.sample', { count: r.sampleSize })}</span>
+                        <span className="dora-caret" aria-hidden="true">
+                          ›
+                        </span>
                       </div>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </section>
@@ -95,8 +111,136 @@ export function DoraPage({ sourceId }: { sourceId: string }) {
           })}
         </div>
       )}
+
+      {detail && <DetailDialog result={detail} onClose={() => setDetail(null)} />}
     </div>
   );
+}
+
+/** Contributing events behind one metric value. */
+function DetailDialog({ result, onClose }: { result: DoraResult; onClose: () => void }) {
+  const { t } = useTranslation();
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const dimensions = Object.entries(result.dimensions);
+  const isDuration = result.unit === 'seconds';
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div
+        className="modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={t(`dora.metric.${result.metric}`)}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="modal-head">
+          <div>
+            <h3 className="with-help">
+              {t(`dora.metric.${result.metric}`)}
+              <HelpTip text={t(`dora.help.${result.metric}`)} />
+            </h3>
+            <div className="modal-sub">
+              <span className="dora-value">{formatValue(result)}</span>
+              {dimensions.length === 0 ? (
+                <span className="muted">{t('dora.global')}</span>
+              ) : (
+                <div className="pills">
+                  {dimensions.map(([k, v]) => (
+                    <span key={k} className="pill attr">
+                      <b>{k}</b>={v}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <button className="btn icon" onClick={onClose} title={t('common.close')} aria-label={t('common.close')}>
+            <CancelIcon />
+          </button>
+        </div>
+
+        <p className="muted modal-count">
+          {t('dora.detail.shown', { shown: result.samples.length, total: result.sampleSize })}
+        </p>
+
+        <div className="modal-body">
+          <table className="data">
+            <thead>
+              <tr>
+                <th>{t('dora.detail.cols.item')}</th>
+                <th>{t('dora.detail.cols.date')}</th>
+                {isDuration ? (
+                  <th className="num">{t('dora.detail.cols.duration')}</th>
+                ) : (
+                  <th>{t('dashboard.cols.status')}</th>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {result.samples.map((s, i) => (
+                <tr key={i}>
+                  <td className="mono">
+                    {s.url ? (
+                      <a href={s.url} target="_blank" rel="noreferrer">
+                        {s.label}
+                      </a>
+                    ) : (
+                      s.label
+                    )}
+                    {s.details && <SampleDetails details={s.details} />}
+                  </td>
+                  <td>{formatDate(s.at)}</td>
+                  {isDuration ? (
+                    <td className="num">{s.value === null ? '—' : humanizeDuration(s.value)}</td>
+                  ) : (
+                    <td>
+                      <SampleStatus status={s.status} />
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SampleDetails({ details }: { details: Record<string, string> }) {
+  const { t } = useTranslation();
+  return (
+    <div className="sample-details">
+      {Object.entries(details).map(([k, v]) => (
+        <span key={k}>
+          {t(`dora.detail.field.${k}`, { defaultValue: k })}: {isIsoDate(v) ? formatDate(v) : v}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function SampleStatus({ status }: { status: DoraSample['status'] }) {
+  const { t } = useTranslation();
+  if (!status) return <span className="muted">—</span>;
+  const key = status === 'other' ? 'unknown' : status;
+  return <span className={`pill status-${key}`}>{t(`status.${key}`)}</span>;
+}
+
+function isIsoDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}T/.test(value);
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
 }
 
 function Sparkline({ values }: { values: number[] }) {

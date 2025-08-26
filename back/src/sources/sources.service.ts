@@ -6,6 +6,7 @@ import { CryptoService } from '../crypto/crypto.service';
 import type { ConnectorContext, SourceAuth } from './connectors/source-connector.interface';
 import { ConnectorFactory } from './connectors/connector.factory';
 import type { CreateSourceDto } from './dto/create-source.dto';
+import type { UpdateSourceDto } from './dto/update-source.dto';
 
 @Injectable()
 export class SourcesService {
@@ -45,6 +46,56 @@ export class SourcesService {
   async findOne(id: string): Promise<SourcePublic> {
     const source = await this.prisma.source.findUnique({ where: { id } });
     if (!source) throw new CodedException('errors.source.notFound', HttpStatus.NOT_FOUND, { id });
+    return toPublic(source);
+  }
+
+  /**
+   * Partial update. The stored secret is kept untouched unless a new one is
+   * supplied — except when the auth scheme changes, which makes it unusable.
+   */
+  async update(id: string, dto: UpdateSourceDto): Promise<SourcePublic> {
+    const current = await this.prisma.source.findUnique({ where: { id } });
+    if (!current) throw new CodedException('errors.source.notFound', HttpStatus.NOT_FOUND, { id });
+
+    const kind = dto.kind ?? (current.kind as SourceKind);
+    const authKind = dto.authKind ?? (current.authKind as AuthKind);
+    if (kind === 'gitlab' && authKind === 'app') {
+      throw new CodedException('errors.source.appUnsupported', HttpStatus.BAD_REQUEST);
+    }
+
+    const newCredential =
+      dto.secret !== undefined || dto.app !== undefined || authKind !== current.authKind
+        ? this.crypto.encrypt(credentialPlaintext({ authKind, secret: dto.secret, app: dto.app }))
+        : null;
+
+    const source = await this.prisma.source.update({
+      where: { id },
+      data: {
+        name: dto.name,
+        kind,
+        baseUrl: dto.baseUrl,
+        authKind,
+        scope: dto.scope ? (dto.scope as unknown as object) : undefined,
+        credential: newCredential
+          ? {
+              upsert: {
+                create: {
+                  ciphertext: newCredential.ciphertext,
+                  iv: newCredential.iv,
+                  authTag: newCredential.authTag,
+                  keyVersion: newCredential.keyVersion,
+                },
+                update: {
+                  ciphertext: newCredential.ciphertext,
+                  iv: newCredential.iv,
+                  authTag: newCredential.authTag,
+                  keyVersion: newCredential.keyVersion,
+                },
+              },
+            }
+          : undefined,
+      },
+    });
     return toPublic(source);
   }
 
@@ -92,18 +143,22 @@ export class SourcesService {
   }
 }
 
-/** Serializes the credential to encrypt from a create request. */
-function credentialPlaintext(dto: CreateSourceDto): string {
-  if (dto.authKind === 'app') {
-    if (!dto.app) {
+/** Serializes the credential to encrypt from a create or update request. */
+function credentialPlaintext(input: {
+  authKind: AuthKind;
+  secret?: string;
+  app?: { appId: string; privateKey: string; installationId: string };
+}): string {
+  if (input.authKind === 'app') {
+    if (!input.app) {
       throw new CodedException('errors.source.missingAppCredentials', HttpStatus.BAD_REQUEST);
     }
-    return JSON.stringify(dto.app);
+    return JSON.stringify(input.app);
   }
-  if (!dto.secret) {
+  if (!input.secret) {
     throw new CodedException('errors.source.missingToken', HttpStatus.BAD_REQUEST);
   }
-  return dto.secret;
+  return input.secret;
 }
 
 /** Rebuilds the connector auth from stored credentials. */

@@ -87,6 +87,8 @@ export interface Deployment {
 export interface MergedPullRequest {
   id: string;
   repo: string;
+  number: number;
+  url: string;
   openedAt: string;
   firstCommitAt: string | null;
   firstReviewAt: string | null;
@@ -134,6 +136,21 @@ export type DoraMetric =
   | 'pickup_time'
   | 'review_time';
 
+/** One event contributing to a metric value, shown in the detail view. */
+export interface DoraSample {
+  /** Environment name, or repo reference for PR-based metrics. */
+  label: string;
+  /** Date the sample is anchored to (deployment date, merge date, ...). */
+  at: string;
+  /** Duration in seconds for time-based metrics, null when only counted. */
+  value: number | null;
+  status?: 'success' | 'failed' | 'other';
+  /** Link to the underlying PR/MR, when there is one. */
+  url?: string;
+  /** Extra context (repo, restore date, ...) rendered as key/value pairs. */
+  details?: Record<string, string>;
+}
+
 /** A computed DORA metric for one dimension combination. */
 export interface DoraResult {
   metric: DoraMetric;
@@ -143,6 +160,8 @@ export interface DoraResult {
   dimensions: Record<string, string>;
   /** Number of events the value is derived from. */
   sampleSize: number;
+  /** Most recent contributing events, capped — sampleSize keeps the real total. */
+  samples: DoraSample[];
 }
 
 /** A historized metric point (basis for time-series trends). */
@@ -164,17 +183,51 @@ export interface ClassifiedEnvironment {
   metaEnvironments: string[];
 }
 
+// ─── Application settings ────────────────────────────────────────────
+
+/**
+ * Application-wide settings, editable from the Settings section. Each one
+ * defaults to its environment variable, then to a built-in value.
+ */
+export interface AppSettings {
+  /** Lookback window for DORA metrics, in days (DORA_WINDOW_DAYS). */
+  doraWindowDays: number;
+  /** Age beyond which a PR/MR counts as stale, in hours. */
+  stalePrHours: number;
+  /** Cron pattern of the scheduled collection (COLLECT_CRON). */
+  collectCron: string;
+}
+
 // ─── Aggregated dashboard responses ──────────────────────────────────
+
+/**
+ * An environment discovered in the deployments of a source, resolved against
+ * its rules. An environment no rule matches is still listed, with empty
+ * attributes and meta-environments.
+ */
+export interface DashboardEnvironment {
+  name: string;
+  /** Attributes from named capture groups — empty when no rule matches. */
+  attributes: Record<string, string>;
+  metaEnvironments: string[];
+  /** Repos having deployed to this environment over the window. */
+  repos: string[];
+  deployments: number;
+  lastDeployAt: string;
+  lastStatus: PipelineStatus;
+}
 
 export interface DashboardLive {
   sourceId: string;
   pullRequests: PullRequest[];
   pipelines: Pipeline[];
+  environments: DashboardEnvironment[];
   summary: {
     openPrs: number;
     stalePrs: number;
     failedPipelines: number;
     runningPipelines: number;
+    environments: number;
   };
   /** Non-blocking errors collected while fetching. */
   warnings: CodedMessage[];

@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SourcesService } from '../sources/sources.service';
 import { ConnectorFactory } from '../sources/connectors/connector.factory';
 import { EnvRulesService } from '../env-rules/env-rules.service';
+import { SettingsService } from '../settings/settings.service';
 import {
   deploymentFrequency,
   changeFailureRate,
@@ -12,8 +13,6 @@ import {
   type DeploymentEvent,
   type MergedPrEvent,
 } from './dora-metrics';
-
-const DEFAULT_WINDOW_DAYS = 30;
 
 @Injectable()
 export class DoraService {
@@ -24,13 +23,14 @@ export class DoraService {
     private readonly sources: SourcesService,
     private readonly connectors: ConnectorFactory,
     private readonly envRules: EnvRulesService,
+    private readonly settings: SettingsService,
   ) {}
 
   /** Compute DORA metrics over the lookback window for a source. */
   async compute(sourceId: string): Promise<DoraResult[]> {
     const { ctx, kind } = await this.sources.resolveContext(sourceId);
     const connector = this.connectors.for(kind);
-    const since = this.windowStart();
+    const since = await this.windowStart();
     const repos = await connector.listRepositories(ctx);
 
     // Best-effort: a missing permission on one endpoint yields partial metrics
@@ -78,9 +78,9 @@ export class DoraService {
     return created.length;
   }
 
-  private windowStart(): string {
-    const days = Number(process.env.DORA_WINDOW_DAYS ?? DEFAULT_WINDOW_DAYS);
-    return new Date(Date.now() - days * 86_400_000).toISOString();
+  private async windowStart(): Promise<string> {
+    const { doraWindowDays } = await this.settings.get();
+    return new Date(Date.now() - doraWindowDays * 86_400_000).toISOString();
   }
 
   private async toDeploymentEvents(
@@ -100,6 +100,7 @@ export class DoraService {
 
     return inWindow.map((d) => ({
       environment: d.environment,
+      repo: d.repo,
       status: toEventStatus(d.status),
       createdAt: d.createdAt,
       dimensions: dimensionsByEnv.get(d.environment) ?? {},
@@ -119,6 +120,9 @@ function toEventStatus(status: PipelineStatus): DeploymentEvent['status'] {
 
 function toMergedPrEvent(pr: MergedPullRequest): MergedPrEvent {
   return {
+    repo: pr.repo,
+    number: pr.number,
+    url: pr.url,
     firstCommitAt: pr.firstCommitAt,
     openedAt: pr.openedAt,
     firstReviewAt: pr.firstReviewAt,

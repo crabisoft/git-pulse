@@ -1,27 +1,27 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { SourcePublic } from '@repo/shared';
+import type { AppSettings, SourcePublic } from '@repo/shared';
 import { api, apiErrorInfo } from './api';
-import { SourcesPage } from './pages/SourcesPage';
+import { SettingsPage } from './pages/SettingsPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { DoraPage } from './pages/DoraPage';
-import { EnvRulesPage } from './pages/EnvRulesPage';
-import { SUPPORTED_LANGUAGES, LANGUAGE_LABELS } from './i18n';
 
-type View = 'dashboard' | 'dora' | 'env' | 'sources';
+type View = 'dashboard' | 'dora' | 'settings';
 
 export function App() {
   const { t, i18n } = useTranslation();
   const [view, setView] = useState<View>('dashboard');
   const [sources, setSources] = useState<SourcePublic[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
+  const [settings, setSettings] = useState<AppSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     try {
       const list = await api.listSources();
       setSources(list);
-      setSelected((cur) => cur ?? list[0]?.id ?? null);
+      // Fall back to the first source when the selected one is gone (deleted).
+      setSelected((cur) => (cur && list.some((s) => s.id === cur) ? cur : (list[0]?.id ?? null)));
       setError(null);
     } catch (e) {
       const { code, params } = apiErrorInfo(e);
@@ -32,6 +32,13 @@ export function App() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    api.settings().then(setSettings, (e) => {
+      const { code, params } = apiErrorInfo(e);
+      setError(t(code, params));
+    });
+  }, [t]);
 
   useEffect(() => {
     document.documentElement.lang = i18n.resolvedLanguage ?? 'en';
@@ -59,21 +66,15 @@ export function App() {
             {t('nav.dora')}
           </button>
           <button
-            className={view === 'env' ? 'tab active' : 'tab'}
-            onClick={() => setView('env')}
+            className={view === 'settings' ? 'tab active' : 'tab'}
+            onClick={() => setView('settings')}
           >
-            {t('nav.env')}
-          </button>
-          <button
-            className={view === 'sources' ? 'tab active' : 'tab'}
-            onClick={() => setView('sources')}
-          >
-            {t('nav.sources')}
+            {t('nav.settings')}
           </button>
         </nav>
 
         <div className="topbar-right">
-          {sources.length > 0 && view !== 'sources' && (
+          {sources.length > 0 && (
             <select
               className="source-picker"
               value={selected ?? ''}
@@ -86,46 +87,35 @@ export function App() {
               ))}
             </select>
           )}
-          <select
-            className="lang-select"
-            aria-label={t('language.label')}
-            value={i18n.resolvedLanguage}
-            onChange={(e) => void i18n.changeLanguage(e.target.value)}
-          >
-            {SUPPORTED_LANGUAGES.map((lng) => (
-              <option key={lng} value={lng}>
-                {LANGUAGE_LABELS[lng]}
-              </option>
-            ))}
-          </select>
         </div>
       </header>
 
-      <main className="content">
+      <main className={view === 'settings' ? 'content flush' : 'content'}>
         {error && <div className="banner error">{error}</div>}
 
         {view === 'dashboard' &&
           (selected ? (
-            <DashboardPage sourceId={selected} />
+            <DashboardPage sourceId={selected} staleHours={settings?.stalePrHours ?? null} />
           ) : (
-            <EmptyState onGoToSources={() => setView('sources')} />
+            <EmptyState onGoToSources={() => setView('settings')} />
           ))}
 
         {view === 'dora' &&
           (selected ? (
             <DoraPage sourceId={selected} />
           ) : (
-            <EmptyState onGoToSources={() => setView('sources')} />
+            <EmptyState onGoToSources={() => setView('settings')} />
           ))}
 
-        {view === 'env' &&
-          (selected ? (
-            <EnvRulesPage sourceId={selected} />
-          ) : (
-            <EmptyState onGoToSources={() => setView('sources')} />
-          ))}
-
-        {view === 'sources' && <SourcesPage sources={sources} onChange={refresh} />}
+        {view === 'settings' && (
+          <SettingsPage
+            sources={sources}
+            selectedSourceId={selected}
+            settings={settings}
+            onSourcesChange={refresh}
+            onSettingsChange={setSettings}
+          />
+        )}
       </main>
     </div>
   );

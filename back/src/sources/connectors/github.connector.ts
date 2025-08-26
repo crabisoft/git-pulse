@@ -179,6 +179,8 @@ export class GitHubConnector implements SourceConnector {
         out.push({
           id: `gh:${repo}:${pr.number}`,
           repo,
+          number: pr.number,
+          url: pr.html_url,
           openedAt: pr.created_at,
           firstCommitAt,
           firstReviewAt,

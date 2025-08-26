@@ -1,4 +1,5 @@
 import type {
+  AppSettings,
   SourcePublic,
   DashboardLive,
   ConnectionTestResult,
@@ -63,6 +64,9 @@ export interface CreateSourceInput {
   scope: { owner: string; include?: string[]; exclude?: string[] };
 }
 
+/** Every field is optional; omitting the secret keeps the stored one. */
+export type UpdateSourceInput = Partial<CreateSourceInput>;
+
 export interface CreateEnvRuleInput {
   name: string;
   pattern: string;
@@ -74,6 +78,8 @@ export const api = {
   listSources: () => request<SourcePublic[]>('/sources'),
   createSource: (input: CreateSourceInput) =>
     request<SourcePublic>('/sources', { method: 'POST', body: JSON.stringify(input) }),
+  updateSource: (id: string, input: UpdateSourceInput) =>
+    request<SourcePublic>(`/sources/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   deleteSource: (id: string) => request<void>(`/sources/${id}`, { method: 'DELETE' }),
   testSource: (id: string) =>
     request<ConnectionTestResult>(`/sources/${id}/test`, { method: 'POST' }),
@@ -92,6 +98,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ name }),
     }),
+
+  settings: () => request<AppSettings>('/settings'),
+  updateSettings: (input: Partial<AppSettings>) =>
+    request<AppSettings>('/settings', { method: 'PATCH', body: JSON.stringify(input) }),
 
   dora: (sourceId: string) => request<DoraResult[]>(`/sources/${sourceId}/dora`),
   metrics: (sourceId: string) => request<MetricSnapshotPublic[]>(`/sources/${sourceId}/metrics`),

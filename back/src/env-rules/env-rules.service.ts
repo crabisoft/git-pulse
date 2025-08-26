@@ -40,11 +40,18 @@ export class EnvRulesService {
 
   /** Classify an environment name against a source's saved rules. */
   async classify(sourceId: string, name: string): Promise<ClassifiedEnvironment> {
+    const [classified] = await this.classifyMany(sourceId, [name]);
+    return classified;
+  }
+
+  /** Same as classify, for several names — the rules are read once. */
+  async classifyMany(sourceId: string, names: string[]): Promise<ClassifiedEnvironment[]> {
     const rules = await this.prisma.envRule.findMany({
       where: { sourceId },
       orderBy: { priority: 'asc' },
     });
-    return classifyEnvironment(name, rules.map(toRuleLike));
+    const ruleLikes = rules.map(toRuleLike);
+    return names.map((name) => classifyEnvironment(name, ruleLikes));
   }
 
   private async assertSourceExists(sourceId: string): Promise<void> {

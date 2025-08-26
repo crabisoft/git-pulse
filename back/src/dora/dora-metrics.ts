@@ -1,8 +1,12 @@
-import type { DoraMetric, DoraResult } from '@repo/shared';
+import type { DoraMetric, DoraResult, DoraSample } from '@repo/shared';
+
+/** Most recent contributing events kept per result for the detail view. */
+const MAX_SAMPLES = 50;
 
 /** A deployment, already classified into dimensions by the env engine. */
 export interface DeploymentEvent {
   environment: string;
+  repo: string;
   status: 'success' | 'failed' | 'other';
   createdAt: string;
   dimensions: Record<string, string>;
@@ -10,6 +14,9 @@ export interface DeploymentEvent {
 
 /** A merged pull/merge request with the timestamps needed for lead time. */
 export interface MergedPrEvent {
+  repo: string;
+  number: number;
+  url: string;
   firstCommitAt: string | null;
   openedAt: string;
   firstReviewAt: string | null;
@@ -25,6 +32,7 @@ export function deploymentFrequency(deployments: DeploymentEvent[]): DoraResult[
     unit: 'count',
     dimensions: items[0].dimensions,
     sampleSize: items.length,
+    samples: takeRecent(items.map(deploymentSample)),
   }));
 }
 
@@ -39,6 +47,10 @@ export function changeFailureRate(deployments: DeploymentEvent[]): DoraResult[] 
       unit: 'ratio',
       dimensions: items[0].dimensions,
       sampleSize: items.length,
+      // Failures first: they are what the rate is about.
+      samples: takeRecent(items.map(deploymentSample), (a, b) =>
+        a.status === b.status ? 0 : a.status === 'failed' ? -1 : 1,
+      ),
     };
   });
 }
@@ -50,12 +62,22 @@ export function changeFailureRate(deployments: DeploymentEvent[]): DoraResult[] 
 export function mttr(deployments: DeploymentEvent[]): DoraResult[] {
   return [...groupByDimensions(deployments)].map(([, items]) => {
     const restores: number[] = [];
+    const samples: DoraSample[] = [];
     for (const [, envItems] of groupBy(items, (d) => d.environment)) {
       const sorted = [...envItems].sort(byCreatedAt);
       for (let i = 0; i < sorted.length; i++) {
         if (sorted[i].status !== 'failed') continue;
         const next = sorted.slice(i + 1).find((d) => d.status === 'success');
-        if (next) restores.push(seconds(sorted[i].createdAt, next.createdAt));
+        if (!next) continue;
+        const durationSec = seconds(sorted[i].createdAt, next.createdAt);
+        restores.push(durationSec);
+        samples.push({
+          label: sorted[i].environment,
+          at: sorted[i].createdAt,
+          value: durationSec,
+          status: 'failed',
+          details: { repo: sorted[i].repo, restoredAt: next.createdAt },
+        });
       }
     }
     return {
@@ -64,6 +86,7 @@ export function mttr(deployments: DeploymentEvent[]): DoraResult[] {
       unit: 'seconds',
       dimensions: items[0].dimensions,
       sampleSize: restores.length,
+      samples: takeRecent(samples),
     };
   });
 }
@@ -78,27 +101,28 @@ export function mttr(deployments: DeploymentEvent[]): DoraResult[] {
  */
 export function leadTimeBreakdown(prs: MergedPrEvent[]): DoraResult[] {
   return [...groupByDimensions(prs)].flatMap(([, items]) => {
-    const coding: number[] = [];
-    const pickup: number[] = [];
-    const review: number[] = [];
-    const lead: number[] = [];
+    const coding: DoraSample[] = [];
+    const pickup: DoraSample[] = [];
+    const review: DoraSample[] = [];
+    const lead: DoraSample[] = [];
     for (const p of items) {
       if (p.firstCommitAt) {
-        coding.push(clamp(seconds(p.firstCommitAt, p.openedAt)));
-        lead.push(clamp(seconds(p.firstCommitAt, p.mergedAt)));
+        coding.push(prSample(p, clamp(seconds(p.firstCommitAt, p.openedAt))));
+        lead.push(prSample(p, clamp(seconds(p.firstCommitAt, p.mergedAt))));
       }
       if (p.firstReviewAt) {
-        pickup.push(clamp(seconds(p.openedAt, p.firstReviewAt)));
-        review.push(clamp(seconds(p.firstReviewAt, p.mergedAt)));
+        pickup.push(prSample(p, clamp(seconds(p.openedAt, p.firstReviewAt))));
+        review.push(prSample(p, clamp(seconds(p.firstReviewAt, p.mergedAt))));
       }
     }
     const dims = items[0].dimensions;
-    const point = (metric: DoraMetric, values: number[]): DoraResult => ({
+    const point = (metric: DoraMetric, samples: DoraSample[]): DoraResult => ({
       metric,
-      value: median(values),
+      value: median(samples.map((s) => s.value ?? 0)),
       unit: 'seconds',
       dimensions: dims,
-      sampleSize: values.length,
+      sampleSize: samples.length,
+      samples: takeRecent(samples),
     });
     return [
       point('coding_time', coding),
@@ -110,6 +134,40 @@ export function leadTimeBreakdown(prs: MergedPrEvent[]): DoraResult[] {
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────
+
+function deploymentSample(d: DeploymentEvent): DoraSample {
+  return {
+    label: d.environment,
+    at: d.createdAt,
+    value: null,
+    status: d.status,
+    details: { repo: d.repo },
+  };
+}
+
+function prSample(p: MergedPrEvent, value: number): DoraSample {
+  return {
+    label: `${p.repo} #${p.number}`,
+    at: p.mergedAt,
+    value,
+    url: p.url,
+    details: { openedAt: p.openedAt },
+  };
+}
+
+/** Most recent first — after an optional priority sort — capped to MAX_SAMPLES. */
+function takeRecent(
+  samples: DoraSample[],
+  priority?: (a: DoraSample, b: DoraSample) => number,
+): DoraSample[] {
+  return [...samples]
+    .sort((a, b) => (priority ? priority(a, b) : 0) || msOf(b.at) - msOf(a.at))
+    .slice(0, MAX_SAMPLES);
+}
+
+function msOf(date: string): number {
+  return new Date(date).getTime();
+}
 
 function groupByDimensions<T extends { dimensions: Record<string, string> }>(items: T[]) {
   return groupBy(items, (i) => dimensionKey(i.dimensions));

@@ -74,6 +74,14 @@ model EnvRule {
   @@index([sourceId, priority])
 }
 
+/// Application-wide setting, editable from the UI. A missing key falls back to
+/// the matching environment variable, then to the built-in default.
+model AppSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
 /// Historized metric snapshot (Phase 2) — the basis for DORA trends.
 model MetricSnapshot {
   id         String   @id @default(uuid())

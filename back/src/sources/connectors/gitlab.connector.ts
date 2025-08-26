@@ -150,6 +150,8 @@ export class GitLabConnector implements SourceConnector {
         out.push({
           id: `gl:${repo}:${mr.iid}`,
           repo,
+          number: mr.iid as number,
+          url: mr.web_url as string,
           openedAt: mr.created_at as string,
           firstCommitAt: await this.firstCommitAt(gl, repo, mr.iid as number),
           // GitLab has no GitHub-style reviews; pickup/review are not derived.

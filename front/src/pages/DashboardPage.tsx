@@ -1,11 +1,19 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { DashboardLive, PipelineStatus } from '@repo/shared';
+import type { DashboardEnvironment, DashboardLive, PipelineStatus } from '@repo/shared';
 import { api, apiErrorInfo } from '../api';
 
-const STALE_HOURS = 72;
+/** Used until the settings are loaded; the backend applies the stored value. */
+const DEFAULT_STALE_HOURS = 72;
 
-export function DashboardPage({ sourceId }: { sourceId: string }) {
+export function DashboardPage({
+  sourceId,
+  staleHours,
+}: {
+  sourceId: string;
+  staleHours: number | null;
+}) {
+  const stale = staleHours ?? DEFAULT_STALE_HOURS;
   const { t } = useTranslation();
   const [data, setData] = useState<DashboardLive | null>(null);
   const [loading, setLoading] = useState(false);
@@ -39,17 +47,20 @@ export function DashboardPage({ sourceId }: { sourceId: string }) {
     const set = new Set<string>();
     data.pullRequests.forEach((p) => set.add(p.repo));
     data.pipelines.forEach((p) => set.add(p.repo));
+    data.environments.forEach((e) => e.repos.forEach((r) => set.add(r)));
     return [...set].sort();
   }, [data]);
 
   const inFilter = (repo: string) => selectedRepos.size === 0 || selectedRepos.has(repo);
   const pullRequests = data ? data.pullRequests.filter((p) => inFilter(p.repo)) : [];
   const pipelines = data ? data.pipelines.filter((p) => inFilter(p.repo)) : [];
+  const environments = data ? data.environments.filter((e) => e.repos.some(inFilter)) : [];
   const summary = {
     openPrs: pullRequests.length,
-    stalePrs: pullRequests.filter((p) => p.ageHours >= STALE_HOURS).length,
+    stalePrs: pullRequests.filter((p) => p.ageHours >= stale).length,
     failedPipelines: pipelines.filter((p) => p.status === 'failed').length,
     runningPipelines: pipelines.filter((p) => p.status === 'running').length,
+    environments: environments.length,
   };
 
   return (
@@ -82,6 +93,7 @@ export function DashboardPage({ sourceId }: { sourceId: string }) {
               value={summary.runningPipelines}
               tone="accent"
             />
+            <Tile label={t('dashboard.tiles.environments')} value={summary.environments} />
           </div>
 
           {data.warnings.length > 0 && (
@@ -91,6 +103,41 @@ export function DashboardPage({ sourceId }: { sourceId: string }) {
               ))}
             </div>
           )}
+
+          <section className="panel env-panel">
+            <h3>{t('dashboard.environments.title')}</h3>
+            {environments.length === 0 ? (
+              <p className="muted">{t('dashboard.environments.empty')}</p>
+            ) : (
+              <table className="data">
+                <thead>
+                  <tr>
+                    <th>{t('dashboard.cols.environment')}</th>
+                    <th>{t('dashboard.cols.classification')}</th>
+                    <th>{t('dashboard.cols.repo')}</th>
+                    <th className="num">{t('dashboard.cols.deployments')}</th>
+                    <th>{t('dashboard.cols.lastDeploy')}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {environments.map((env) => (
+                    <tr key={env.name}>
+                      <td className="mono">{env.name}</td>
+                      <td>
+                        <Classification env={env} />
+                      </td>
+                      <td className="mono">{env.repos.join(', ')}</td>
+                      <td className="num">{env.deployments}</td>
+                      <td>
+                        <StatusPill status={env.lastStatus} />{' '}
+                        <span className="muted">{formatDate(env.lastDeployAt)}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </section>
 
           <div className="grid-2">
             <section className="panel">
@@ -109,7 +156,7 @@ export function DashboardPage({ sourceId }: { sourceId: string }) {
                   </thead>
                   <tbody>
                     {pullRequests.map((pr) => (
-                      <tr key={pr.id} className={pr.ageHours >= STALE_HOURS ? 'stale' : ''}>
+                      <tr key={pr.id} className={pr.ageHours >= stale ? 'stale' : ''}>
                         <td className="mono">
                           <a href={pr.repoUrl} target="_blank" rel="noreferrer">
                             {pr.repo}
@@ -247,6 +294,31 @@ function RepoFilter({
   );
 }
 
+/** Attributes and meta-environments of an environment, or a hint when no rule matched. */
+function Classification({ env }: { env: DashboardEnvironment }) {
+  const { t } = useTranslation();
+  const attributes = Object.entries(env.attributes);
+
+  if (attributes.length === 0 && env.metaEnvironments.length === 0) {
+    return <span className="muted">{t('dashboard.environments.unclassified')}</span>;
+  }
+
+  return (
+    <div className="pills">
+      {attributes.map(([k, v]) => (
+        <span key={k} className="pill attr">
+          <b>{k}</b>={v}
+        </span>
+      ))}
+      {env.metaEnvironments.map((m) => (
+        <span key={m} className="pill meta">
+          {m}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 function Tile({
   label,
   value,
@@ -267,6 +339,10 @@ function Tile({
 function StatusPill({ status }: { status: PipelineStatus }) {
   const { t } = useTranslation();
   return <span className={`pill status-${status}`}>{t(`status.${status}`)}</span>;
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
 }
 
 function formatDuration(sec: number | null): string {

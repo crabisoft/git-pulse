@@ -5,8 +5,35 @@
   "nav": {
     "dashboard": "Tableau de bord",
     "dora": "DORA",
-    "env": "Environnements",
-    "sources": "Sources"
+    "settings": "Paramètres"
+  },
+  "settings": {
+    "title": "Paramètres",
+    "section": {
+      "general": "Général",
+      "sources": "Sources",
+      "env": "Environnements"
+    },
+    "desc": {
+      "general": "Collecte et seuils",
+      "sources": "GitHub et GitLab",
+      "env": "Règles de classification"
+    },
+    "env": {
+      "noSource": "Ajoutez une source pour définir des règles d'environnement."
+    },
+    "general": {
+      "appTitle": "Application",
+      "uiTitle": "Interface",
+      "saved": "Réglages enregistrés.",
+      "doraWindowDays": "Fenêtre DORA (jours)",
+      "doraWindowDaysHint": "période d'analyse des métriques",
+      "stalePrHours": "Seuil PR bloquée (heures)",
+      "stalePrHoursHint": "au-delà, une PR/MR est signalée comme bloquée",
+      "collectCron": "Cron de collecte",
+      "collectCronHint": "ex. */15 * * * * (toutes les 15 minutes)",
+      "languageHint": "conservée sur ce navigateur"
+    }
   },
   "envRules": {
     "listTitle": "Règles d'environnement",
@@ -39,10 +66,17 @@
   },
   "common": {
     "apiError": "Erreur API : {{error}}",
-    "test": "Tester",
+    "test": "Tester la connexion",
+    "edit": "Modifier",
+    "cancel": "Annuler",
     "delete": "Supprimer",
     "refresh": "Actualiser",
-    "refreshing": "Actualisation…"
+    "refreshing": "Actualisation…",
+    "loading": "Chargement…",
+    "save": "Enregistrer",
+    "saving": "Enregistrement…",
+    "close": "Fermer",
+    "help": "Aide"
   },
   "errors": {
     "http": "Échec de la requête ({{status}}) : {{detail}}",
@@ -53,11 +87,16 @@
       "noCredential": "Aucun secret enregistré pour cette source.",
       "unsupportedKind": "Type de source non supporté : {{kind}}",
       "missingToken": "Un token est requis.",
-      "missingAppCredentials": "Les identifiants de la GitHub App sont requis."
+      "missingAppCredentials": "Les identifiants de la GitHub App sont requis.",
+      "appUnsupported": "L'authentification GitHub App n'est pas supportée par GitLab."
     },
     "envRule": {
       "notFound": "Règle introuvable.",
       "invalidPattern": "Expression régulière invalide : {{pattern}}"
+    },
+    "settings": {
+      "outOfRange": "Valeur invalide pour {{key}} : attendu un entier entre {{min}} et {{max}}.",
+      "invalidCron": "Expression cron invalide : {{pattern}}"
     }
   },
   "empty": {
@@ -78,7 +117,8 @@
       "openPrs": "PR / MR ouvertes",
       "stalePrs": "PR / MR bloquées",
       "failedPipelines": "Pipelines en échec",
-      "runningPipelines": "Pipelines en cours"
+      "runningPipelines": "Pipelines en cours",
+      "environments": "Environnements"
     },
     "prs": {
       "title": "Pull / Merge Requests",
@@ -88,6 +128,11 @@
       "title": "Pipelines récents",
       "empty": "Aucun pipeline."
     },
+    "environments": {
+      "title": "Environnements découverts",
+      "empty": "Aucun environnement déployé.",
+      "unclassified": "non classé"
+    },
     "cols": {
       "repo": "Repo",
       "title": "Titre",
@@ -95,12 +140,17 @@
       "ageH": "Âge (h)",
       "ref": "Ref",
       "status": "Statut",
-      "duration": "Durée"
+      "duration": "Durée",
+      "environment": "Environnement",
+      "classification": "Classification",
+      "deployments": "Déploiements",
+      "lastDeploy": "Dernier déploiement"
     },
     "warn": {
       "reposFailed": "Découverte des repos échouée : {{error}}",
       "prsFailed": "Collecte des PR/MR échouée : {{error}}",
-      "pipelinesFailed": "Collecte des pipelines échouée : {{error}}"
+      "pipelinesFailed": "Collecte des pipelines échouée : {{error}}",
+      "deploymentsFailed": "Collecte des déploiements échouée : {{error}}"
     }
   },
   "dora": {
@@ -108,6 +158,20 @@
     "empty": "Aucune donnée — configurez des règles d'environnement et lancez une collecte.",
     "global": "global",
     "sample": "{{count}} événements",
+    "detail": {
+      "open": "Voir le détail",
+      "shown": "{{shown}} événement(s) affiché(s) sur {{total}}",
+      "cols": {
+        "item": "Événement",
+        "date": "Date",
+        "duration": "Durée"
+      },
+      "field": {
+        "repo": "dépôt",
+        "restoredAt": "rétabli le",
+        "openedAt": "ouverte le"
+      }
+    },
     "metric": {
       "deployment_frequency": "Fréquence de déploiement",
       "lead_time": "Lead time",
@@ -116,6 +180,15 @@
       "coding_time": "Temps de codage",
       "pickup_time": "Temps de prise en charge",
       "review_time": "Temps de review"
+    },
+    "help": {
+      "deployment_frequency": "Nombre de déploiements sur la fenêtre d'analyse. Une fréquence élevée traduit des lots de changements plus petits, donc moins risqués.",
+      "lead_time": "Durée médiane entre le premier commit d'une PR/MR et sa fusion. C'est le temps total pour qu'un changement soit prêt à partir.",
+      "change_failure_rate": "Part des déploiements en échec parmi ceux dont le statut est connu. Les déploiements au statut indéterminé sont exclus du calcul.",
+      "mttr": "Durée médiane entre un déploiement en échec et le déploiement réussi suivant sur le même environnement.",
+      "coding_time": "Durée médiane entre le premier commit et l'ouverture de la PR/MR.",
+      "pickup_time": "Durée médiane entre l'ouverture de la PR/MR et la première review. Non calculé sur GitLab, qui n'expose pas de reviews.",
+      "review_time": "Durée médiane entre la première review et la fusion. Non calculé sur GitLab, qui n'expose pas de reviews."
     }
   },
   "status": {
@@ -132,7 +205,10 @@
     "listEmpty": "Aucune source pour l'instant.",
     "auth": "auth",
     "addTitle": "Ajouter une source",
+    "editTitle": "Modifier « {{name}} »",
     "added": "Source ajoutée.",
+    "updated": "Source mise à jour.",
+    "confirmDelete": "Supprimer la source « {{name}} » ? Ses règles d'environnement et son historique de métriques seront également supprimés.",
     "test": {
       "ok": "Connexion OK pour « {{owner}} ».",
       "failed": "Échec de connexion : {{error}}"
@@ -149,12 +225,14 @@
       "authApp": "GitHub App",
       "secret": "Secret",
       "secretHint": "(chiffré au repos, jamais réaffiché)",
+      "secretKeepHint": "(laisser vide pour conserver le secret actuel)",
       "appId": "App ID",
       "installationId": "Installation ID",
       "privateKey": "Clé privée (PEM)",
       "privateKeyHint": "(collez le contenu du .pem)",
       "submit": "Ajouter la source",
-      "submitting": "Ajout…"
+      "save": "Enregistrer",
+      "submitting": "Enregistrement…"
     }
   }
 }

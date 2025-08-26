@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { SourcePublic, ConnectionTestResult } from '@repo/shared';
-import { api, apiErrorInfo, type CreateSourceInput } from '../api';
+import { api, apiErrorInfo, type CreateSourceInput, type UpdateSourceInput } from '../api';
+import { CancelIcon, DeleteIcon, EditIcon, TestIcon } from '../icons';
 
 interface FormState {
   name: string;
@@ -47,6 +48,51 @@ function toInput(form: FormState): CreateSourceInput {
     : { ...base, secret: form.secret };
 }
 
+/** Same payload, minus the credentials left blank — those keep their stored value. */
+function toUpdateInput(form: FormState): UpdateSourceInput {
+  const { app, secret, ...base } = toInput(form);
+  if (form.authKind === 'app') {
+    return app && app.appId && app.privateKey && app.installationId ? { ...base, app } : base;
+  }
+  return secret ? { ...base, secret } : base;
+}
+
+function toForm(source: SourcePublic): FormState {
+  return {
+    ...EMPTY,
+    name: source.name,
+    kind: source.kind,
+    baseUrl: source.baseUrl,
+    authKind: source.authKind,
+    owner: source.scope.owner,
+  };
+}
+
+/** Icon-only action; the label is exposed as both tooltip and accessible name. */
+function IconButton({
+  label,
+  onClick,
+  tone,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  tone?: 'danger';
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={`btn icon ${tone ?? ''}`}
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+    >
+      {children}
+    </button>
+  );
+}
+
 export function SourcesPage({
   sources,
   onChange,
@@ -59,15 +105,35 @@ export function SourcesPage({
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [tested, setTested] = useState<Record<string, ConnectionTestResult | 'pending'>>({});
+  const [editing, setEditing] = useState<string | null>(null);
+
+  const edited = sources.find((s) => s.id === editing) ?? null;
+  // Stored credentials can be kept as-is, unless the auth scheme itself changes.
+  const secretRequired = !edited || edited.authKind !== form.authKind;
+  const appTouched = Boolean(form.appId || form.privateKey || form.installationId);
 
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
+
+  function startEdit(source: SourcePublic) {
+    setEditing(source.id);
+    setForm(toForm(source));
+    setMsg(null);
+  }
+
+  function cancelEdit() {
+    setEditing(null);
+    setForm(EMPTY);
+    setMsg(null);
+  }
 
   function changeKind(kind: FormState['kind']) {
     setForm((f) => ({
       ...f,
       kind,
-      baseUrl: kind === 'github' ? 'https://github.com' : 'https://gitlab.com',
+      // Only prefill the default host when creating: while editing, the base URL
+      // must keep reflecting the edited source (often a self-hosted instance).
+      baseUrl: editing ? f.baseUrl : kind === 'github' ? 'https://github.com' : 'https://gitlab.com',
       // GitLab supports token auth only.
       authKind: kind === 'gitlab' ? 'token' : f.authKind,
     }));
@@ -78,9 +144,15 @@ export function SourcesPage({
     setBusy(true);
     setMsg(null);
     try {
-      await api.createSource(toInput(form));
+      if (editing) {
+        await api.updateSource(editing, toUpdateInput(form));
+        setEditing(null);
+        setMsg({ kind: 'ok', text: t('sources.updated') });
+      } else {
+        await api.createSource(toInput(form));
+        setMsg({ kind: 'ok', text: t('sources.added') });
+      }
       setForm(EMPTY);
-      setMsg({ kind: 'ok', text: t('sources.added') });
       await onChange();
     } catch (err) {
       const { code, params } = apiErrorInfo(err);
@@ -100,9 +172,11 @@ export function SourcesPage({
     }
   }
 
-  async function remove(id: string) {
+  async function remove(source: SourcePublic) {
+    if (!window.confirm(t('sources.confirmDelete', { name: source.name }))) return;
     try {
-      await api.deleteSource(id);
+      await api.deleteSource(source.id);
+      if (editing === source.id) cancelEdit();
       await onChange();
     } catch (err) {
       const { code, params } = apiErrorInfo(err);
@@ -119,7 +193,7 @@ export function SourcesPage({
           {sources.map((s) => {
             const ts = tested[s.id];
             return (
-              <li key={s.id} className="source-row">
+              <li key={s.id} className={editing === s.id ? 'source-row editing' : 'source-row'}>
                 <div>
                   <div className="source-name">
                     {s.name} <span className={`kind-badge ${s.kind}`}>{s.kind}</span>
@@ -136,12 +210,15 @@ export function SourcesPage({
                   )}
                 </div>
                 <div className="row-actions">
-                  <button className="btn" onClick={() => test(s.id)}>
-                    {t('common.test')}
-                  </button>
-                  <button className="btn danger" onClick={() => remove(s.id)}>
-                    {t('common.delete')}
-                  </button>
+                  <IconButton label={t('common.edit')} onClick={() => startEdit(s)}>
+                    <EditIcon />
+                  </IconButton>
+                  <IconButton label={t('common.test')} onClick={() => void test(s.id)}>
+                    <TestIcon />
+                  </IconButton>
+                  <IconButton label={t('common.delete')} tone="danger" onClick={() => void remove(s)}>
+                    <DeleteIcon />
+                  </IconButton>
                 </div>
               </li>
             );
@@ -150,7 +227,7 @@ export function SourcesPage({
       </section>
 
       <section className="panel">
-        <h2>{t('sources.addTitle')}</h2>
+        <h2>{editing ? t('sources.editTitle', { name: edited?.name ?? '' }) : t('sources.addTitle')}</h2>
         <form onSubmit={submit} className="form">
           <label>
             {t('sources.form.name')}
@@ -186,27 +263,34 @@ export function SourcesPage({
           {form.authKind === 'token' ? (
             <label>
               {t('sources.form.secret')}{' '}
-              <span className="hint">{t('sources.form.secretHint')}</span>
+              <span className="hint">
+                {secretRequired ? t('sources.form.secretHint') : t('sources.form.secretKeepHint')}
+              </span>
               <input
                 type="password"
                 value={form.secret}
                 onChange={(e) => set('secret', e.target.value)}
-                required
+                required={secretRequired}
                 autoComplete="off"
               />
             </label>
           ) : (
             <>
+              {!secretRequired && <p className="hint">{t('sources.form.secretKeepHint')}</p>}
               <label>
                 {t('sources.form.appId')}
-                <input value={form.appId} onChange={(e) => set('appId', e.target.value)} required />
+                <input
+                  value={form.appId}
+                  onChange={(e) => set('appId', e.target.value)}
+                  required={secretRequired || appTouched}
+                />
               </label>
               <label>
                 {t('sources.form.installationId')}
                 <input
                   value={form.installationId}
                   onChange={(e) => set('installationId', e.target.value)}
-                  required
+                  required={secretRequired || appTouched}
                 />
               </label>
               <label>
@@ -215,7 +299,7 @@ export function SourcesPage({
                 <textarea
                   value={form.privateKey}
                   onChange={(e) => set('privateKey', e.target.value)}
-                  required
+                  required={secretRequired || appTouched}
                   rows={5}
                   autoComplete="off"
                 />
@@ -224,9 +308,20 @@ export function SourcesPage({
           )}
 
           {msg && <div className={`banner ${msg.kind === 'ok' ? 'ok' : 'error'}`}>{msg.text}</div>}
-          <button className="btn primary" disabled={busy} type="submit">
-            {busy ? t('sources.form.submitting') : t('sources.form.submit')}
-          </button>
+          <div className="form-actions">
+            <button className="btn primary" disabled={busy} type="submit">
+              {busy
+                ? t('sources.form.submitting')
+                : editing
+                  ? t('sources.form.save')
+                  : t('sources.form.submit')}
+            </button>
+            {editing && (
+              <button className="btn" type="button" onClick={cancelEdit}>
+                <CancelIcon /> {t('common.cancel')}
+              </button>
+            )}
+          </div>
         </form>
       </section>
     </div>

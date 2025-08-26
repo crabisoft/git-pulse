@@ -10,7 +10,7 @@ import {
 import { Type } from 'class-transformer';
 import type { AuthKind, SourceKind } from '@repo/shared';
 
-class ScopeDto {
+export class ScopeDto {
   @IsString()
   @MinLength(1)
   owner!: string;
@@ -27,7 +27,7 @@ class ScopeDto {
 }
 
 /** GitHub App installation credentials (used when authKind is 'app'). */
-class GitHubAppDto {
+export class GitHubAppDto {
   @IsString()
   @MinLength(1)
   appId!: string;
