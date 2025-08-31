@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CodedException } from '../common/coded-exception';
 import { classifyEnvironment, type EnvRuleLike } from './env-classifier';
 import type { CreateEnvRuleDto } from './dto/create-env-rule.dto';
+import type { UpdateEnvRuleDto } from './dto/update-env-rule.dto';
 
 @Injectable()
 export class EnvRulesService {
@@ -30,6 +31,25 @@ export class EnvRulesService {
       orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
     });
     return rules.map(toPublic);
+  }
+
+  async update(id: string, dto: UpdateEnvRuleDto): Promise<EnvRulePublic> {
+    if (dto.pattern !== undefined) assertValidPattern(dto.pattern);
+    const rule = await this.prisma.envRule
+      .update({
+        where: { id },
+        // Undefined keys are ignored by Prisma, so the stored value is kept.
+        data: {
+          name: dto.name,
+          pattern: dto.pattern,
+          kind: dto.kind,
+          priority: dto.priority,
+        },
+      })
+      .catch(() => {
+        throw new CodedException('errors.envRule.notFound', HttpStatus.NOT_FOUND, { id });
+      });
+    return toPublic(rule);
   }
 
   async remove(id: string): Promise<void> {

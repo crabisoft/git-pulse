@@ -2,8 +2,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DoraResult, DoraMetric, DoraSample, MetricSnapshotPublic } from '@repo/shared';
 import { api, apiErrorInfo } from '../api';
-import { CancelIcon } from '../icons';
 import { HelpTip } from '../HelpTip';
+import { Modal } from '../Modal';
 
 const METRIC_ORDER: DoraMetric[] = [
   'deployment_frequency',
@@ -120,98 +120,79 @@ export function DoraPage({ sourceId }: { sourceId: string }) {
 /** Contributing events behind one metric value. */
 function DetailDialog({ result, onClose }: { result: DoraResult; onClose: () => void }) {
   const { t } = useTranslation();
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   const dimensions = Object.entries(result.dimensions);
   const isDuration = result.unit === 'seconds';
 
   return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div
-        className="modal"
-        role="dialog"
-        aria-modal="true"
-        aria-label={t(`dora.metric.${result.metric}`)}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="modal-head">
-          <div>
-            <h3 className="with-help">
-              {t(`dora.metric.${result.metric}`)}
-              <HelpTip text={t(`dora.help.${result.metric}`)} />
-            </h3>
-            <div className="modal-sub">
-              <span className="dora-value">{formatValue(result)}</span>
-              {dimensions.length === 0 ? (
-                <span className="muted">{t('dora.global')}</span>
-              ) : (
-                <div className="pills">
-                  {dimensions.map(([k, v]) => (
-                    <span key={k} className="pill attr">
-                      <b>{k}</b>={v}
-                    </span>
-                  ))}
-                </div>
-              )}
-            </div>
+    <Modal
+      label={t(`dora.metric.${result.metric}`)}
+      onClose={onClose}
+      title={
+        <span className="with-help">
+          {t(`dora.metric.${result.metric}`)}
+          <HelpTip text={t(`dora.help.${result.metric}`)} />
+        </span>
+      }
+      subtitle={
+        <>
+          <div className="modal-sub">
+            <span className="dora-value">{formatValue(result)}</span>
+            {dimensions.length === 0 ? (
+              <span className="muted">{t('dora.global')}</span>
+            ) : (
+              <div className="pills">
+                {dimensions.map(([k, v]) => (
+                  <span key={k} className="pill attr">
+                    <b>{k}</b>={v}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
-          <button className="btn icon" onClick={onClose} title={t('common.close')} aria-label={t('common.close')}>
-            <CancelIcon />
-          </button>
-        </div>
-
-        <p className="muted modal-count">
-          {t('dora.detail.shown', { shown: result.samples.length, total: result.sampleSize })}
-        </p>
-
-        <div className="modal-body">
-          <table className="data">
-            <thead>
-              <tr>
-                <th>{t('dora.detail.cols.item')}</th>
-                <th>{t('dora.detail.cols.date')}</th>
-                {isDuration ? (
-                  <th className="num">{t('dora.detail.cols.duration')}</th>
+          <p className="muted modal-count">
+            {t('dora.detail.shown', { shown: result.samples.length, total: result.sampleSize })}
+          </p>
+        </>
+      }
+    >
+      <table className="data">
+        <thead>
+          <tr>
+            <th>{t('dora.detail.cols.item')}</th>
+            <th>{t('dora.detail.cols.date')}</th>
+            {isDuration ? (
+              <th className="num">{t('dora.detail.cols.duration')}</th>
+            ) : (
+              <th>{t('dashboard.cols.status')}</th>
+            )}
+          </tr>
+        </thead>
+        <tbody>
+          {result.samples.map((s, i) => (
+            <tr key={i}>
+              <td className="mono">
+                {s.url ? (
+                  <a href={s.url} target="_blank" rel="noreferrer">
+                    {s.label}
+                  </a>
                 ) : (
-                  <th>{t('dashboard.cols.status')}</th>
+                  s.label
                 )}
-              </tr>
-            </thead>
-            <tbody>
-              {result.samples.map((s, i) => (
-                <tr key={i}>
-                  <td className="mono">
-                    {s.url ? (
-                      <a href={s.url} target="_blank" rel="noreferrer">
-                        {s.label}
-                      </a>
-                    ) : (
-                      s.label
-                    )}
-                    {s.details && <SampleDetails details={s.details} />}
-                  </td>
-                  <td>{formatDate(s.at)}</td>
-                  {isDuration ? (
-                    <td className="num">{s.value === null ? '—' : humanizeDuration(s.value)}</td>
-                  ) : (
-                    <td>
-                      <SampleStatus status={s.status} />
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </div>
+                {s.details && <SampleDetails details={s.details} />}
+              </td>
+              <td>{formatDate(s.at)}</td>
+              {isDuration ? (
+                <td className="num">{s.value === null ? '—' : humanizeDuration(s.value)}</td>
+              ) : (
+                <td>
+                  <SampleStatus status={s.status} />
+                </td>
+              )}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Modal>
   );
 }
 

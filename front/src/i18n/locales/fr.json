@@ -39,7 +39,14 @@
     "listTitle": "Règles d'environnement",
     "listEmpty": "Aucune règle pour l'instant.",
     "addTitle": "Ajouter une règle",
+    "editTitle": "Modifier « {{name}} »",
     "added": "Règle ajoutée.",
+    "updated": "Règle mise à jour.",
+    "deleted": "Règle supprimée.",
+    "deleteTitle": "Supprimer la règle",
+    "confirmDelete": "Supprimer la règle « {{name}} » ? Les environnements qu'elle classait perdront ses attributs à la prochaine collecte.",
+    "testAll": "Tester le jeu de règles",
+    "testRule": "Tester cette règle",
     "kind": { "simple": "simple", "meta": "méta" },
     "form": {
       "name": "Nom",
@@ -49,11 +56,13 @@
       "priority": "Priorité",
       "priorityHint": "le plus petit gagne en cas de conflit d'attribut",
       "submit": "Ajouter la règle",
-      "submitting": "Ajout…"
+      "submitting": "Enregistrement…"
     },
     "preview": {
       "title": "Tester un nom d'environnement",
       "hint": "Classe un nom selon les règles enregistrées.",
+      "ruleTitle": "Tester la règle « {{name}} »",
+      "ruleHint": "Classe un nom selon cette seule règle.",
       "placeholder": "ex. prod-acme",
       "classify": "Classer",
       "attributes": "Attributs",
@@ -67,6 +76,7 @@
   "common": {
     "apiError": "Erreur API : {{error}}",
     "test": "Tester la connexion",
+    "testing": "Test en cours…",
     "edit": "Modifier",
     "cancel": "Annuler",
     "delete": "Supprimer",
@@ -208,6 +218,8 @@
     "editTitle": "Modifier « {{name}} »",
     "added": "Source ajoutée.",
     "updated": "Source mise à jour.",
+    "deleted": "Source supprimée.",
+    "deleteTitle": "Supprimer la source",
     "confirmDelete": "Supprimer la source « {{name}} » ? Ses règles d'environnement et son historique de métriques seront également supprimés.",
     "test": {
       "ok": "Connexion OK pour « {{owner}} ».",
@@ -231,7 +243,6 @@
       "privateKey": "Clé privée (PEM)",
       "privateKeyHint": "(collez le contenu du .pem)",
       "submit": "Ajouter la source",
-      "save": "Enregistrer",
       "submitting": "Enregistrement…"
     }
   }

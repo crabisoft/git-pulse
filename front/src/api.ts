@@ -74,6 +74,9 @@ export interface CreateEnvRuleInput {
   priority?: number;
 }
 
+/** Every field is optional; omitted ones keep their stored value. */
+export type UpdateEnvRuleInput = Partial<CreateEnvRuleInput>;
+
 export const api = {
   listSources: () => request<SourcePublic[]>('/sources'),
   createSource: (input: CreateSourceInput) =>
@@ -92,11 +95,19 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+  updateEnvRule: (id: string, input: UpdateEnvRuleInput) =>
+    request<EnvRulePublic>(`/env-rules/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   deleteEnvRule: (id: string) => request<void>(`/env-rules/${id}`, { method: 'DELETE' }),
   classifyEnv: (sourceId: string, name: string) =>
     request<ClassifiedEnvironment>(`/sources/${sourceId}/env-rules/classify`, {
       method: 'POST',
       body: JSON.stringify({ name }),
+    }),
+  /** Stateless classification: a name against an ad-hoc rule set. */
+  previewEnvRules: (name: string, rules: CreateEnvRuleInput[]) =>
+    request<ClassifiedEnvironment>('/env-rules/preview', {
+      method: 'POST',
+      body: JSON.stringify({ name, rules }),
     }),
 
   settings: () => request<AppSettings>('/settings'),

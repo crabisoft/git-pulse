@@ -1,6 +1,7 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post } from '@nestjs/common';
 import { EnvRulesService } from './env-rules.service';
 import { CreateEnvRuleDto } from './dto/create-env-rule.dto';
+import { UpdateEnvRuleDto } from './dto/update-env-rule.dto';
 import { PreviewEnvRulesDto } from './dto/preview-env-rules.dto';
 import { classifyEnvironment } from './env-classifier';
 
@@ -22,6 +23,11 @@ export class EnvRulesController {
   @HttpCode(200)
   classify(@Param('sourceId') sourceId: string, @Body('name') name: string) {
     return this.envRules.classify(sourceId, name);
+  }
+
+  @Patch('env-rules/:id')
+  update(@Param('id') id: string, @Body() dto: UpdateEnvRuleDto) {
+    return this.envRules.update(id, dto);
   }
 
   @Delete('env-rules/:id')

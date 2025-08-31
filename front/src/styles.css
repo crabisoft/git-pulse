@@ -201,6 +201,7 @@ input.mono-input { font-family: var(--mono); font-size: .84rem; }
 
 /* Help tips */
 h3.with-help, h2.with-help { display: flex; align-items: center; gap: 6px; }
+.with-help { display: inline-flex; align-items: center; gap: 6px; }
 .help-tip { position: relative; display: inline-flex; }
 .help-btn {
   display: inline-flex; padding: 2px; border: none; border-radius: 50%;
@@ -232,6 +233,10 @@ h3.with-help, h2.with-help { display: flex; align-items: center; gap: 6px; }
 .modal-sub { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .modal-count { font-size: .78rem; margin: 10px 0 6px; }
 .modal-body { overflow: auto; min-height: 0; }
+.modal-foot {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding-top: 14px; margin-top: 14px; border-top: 1px solid var(--line);
+}
 .sample-details { display: flex; gap: 10px; flex-wrap: wrap; color: var(--muted); font-size: .72rem; margin-top: 2px; }
 
 /* Panels & layout */
@@ -242,6 +247,10 @@ h3.with-help, h2.with-help { display: flex; align-items: center; gap: 6px; }
 .panel h2, .panel h3 { margin: 0 0 14px; }
 .page-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .page-head h2 { margin: 0; }
+/* Panel header: title on the left, the panel's CTAs on the right. */
+.panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.panel-head h2, .panel-head h3 { margin: 0; }
+.panel-head-actions { display: flex; gap: 8px; flex-shrink: 0; }
 
 /* Tables */
 table.data { width: 100%; border-collapse: collapse; font-size: .88rem; }
@@ -285,6 +294,7 @@ tr.stale td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
 .btn.icon:hover { color: var(--ink); }
 .btn.icon.danger { color: var(--crit); }
 .btn.icon.danger:hover { background: color-mix(in srgb, var(--crit) 10%, transparent); }
+.btn.with-icon { display: inline-flex; align-items: center; gap: 6px; }
 .form-actions { display: flex; align-items: center; gap: 8px; }
 .form-actions .btn { display: inline-flex; align-items: center; gap: 6px; }
 
@@ -293,8 +303,9 @@ tr.stale td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
 .source-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; }
 .source-name { font-weight: 600; }
 .source-meta { color: var(--muted); font-size: .8rem; font-family: var(--mono); margin-top: 2px; }
-.source-test { margin-top: 6px; font-size: .8rem; }
-.source-row.editing { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.source-test { margin-top: 6px; font-size: .8rem; color: var(--muted); }
+.source-test.ok { color: var(--good); }
+.source-test.err { color: var(--crit); }
 .row-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
 /* Banners */
