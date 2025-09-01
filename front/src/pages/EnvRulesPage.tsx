@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { EnvRulePublic, ClassifiedEnvironment } from '@repo/shared';
-import { api, apiErrorInfo, type CreateEnvRuleInput } from '../api';
+import type { EnvRulePublic, ClassifiedEnvironment, PageInfo } from '@repo/shared';
+import { api, apiErrorInfo, type CreateEnvRuleInput, type PageQuery } from '../api';
 import { DeleteIcon, EditIcon, PlusIcon, TestIcon } from '../icons';
 import { IconButton } from '../IconButton';
 import { ConfirmDialog, Modal } from '../Modal';
+import { Pagination } from '../Pagination';
 
 const EMPTY: CreateEnvRuleInput = { name: '', pattern: '', kind: 'simple', priority: 100 };
+
+/** Module constant so resetting on source change never re-triggers a fetch. */
+const FIRST_PAGE: PageQuery = {};
 
 export function EnvRulesPage({ sourceId }: { sourceId: string }) {
   const { t } = useTranslation();
   const [rules, setRules] = useState<EnvRulePublic[]>([]);
+  const [pageInfo, setPageInfo] = useState<PageInfo | null>(null);
+  const [page, setPage] = useState<PageQuery>(FIRST_PAGE);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   /** Open editor: `null` rule means creation. */
   const [editing, setEditing] = useState<{ rule: EnvRulePublic | null } | null>(null);
@@ -20,17 +26,24 @@ export function EnvRulesPage({ sourceId }: { sourceId: string }) {
 
   const load = useCallback(async () => {
     try {
-      setRules(await api.listEnvRules(sourceId));
+      const result = await api.listEnvRules(sourceId, page);
+      setRules(result.items);
+      setPageInfo(result.page);
     } catch (err) {
       const { code, params } = apiErrorInfo(err);
       setMsg({ kind: 'err', text: t(code, params) });
     }
-  }, [sourceId, t]);
+  }, [sourceId, page, t]);
 
   useEffect(() => {
     void load();
     setMsg(null);
   }, [load]);
+
+  // Back to the first page when switching source.
+  useEffect(() => {
+    setPage(FIRST_PAGE);
+  }, [sourceId]);
 
   async function remove(rule: EnvRulePublic) {
     setDeleting(null);
@@ -94,6 +107,10 @@ export function EnvRulesPage({ sourceId }: { sourceId: string }) {
             </li>
           ))}
         </ul>
+
+        {pageInfo && (
+          <Pagination info={pageInfo} value={page} onChange={setPage} />
+        )}
       </section>
 
       {editing && (

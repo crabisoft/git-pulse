@@ -11,6 +11,8 @@ import { SourcesService } from '../sources/sources.service';
 import { ConnectorFactory } from '../sources/connectors/connector.factory';
 import { EnvRulesService } from '../env-rules/env-rules.service';
 import { SettingsService } from '../settings/settings.service';
+import { paginate, toWindow } from '../common/pagination';
+import type { DashboardLiveQueryDto } from './dto/dashboard-live-query.dto';
 
 @Injectable()
 export class DashboardService {
@@ -23,16 +25,21 @@ export class DashboardService {
     private readonly settings: SettingsService,
   ) {}
 
-  /** Live view (PRs/MRs + pipelines) for a given source. */
-  async live(sourceId: string): Promise<DashboardLive> {
+  /**
+   * Live view (PRs/MRs + pipelines + environments) for a given source. The repo
+   * filter is applied before anything else, so the summary always describes the
+   * whole filtered data set — never just the returned windows.
+   */
+  async live(sourceId: string, query: DashboardLiveQueryDto = {}): Promise<DashboardLive> {
     const { ctx, kind } = await this.sources.resolveContext(sourceId);
     const connector = this.connectors.for(kind);
     const warnings: CodedMessage[] = [];
 
-    const repos = await connector.listRepositories(ctx).catch((e) => {
+    const allRepos = await connector.listRepositories(ctx).catch((e) => {
       warnings.push({ code: 'dashboard.warn.reposFailed', params: { error: asMessage(e) } });
       return [] as string[];
     });
+    const repos = filterRepos(allRepos, query.repos);
 
     const pullRequests = await safe(
       () => connector.listPullRequests(ctx, repos),
@@ -50,13 +57,23 @@ export class DashboardService {
       'dashboard.warn.deploymentsFailed',
     );
     const environments = await this.toEnvironments(sourceId, deployments);
-    const { stalePrHours } = await this.settings.get();
+    const { stalePrHours, pageSize } = await this.settings.get();
 
     return {
       sourceId,
-      pullRequests: sortByAge(pullRequests),
-      pipelines,
-      environments,
+      pullRequests: paginate(
+        sortByAge(pullRequests),
+        toWindow({ limit: query.prsLimit, offset: query.prsOffset }, pageSize),
+      ),
+      pipelines: paginate(
+        pipelines,
+        toWindow({ limit: query.pipelinesLimit, offset: query.pipelinesOffset }, pageSize),
+      ),
+      environments: paginate(
+        environments,
+        toWindow({ limit: query.environmentsLimit, offset: query.environmentsOffset }, pageSize),
+      ),
+      repos: allRepos,
       summary: summarize(pullRequests, pipelines, environments, stalePrHours),
       warnings,
     };
@@ -111,6 +128,13 @@ async function safe<T>(
     warnings.push({ code, params: { error: asMessage(e) } });
     return [];
   }
+}
+
+/** Keeps the requested repos, ignoring names outside the source scope. */
+function filterRepos(all: string[], wanted?: string[]): string[] {
+  if (!wanted || wanted.length === 0) return all;
+  const set = new Set(wanted);
+  return all.filter((repo) => set.has(repo));
 }
 
 function sortByAge(prs: PullRequest[]): PullRequest[] {

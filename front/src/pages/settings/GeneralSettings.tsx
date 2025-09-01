@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AppSettings } from '@repo/shared';
+import { PAGE_LIMIT_MAX, type AppSettings } from '@repo/shared';
 import { api, apiErrorInfo } from '../../api';
 import { SUPPORTED_LANGUAGES, LANGUAGE_LABELS } from '../../i18n';
 
@@ -65,6 +65,18 @@ export function GeneralSettings({
               max={8760}
               value={form.stalePrHours}
               onChange={(e) => set('stalePrHours', Number(e.target.value))}
+              required
+            />
+          </label>
+          <label>
+            {t('settings.general.pageSize')}{' '}
+            <span className="hint">{t('settings.general.pageSizeHint')}</span>
+            <input
+              type="number"
+              min={1}
+              max={PAGE_LIMIT_MAX}
+              value={form.pageSize}
+              onChange={(e) => set('pageSize', Number(e.target.value))}
               required
             />
           </label>

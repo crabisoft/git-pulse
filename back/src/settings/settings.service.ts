@@ -1,5 +1,5 @@
 import { Injectable, HttpStatus, Logger } from '@nestjs/common';
-import type { AppSettings } from '@repo/shared';
+import { PAGE_LIMIT_DEFAULT, PAGE_LIMIT_MAX, type AppSettings } from '@repo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CodedException } from '../common/coded-exception';
 import type { UpdateSettingsDto } from './dto/update-settings.dto';
@@ -9,11 +9,13 @@ const FALLBACKS: AppSettings = {
   doraWindowDays: 30,
   stalePrHours: 72,
   collectCron: '*/15 * * * *',
+  pageSize: PAGE_LIMIT_DEFAULT,
 };
 
 const LIMITS = {
   doraWindowDays: { min: 1, max: 365 },
   stalePrHours: { min: 1, max: 8760 },
+  pageSize: { min: 1, max: PAGE_LIMIT_MAX },
 };
 
 type Listener = (settings: AppSettings) => void;
@@ -36,13 +38,20 @@ export class SettingsService {
       ),
       stalePrHours: readNumber(stored.get('stalePrHours'), FALLBACKS.stalePrHours),
       collectCron: stored.get('collectCron') ?? process.env.COLLECT_CRON ?? FALLBACKS.collectCron,
+      pageSize: readNumber(stored.get('pageSize') ?? process.env.PAGE_SIZE, FALLBACKS.pageSize),
     };
+  }
+
+  /** Default page size of every list route, when the client asks for no limit. */
+  async pageSize(): Promise<number> {
+    return (await this.get()).pageSize;
   }
 
   /** Persists the supplied keys and notifies the listeners with the new state. */
   async update(dto: UpdateSettingsDto): Promise<AppSettings> {
     assertInRange('doraWindowDays', dto.doraWindowDays);
     assertInRange('stalePrHours', dto.stalePrHours);
+    assertInRange('pageSize', dto.pageSize);
     if (dto.collectCron !== undefined) assertValidCron(dto.collectCron);
 
     const entries = Object.entries(dto).filter(([, value]) => value !== undefined);

@@ -7,18 +7,24 @@ import {
   Param,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import { SourcesService } from './sources.service';
 import { CreateSourceDto } from './dto/create-source.dto';
 import { UpdateSourceDto } from './dto/update-source.dto';
+import { PaginationQueryDto, toWindow } from '../common/pagination';
+import { SettingsService } from '../settings/settings.service';
 
 @Controller('sources')
 export class SourcesController {
-  constructor(private readonly sources: SourcesService) {}
+  constructor(
+    private readonly sources: SourcesService,
+    private readonly settings: SettingsService,
+  ) {}
 
   @Get()
-  findAll() {
-    return this.sources.findAll();
+  async findAll(@Query() query: PaginationQueryDto) {
+    return this.sources.findAll(toWindow(query, await this.settings.pageSize()));
   }
 
   @Get(':id')

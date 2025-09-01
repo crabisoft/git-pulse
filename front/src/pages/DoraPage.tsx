@@ -1,9 +1,17 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { DoraResult, DoraMetric, DoraSample, MetricSnapshotPublic } from '@repo/shared';
-import { api, apiErrorInfo } from '../api';
+import {
+  PAGE_LIMIT_MAX,
+  type DoraResult,
+  type DoraMetric,
+  type DoraSample,
+  type MetricSnapshotPublic,
+  type PageInfo,
+} from '@repo/shared';
+import { api, apiErrorInfo, type PageQuery } from '../api';
 import { HelpTip } from '../HelpTip';
 import { Modal } from '../Modal';
+import { Pagination } from '../Pagination';
 
 const METRIC_ORDER: DoraMetric[] = [
   'deployment_frequency',
@@ -15,9 +23,28 @@ const METRIC_ORDER: DoraMetric[] = [
   'review_time',
 ];
 
+/** Module constant so resetting on source change never re-triggers a fetch. */
+const FIRST_PAGE: PageQuery = {};
+
+/**
+ * Sparklines only need the tail of the series. Snapshots come back in ascending
+ * order, so grab the last window rather than the first.
+ */
+async function loadRecentHistory(sourceId: string): Promise<MetricSnapshotPublic[]> {
+  const first = await api.metrics(sourceId, { limit: PAGE_LIMIT_MAX });
+  if (!first.page.hasMore) return first.items;
+  const tail = await api.metrics(sourceId, {
+    limit: PAGE_LIMIT_MAX,
+    offset: first.page.total - PAGE_LIMIT_MAX,
+  });
+  return tail.items;
+}
+
 export function DoraPage({ sourceId }: { sourceId: string }) {
   const { t } = useTranslation();
   const [results, setResults] = useState<DoraResult[] | null>(null);
+  const [resultsPage, setResultsPage] = useState<PageInfo | null>(null);
+  const [page, setPage] = useState<PageQuery>(FIRST_PAGE);
   const [history, setHistory] = useState<MetricSnapshotPublic[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,8 +54,12 @@ export function DoraPage({ sourceId }: { sourceId: string }) {
     setLoading(true);
     setError(null);
     try {
-      const [live, hist] = await Promise.all([api.dora(sourceId), api.metrics(sourceId)]);
-      setResults(live);
+      const [live, hist] = await Promise.all([
+        api.dora(sourceId, page),
+        loadRecentHistory(sourceId),
+      ]);
+      setResults(live.items);
+      setResultsPage(live.page);
       setHistory(hist);
     } catch (e) {
       const { code, params } = apiErrorInfo(e);
@@ -36,11 +67,16 @@ export function DoraPage({ sourceId }: { sourceId: string }) {
     } finally {
       setLoading(false);
     }
-  }, [sourceId, t]);
+  }, [sourceId, page, t]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Back to the first page when switching source.
+  useEffect(() => {
+    setPage(FIRST_PAGE);
+  }, [sourceId]);
 
   const historyByKey = new Map<string, number[]>();
   for (const s of history) {
@@ -110,6 +146,10 @@ export function DoraPage({ sourceId }: { sourceId: string }) {
             );
           })}
         </div>
+      )}
+
+      {resultsPage && (
+        <Pagination info={resultsPage} value={page} onChange={setPage} disabled={loading} />
       )}
 
       {detail && <DetailDialog result={detail} onClose={() => setDetail(null)} />}

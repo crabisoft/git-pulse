@@ -1,6 +1,14 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
-import type { AuthKind, ScopeRules, SourceKind, SourcePublic, ConnectionTestResult } from '@repo/shared';
+import type {
+  AuthKind,
+  ScopeRules,
+  SourceKind,
+  SourcePublic,
+  ConnectionTestResult,
+  Page,
+} from '@repo/shared';
 import { CodedException } from '../common/coded-exception';
+import { toPage, type PageWindow } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../crypto/crypto.service';
 import type { ConnectorContext, SourceAuth } from './connectors/source-connector.interface';
@@ -38,9 +46,25 @@ export class SourcesService {
     return toPublic(source);
   }
 
-  async findAll(): Promise<SourcePublic[]> {
-    const sources = await this.prisma.source.findMany({ orderBy: { createdAt: 'asc' } });
-    return sources.map(toPublic);
+  async findAll(window: PageWindow): Promise<Page<SourcePublic>> {
+    const [sources, total] = await this.prisma.$transaction([
+      this.prisma.source.findMany({
+        orderBy: { createdAt: 'asc' },
+        skip: window.offset,
+        take: window.limit,
+      }),
+      this.prisma.source.count(),
+    ]);
+    return toPage(sources.map(toPublic), total, window);
+  }
+
+  /** Every source id, for internal fan-out — deliberately not paginated. */
+  async listIds(): Promise<string[]> {
+    const rows = await this.prisma.source.findMany({
+      orderBy: { createdAt: 'asc' },
+      select: { id: true },
+    });
+    return rows.map((r) => r.id);
   }
 
   async findOne(id: string): Promise<SourcePublic> {

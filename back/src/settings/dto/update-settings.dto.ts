@@ -14,4 +14,8 @@ export class UpdateSettingsDto {
   @IsString()
   @MinLength(1)
   collectCron?: string;
+
+  @IsOptional()
+  @IsInt()
+  pageSize?: number;
 }

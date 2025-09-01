@@ -1,10 +1,19 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DashboardEnvironment, DashboardLive, PipelineStatus } from '@repo/shared';
-import { api, apiErrorInfo } from '../api';
+import { api, apiErrorInfo, type DashboardLiveQuery, type PageQuery } from '../api';
+import { Pagination } from '../Pagination';
 
 /** Used until the settings are loaded; the backend applies the stored value. */
 const DEFAULT_STALE_HOURS = 72;
+
+/** Module constant so resetting on source change never re-triggers a fetch. */
+const EMPTY_QUERY: Required<DashboardLiveQuery> = {
+  repos: [],
+  prs: {},
+  pipelines: {},
+  environments: {},
+};
 
 export function DashboardPage({
   sourceId,
@@ -18,50 +27,51 @@ export function DashboardPage({
   const [data, setData] = useState<DashboardLive | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedRepos, setSelectedRepos] = useState<Set<string>>(new Set());
+  // Repo filter and the three page windows are resolved by the backend, so the
+  // tiles keep counting the whole filtered data set rather than the visible page.
+  const [query, setQuery] = useState<Required<DashboardLiveQuery>>(EMPTY_QUERY);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      setData(await api.live(sourceId));
+      setData(await api.live(sourceId, query));
     } catch (e) {
       const { code, params } = apiErrorInfo(e);
       setError(t(code, params));
     } finally {
       setLoading(false);
     }
-  }, [sourceId, t]);
+  }, [sourceId, query, t]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  // Reset the repo filter when switching source.
+  // Reset the repo filter and the windows when switching source.
   useEffect(() => {
-    setSelectedRepos(new Set());
+    setQuery(EMPTY_QUERY);
   }, [sourceId]);
 
-  const repos = useMemo(() => {
-    if (!data) return [];
-    const set = new Set<string>();
-    data.pullRequests.forEach((p) => set.add(p.repo));
-    data.pipelines.forEach((p) => set.add(p.repo));
-    data.environments.forEach((e) => e.repos.forEach((r) => set.add(r)));
-    return [...set].sort();
-  }, [data]);
+  const selectedRepos = useMemo(() => new Set(query.repos), [query.repos]);
 
-  const inFilter = (repo: string) => selectedRepos.size === 0 || selectedRepos.has(repo);
-  const pullRequests = data ? data.pullRequests.filter((p) => inFilter(p.repo)) : [];
-  const pipelines = data ? data.pipelines.filter((p) => inFilter(p.repo)) : [];
-  const environments = data ? data.environments.filter((e) => e.repos.some(inFilter)) : [];
-  const summary = {
-    openPrs: pullRequests.length,
-    stalePrs: pullRequests.filter((p) => p.ageHours >= stale).length,
-    failedPipelines: pipelines.filter((p) => p.status === 'failed').length,
-    runningPipelines: pipelines.filter((p) => p.status === 'running').length,
-    environments: environments.length,
-  };
+  /** A new repo selection invalidates every offset, but keeps the page sizes. */
+  const changeRepos = (next: Set<string>) =>
+    setQuery((q) => ({
+      repos: [...next].sort(),
+      prs: { ...q.prs, offset: 0 },
+      pipelines: { ...q.pipelines, offset: 0 },
+      environments: { ...q.environments, offset: 0 },
+    }));
+
+  const setWindow = (key: 'prs' | 'pipelines' | 'environments') => (page: PageQuery) =>
+    setQuery((q) => ({ ...q, [key]: page }));
+
+  const repos = data?.repos ?? [];
+  const pullRequests = data?.pullRequests.items ?? [];
+  const pipelines = data?.pipelines.items ?? [];
+  const environments = data?.environments.items ?? [];
+  const summary = data?.summary;
 
   return (
     <div>
@@ -74,10 +84,10 @@ export function DashboardPage({
 
       {error && <div className="banner error">{error}</div>}
 
-      {data && (
+      {data && summary && (
         <>
           {repos.length > 1 && (
-            <RepoFilter repos={repos} selected={selectedRepos} onChange={setSelectedRepos} />
+            <RepoFilter repos={repos} selected={selectedRepos} onChange={changeRepos} />
           )}
 
           <div className="tiles">
@@ -137,6 +147,12 @@ export function DashboardPage({
                 </tbody>
               </table>
             )}
+            <Pagination
+              info={data.environments.page}
+              value={query.environments}
+              onChange={setWindow('environments')}
+              disabled={loading}
+            />
           </section>
 
           <div className="grid-2">
@@ -174,6 +190,12 @@ export function DashboardPage({
                   </tbody>
                 </table>
               )}
+              <Pagination
+                info={data.pullRequests.page}
+                value={query.prs}
+                onChange={setWindow('prs')}
+                disabled={loading}
+              />
             </section>
 
             <section className="panel">
@@ -212,6 +234,12 @@ export function DashboardPage({
                   </tbody>
                 </table>
               )}
+              <Pagination
+                info={data.pipelines.page}
+                value={query.pipelines}
+                onChange={setWindow('pipelines')}
+                disabled={loading}
+              />
             </section>
           </div>
         </>

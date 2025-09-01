@@ -8,6 +8,7 @@ import type {
   ClassifiedEnvironment,
   DoraResult,
   MetricSnapshotPublic,
+  Page,
 } from '@repo/shared';
 
 // Relative by default (same-origin, via the Vite dev proxy / nginx). An absolute
@@ -54,6 +55,45 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+type QueryValue = string | number | string[] | undefined;
+
+/** Builds a query string, dropping the params left undefined. */
+function qs(params: Record<string, QueryValue>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined) continue;
+    if (Array.isArray(value)) value.forEach((v) => search.append(key, v));
+    else search.set(key, String(value));
+  }
+  const query = search.toString();
+  return query ? `?${query}` : '';
+}
+
+/**
+ * Page window accepted by every list route. `limit` may not exceed
+ * PAGE_LIMIT_MAX; omitting it applies the configured page size
+ * (`AppSettings.pageSize`).
+ */
+export interface PageQuery {
+  limit?: number;
+  offset?: number;
+}
+
+/** The live view bundles three lists, each windowed independently. */
+export interface DashboardLiveQuery {
+  /** Repo filter; omitted means every repo in the source scope. */
+  repos?: string[];
+  prs?: PageQuery;
+  pipelines?: PageQuery;
+  environments?: PageQuery;
+}
+
+export interface MetricsQuery extends PageQuery {
+  metric?: string;
+  from?: string;
+  to?: string;
+}
+
 export interface CreateSourceInput {
   name: string;
   kind: 'github' | 'gitlab';
@@ -78,7 +118,7 @@ export interface CreateEnvRuleInput {
 export type UpdateEnvRuleInput = Partial<CreateEnvRuleInput>;
 
 export const api = {
-  listSources: () => request<SourcePublic[]>('/sources'),
+  listSources: (page?: PageQuery) => request<Page<SourcePublic>>(`/sources${qs({ ...page })}`),
   createSource: (input: CreateSourceInput) =>
     request<SourcePublic>('/sources', { method: 'POST', body: JSON.stringify(input) }),
   updateSource: (id: string, input: UpdateSourceInput) =>
@@ -86,10 +126,22 @@ export const api = {
   deleteSource: (id: string) => request<void>(`/sources/${id}`, { method: 'DELETE' }),
   testSource: (id: string) =>
     request<ConnectionTestResult>(`/sources/${id}/test`, { method: 'POST' }),
-  live: (sourceId: string) => request<DashboardLive>(`/dashboard/${sourceId}/live`),
+  live: (sourceId: string, query: DashboardLiveQuery = {}) =>
+    request<DashboardLive>(
+      `/dashboard/${sourceId}/live` +
+        qs({
+          repos: query.repos?.length ? query.repos : undefined,
+          prsLimit: query.prs?.limit,
+          prsOffset: query.prs?.offset,
+          pipelinesLimit: query.pipelines?.limit,
+          pipelinesOffset: query.pipelines?.offset,
+          environmentsLimit: query.environments?.limit,
+          environmentsOffset: query.environments?.offset,
+        }),
+    ),
 
-  listEnvRules: (sourceId: string) =>
-    request<EnvRulePublic[]>(`/sources/${sourceId}/env-rules`),
+  listEnvRules: (sourceId: string, page?: PageQuery) =>
+    request<Page<EnvRulePublic>>(`/sources/${sourceId}/env-rules${qs({ ...page })}`),
   createEnvRule: (sourceId: string, input: CreateEnvRuleInput) =>
     request<EnvRulePublic>(`/sources/${sourceId}/env-rules`, {
       method: 'POST',
@@ -114,6 +166,8 @@ export const api = {
   updateSettings: (input: Partial<AppSettings>) =>
     request<AppSettings>('/settings', { method: 'PATCH', body: JSON.stringify(input) }),
 
-  dora: (sourceId: string) => request<DoraResult[]>(`/sources/${sourceId}/dora`),
-  metrics: (sourceId: string) => request<MetricSnapshotPublic[]>(`/sources/${sourceId}/metrics`),
+  dora: (sourceId: string, page?: PageQuery) =>
+    request<Page<DoraResult>>(`/sources/${sourceId}/dora${qs({ ...page })}`),
+  metrics: (sourceId: string, query?: MetricsQuery) =>
+    request<Page<MetricSnapshotPublic>>(`/sources/${sourceId}/metrics${qs({ ...query })}`),
 };

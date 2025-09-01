@@ -4,6 +4,33 @@
  * platform-neutral shapes.
  */
 
+// ─── Pagination ──────────────────────────────────────────────────────
+
+/** Largest page size a client may ask for; higher values are rejected. */
+export const PAGE_LIMIT_MAX = 200;
+
+/**
+ * Page size of a fresh install. It is only the built-in fallback: the effective
+ * default is `AppSettings.pageSize`, editable from the Settings section.
+ */
+export const PAGE_LIMIT_DEFAULT = 10;
+
+/** Describes the window a paginated payload was cut from. */
+export interface PageInfo {
+  /** Items matching the query, regardless of the window. */
+  total: number;
+  limit: number;
+  offset: number;
+  /** True when items remain after this window. */
+  hasMore: boolean;
+}
+
+/** Envelope returned by every list route. */
+export interface Page<T> {
+  items: T[];
+  page: PageInfo;
+}
+
 // ─── Sources ─────────────────────────────────────────────────────────
 
 export type SourceKind = 'github' | 'gitlab';
@@ -196,6 +223,11 @@ export interface AppSettings {
   stalePrHours: number;
   /** Cron pattern of the scheduled collection (COLLECT_CRON). */
   collectCron: string;
+  /**
+   * Items per page applied by every list route when the client asks for no
+   * `limit` (PAGE_SIZE). Capped at PAGE_LIMIT_MAX.
+   */
+  pageSize: number;
 }
 
 // ─── Aggregated dashboard responses ──────────────────────────────────
@@ -219,9 +251,13 @@ export interface DashboardEnvironment {
 
 export interface DashboardLive {
   sourceId: string;
-  pullRequests: PullRequest[];
-  pipelines: Pipeline[];
-  environments: DashboardEnvironment[];
+  /** Each list is windowed independently — see DashboardLiveQuery on the client. */
+  pullRequests: Page<PullRequest>;
+  pipelines: Page<Pipeline>;
+  environments: Page<DashboardEnvironment>;
+  /** Every repo in the source scope — vocabulary of the repo filter. */
+  repos: string[];
+  /** Computed over the whole filtered data set, not over the windows above. */
   summary: {
     openPrs: number;
     stalePrs: number;

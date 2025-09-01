@@ -1,7 +1,8 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
-import type { ClassifiedEnvironment, EnvRuleKind, EnvRulePublic } from '@repo/shared';
+import type { ClassifiedEnvironment, EnvRuleKind, EnvRulePublic, Page } from '@repo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CodedException } from '../common/coded-exception';
+import { toPage, type PageWindow } from '../common/pagination';
 import { classifyEnvironment, type EnvRuleLike } from './env-classifier';
 import type { CreateEnvRuleDto } from './dto/create-env-rule.dto';
 import type { UpdateEnvRuleDto } from './dto/update-env-rule.dto';
@@ -25,12 +26,17 @@ export class EnvRulesService {
     return toPublic(rule);
   }
 
-  async findBySource(sourceId: string): Promise<EnvRulePublic[]> {
-    const rules = await this.prisma.envRule.findMany({
-      where: { sourceId },
-      orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
-    });
-    return rules.map(toPublic);
+  async findBySource(sourceId: string, window: PageWindow): Promise<Page<EnvRulePublic>> {
+    const [rules, total] = await this.prisma.$transaction([
+      this.prisma.envRule.findMany({
+        where: { sourceId },
+        orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
+        skip: window.offset,
+        take: window.limit,
+      }),
+      this.prisma.envRule.count({ where: { sourceId } }),
+    ]);
+    return toPage(rules.map(toPublic), total, window);
   }
 
   async update(id: string, dto: UpdateEnvRuleDto): Promise<EnvRulePublic> {

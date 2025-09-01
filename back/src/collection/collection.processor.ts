@@ -23,9 +23,9 @@ export class CollectionProcessor extends WorkerHost {
 
   async process(job: Job): Promise<unknown> {
     if (job.name === 'collect-all') {
-      const sources = await this.sources.findAll();
-      await Promise.all(sources.map((s) => this.queue.add('collect-source', { sourceId: s.id })));
-      return { enqueued: sources.length };
+      const sourceIds = await this.sources.listIds();
+      await Promise.all(sourceIds.map((sourceId) => this.queue.add('collect-source', { sourceId })));
+      return { enqueued: sourceIds.length };
     }
 
     if (job.name === 'collect-source') {

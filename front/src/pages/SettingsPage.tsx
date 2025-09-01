@@ -65,7 +65,7 @@ export function SettingsPage({
         {section === 'general' && (
           <GeneralSettings settings={settings} onChange={onSettingsChange} />
         )}
-        {section === 'sources' && <SourcesPage sources={sources} onChange={onSourcesChange} />}
+        {section === 'sources' && <SourcesPage onChange={onSourcesChange} />}
         {section === 'env' &&
           (selectedSourceId ? (
             <EnvRulesPage sourceId={selectedSourceId} />

@@ -30,6 +30,8 @@
       "doraWindowDaysHint": "metrics lookback period",
       "stalePrHours": "Stale PR threshold (hours)",
       "stalePrHoursHint": "beyond this age a PR/MR is flagged as stale",
+      "pageSize": "Items per page",
+      "pageSizeHint": "default page size of every list",
       "collectCron": "Collection cron",
       "collectCronHint": "e.g. */15 * * * * (every 15 minutes)",
       "languageHint": "kept in this browser"
@@ -87,6 +89,12 @@
     "saving": "Saving…",
     "close": "Close",
     "help": "Help"
+  },
+  "pagination": {
+    "range": "{{first}}–{{last}} of {{total}}",
+    "perPage": "Per page",
+    "previous": "← Previous",
+    "next": "Next →"
   },
   "errors": {
     "http": "Request failed ({{status}}): {{detail}}",

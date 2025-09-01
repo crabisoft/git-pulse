@@ -1,10 +1,17 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { SourcePublic, ConnectionTestResult } from '@repo/shared';
-import { api, apiErrorInfo, type CreateSourceInput, type UpdateSourceInput } from '../api';
+import type { SourcePublic, ConnectionTestResult, PageInfo } from '@repo/shared';
+import {
+  api,
+  apiErrorInfo,
+  type CreateSourceInput,
+  type PageQuery,
+  type UpdateSourceInput,
+} from '../api';
 import { DeleteIcon, EditIcon, PlusIcon, TestIcon } from '../icons';
 import { IconButton } from '../IconButton';
 import { ConfirmDialog, Modal } from '../Modal';
+import { Pagination } from '../Pagination';
 
 interface FormState {
   name: string;
@@ -70,19 +77,40 @@ function toForm(source: SourcePublic): FormState {
   };
 }
 
-export function SourcesPage({
-  sources,
-  onChange,
-}: {
-  sources: SourcePublic[];
-  onChange: () => Promise<void>;
-}) {
+/**
+ * The list holds its own window — the sources App keeps in memory feed the
+ * source picker, which needs them all and must not follow the page size.
+ */
+export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
   const { t } = useTranslation();
+  const [sources, setSources] = useState<SourcePublic[]>([]);
+  const [pageInfo, setPageInfo] = useState<PageInfo | null>(null);
+  const [page, setPage] = useState<PageQuery>({});
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [tested, setTested] = useState<Record<string, ConnectionTestResult | 'pending'>>({});
   /** Open editor: `null` source means creation. */
   const [editing, setEditing] = useState<{ source: SourcePublic | null } | null>(null);
   const [deleting, setDeleting] = useState<SourcePublic | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const result = await api.listSources(page);
+      setSources(result.items);
+      setPageInfo(result.page);
+    } catch (err) {
+      const { code, params } = apiErrorInfo(err);
+      setMsg({ kind: 'err', text: t(code, params) });
+    }
+  }, [page, t]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  /** Refreshes both this list and the sources App holds (picker, badge). */
+  async function refresh() {
+    await Promise.all([load(), onChange()]);
+  }
 
   async function test(id: string) {
     setTested((cur) => ({ ...cur, [id]: 'pending' }));
@@ -99,7 +127,7 @@ export function SourcesPage({
     try {
       await api.deleteSource(source.id);
       setMsg({ kind: 'ok', text: t('sources.deleted') });
-      await onChange();
+      await refresh();
     } catch (err) {
       const { code, params } = apiErrorInfo(err);
       setMsg({ kind: 'err', text: t(code, params) });
@@ -109,7 +137,7 @@ export function SourcesPage({
   async function saved(created: boolean) {
     setEditing(null);
     setMsg({ kind: 'ok', text: created ? t('sources.added') : t('sources.updated') });
-    await onChange();
+    await refresh();
   }
 
   return (
@@ -164,6 +192,8 @@ export function SourcesPage({
             );
           })}
         </ul>
+
+        {pageInfo && <Pagination info={pageInfo} value={page} onChange={setPage} />}
       </section>
 
       {editing && (

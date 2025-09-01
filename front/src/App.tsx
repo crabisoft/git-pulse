@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AppSettings, SourcePublic } from '@repo/shared';
+import { PAGE_LIMIT_MAX, type AppSettings, type SourcePublic } from '@repo/shared';
 import { api, apiErrorInfo } from './api';
 import { SettingsPage } from './pages/SettingsPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -18,7 +18,8 @@ export function App() {
 
   const refresh = useCallback(async () => {
     try {
-      const list = await api.listSources();
+      // The source picker needs every source at once, so ask for the cap.
+      const { items: list } = await api.listSources({ limit: PAGE_LIMIT_MAX });
       setSources(list);
       // Fall back to the first source when the selected one is gone (deleted).
       setSelected((cur) => (cur && list.some((s) => s.id === cur) ? cur : (list[0]?.id ?? null)));

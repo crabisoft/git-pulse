@@ -308,6 +308,13 @@ tr.stale td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
 .source-test.err { color: var(--crit); }
 .row-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
+/* Pagination */
+.pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-size: .82rem; }
+.pagination-controls { display: flex; align-items: center; gap: 8px; }
+.pagination-size { display: flex; align-items: center; gap: 6px; color: var(--muted); }
+.pagination-size select { padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: .82rem; font-family: var(--sans); }
+.pagination .btn { padding: 6px 10px; font-size: .82rem; }
+
 /* Banners */
 .banner { padding: 10px 14px; border-radius: 8px; font-size: .88rem; margin-bottom: 14px; }
 .banner.error { background: color-mix(in srgb, var(--crit) 12%, transparent); color: var(--crit); }

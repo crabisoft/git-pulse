@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { MetricSnapshotPublic } from '@repo/shared';
+import type { MetricSnapshotPublic, Page } from '@repo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { DashboardService } from '../dashboard/dashboard.service';
 import { DoraService } from '../dora/dora.service';
+import { toPage, type PageWindow } from '../common/pagination';
 
 interface HistoryQuery {
   metric?: string;
@@ -48,24 +49,33 @@ export class CollectorService {
   }
 
   /** Time-series read for trends (optionally filtered by metric / range). */
-  async history(sourceId: string, q: HistoryQuery): Promise<MetricSnapshotPublic[]> {
-    const rows = await this.prisma.metricSnapshot.findMany({
-      where: {
-        sourceId,
-        ...(q.metric ? { metric: q.metric } : {}),
-        ...(q.from || q.to
-          ? {
-              capturedAt: {
-                gte: q.from ? new Date(q.from) : undefined,
-                lte: q.to ? new Date(q.to) : undefined,
-              },
-            }
-          : {}),
-      },
-      orderBy: { capturedAt: 'asc' },
-      take: 2000,
-    });
-    return rows.map(toPublic);
+  async history(
+    sourceId: string,
+    q: HistoryQuery,
+    window: PageWindow,
+  ): Promise<Page<MetricSnapshotPublic>> {
+    const where = {
+      sourceId,
+      ...(q.metric ? { metric: q.metric } : {}),
+      ...(q.from || q.to
+        ? {
+            capturedAt: {
+              gte: q.from ? new Date(q.from) : undefined,
+              lte: q.to ? new Date(q.to) : undefined,
+            },
+          }
+        : {}),
+    };
+    const [rows, total] = await this.prisma.$transaction([
+      this.prisma.metricSnapshot.findMany({
+        where,
+        orderBy: { capturedAt: 'asc' },
+        skip: window.offset,
+        take: window.limit,
+      }),
+      this.prisma.metricSnapshot.count({ where }),
+    ]);
+    return toPage(rows.map(toPublic), total, window);
   }
 }
 

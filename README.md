@@ -47,6 +47,20 @@ Monorepo **npm workspaces** : `back`, `front`, `packages/shared`.
 - **`SourcesModule`** — CRUD des sources + test de connexion.
 - **`DashboardModule`** — agrégation live par source.
 
+## Pagination des routes de liste
+
+Toute route qui retourne une liste accepte `?limit=&offset=` et répond
+`{ items, page: { total, limit, offset, hasMore } }`. Omettre `limit` applique
+la taille de page configurée — réglage `pageSize` de la section Paramètres, à
+`PAGE_LIMIT_DEFAULT` (10) sur une nouvelle installation. `limit` reste plafonné
+à `PAGE_LIMIT_MAX` (200) ; au-delà la requête est rejetée en 400.
+
+`GET /api/dashboard/:sourceId/live` agrège trois listes et expose donc une
+fenêtre par liste — `prsLimit`/`prsOffset`, `pipelinesLimit`/`pipelinesOffset`,
+`environmentsLimit`/`environmentsOffset` — plus un filtre `repos` (répétable ou
+séparé par des virgules) appliqué en amont : les compteurs de `summary` portent
+sur l'ensemble filtré, jamais sur la seule fenêtre retournée.
+
 ## Démarrage — Docker (recommandé)
 
 Toute la configuration Docker vit dans `.docker/` :

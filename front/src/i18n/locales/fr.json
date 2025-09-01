@@ -30,6 +30,8 @@
       "doraWindowDaysHint": "période d'analyse des métriques",
       "stalePrHours": "Seuil PR bloquée (heures)",
       "stalePrHoursHint": "au-delà, une PR/MR est signalée comme bloquée",
+      "pageSize": "Éléments par page",
+      "pageSizeHint": "taille de page par défaut de toutes les listes",
       "collectCron": "Cron de collecte",
       "collectCronHint": "ex. */15 * * * * (toutes les 15 minutes)",
       "languageHint": "conservée sur ce navigateur"
@@ -87,6 +89,12 @@
     "saving": "Enregistrement…",
     "close": "Fermer",
     "help": "Aide"
+  },
+  "pagination": {
+    "range": "{{first}}–{{last}} sur {{total}}",
+    "perPage": "Par page",
+    "previous": "← Précédent",
+    "next": "Suivant →"
   },
   "errors": {
     "http": "Échec de la requête ({{status}}) : {{detail}}",
