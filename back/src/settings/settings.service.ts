@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CodedException } from '../common/coded-exception';
 import type { UpdateSettingsDto } from './dto/update-settings.dto';
 
-/** Built-in values, used when neither the database nor the env provides one. */
+/** Built-in values of a fresh install, until a value is stored. */
 const FALLBACKS: AppSettings = {
   doraWindowDays: 30,
   stalePrHours: 72,
@@ -27,18 +27,19 @@ export class SettingsService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  /** Effective settings: database value, else environment variable, else fallback. */
+  /**
+   * Effective settings: stored value, else the built-in fallback. Everything
+   * here is editable from the Settings section, so the database is the only
+   * source — no environment override.
+   */
   async get(): Promise<AppSettings> {
     const rows = await this.prisma.appSetting.findMany();
     const stored = new Map(rows.map((r) => [r.key, r.value]));
     return {
-      doraWindowDays: readNumber(
-        stored.get('doraWindowDays') ?? process.env.DORA_WINDOW_DAYS,
-        FALLBACKS.doraWindowDays,
-      ),
+      doraWindowDays: readNumber(stored.get('doraWindowDays'), FALLBACKS.doraWindowDays),
       stalePrHours: readNumber(stored.get('stalePrHours'), FALLBACKS.stalePrHours),
-      collectCron: stored.get('collectCron') ?? process.env.COLLECT_CRON ?? FALLBACKS.collectCron,
-      pageSize: readNumber(stored.get('pageSize') ?? process.env.PAGE_SIZE, FALLBACKS.pageSize),
+      collectCron: stored.get('collectCron') ?? FALLBACKS.collectCron,
+      pageSize: readNumber(stored.get('pageSize'), FALLBACKS.pageSize),
     };
   }
 

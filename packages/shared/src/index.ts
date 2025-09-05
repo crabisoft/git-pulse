@@ -213,19 +213,19 @@ export interface ClassifiedEnvironment {
 // ─── Application settings ────────────────────────────────────────────
 
 /**
- * Application-wide settings, editable from the Settings section. Each one
- * defaults to its environment variable, then to a built-in value.
+ * Application-wide settings, stored in the database and editable from the
+ * Settings section. Each one falls back to a built-in value until it is saved.
  */
 export interface AppSettings {
-  /** Lookback window for DORA metrics, in days (DORA_WINDOW_DAYS). */
+  /** Lookback window for DORA metrics, in days. */
   doraWindowDays: number;
   /** Age beyond which a PR/MR counts as stale, in hours. */
   stalePrHours: number;
-  /** Cron pattern of the scheduled collection (COLLECT_CRON). */
+  /** Cron pattern of the scheduled collection. */
   collectCron: string;
   /**
    * Items per page applied by every list route when the client asks for no
-   * `limit` (PAGE_SIZE). Capped at PAGE_LIMIT_MAX.
+   * `limit`. Capped at PAGE_LIMIT_MAX.
    */
   pageSize: number;
 }
