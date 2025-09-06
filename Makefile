@@ -3,7 +3,7 @@
 COMPOSE := sh .docker/compose.sh
 
 .PHONY: help install build typecheck \
-        dev dev-down logs restart ps \
+        dev dev-down logs restart restart-back ps \
         prod prod-down \
         migrate deploy studio db-reset psql sh-back \
         clean clean-all
@@ -35,6 +35,9 @@ logs: ## Follow the dev stack logs
 	npm run docker:logs
 
 restart: dev-down dev ## Restart the dev stack
+
+restart-back: ## Restart only the back container (dev)
+	$(COMPOSE) dev restart back
 
 ps: ## Show container status
 	$(COMPOSE) dev ps
