@@ -47,6 +47,36 @@ Monorepo **npm workspaces** : `back`, `front`, `packages/shared`.
 - **`SourcesModule`** — CRUD des sources + test de connexion.
 - **`DashboardModule`** — agrégation live par source.
 
+## Navigation (front)
+
+Chaque module, section et page a son URL — react-router en `BrowserRouter`, le
+fallback SPA étant déjà assuré par nginx en prod et par Vite en dev.
+
+| URL | Page |
+|---|---|
+| `/dashboard/:slug` | Vue live d'une source |
+| `/dora/:slug` | Métriques DORA d'une source |
+| `/settings/general` | Réglages applicatifs |
+| `/settings/sources` | Sources GitHub / GitLab |
+| `/settings/environments/:slug` | Règles de classification (`?target=repository` pour l'onglet repos) |
+
+`/`, `/dashboard`, `/dora` et `/settings/environments` redirigent vers la
+première source ; `/settings` vers `/settings/general` ; tout le reste vers le
+dashboard.
+
+Le segment de source est le **slug** (`Source.slug`), forme URL-safe et unique
+du nom : `SISMIC — Prod` donne `/dashboard/sismic-prod`. Deux sources de même
+nom sont départagées par un suffixe (`prod`, `prod-2`). L'API, elle, continue
+d'adresser les sources par `id` : le front résout slug → id depuis la liste
+qu'il charge déjà pour le sélecteur, sans requête supplémentaire.
+
+L'URL est la source de vérité du sélecteur : en changer garde la page courante
+et ne remplace que le slug. Un slug inconnu — source supprimée ou renommée —
+bascule sur la première source, ou sur l'état vide s'il n'en reste aucune.
+
+> Le slug suit le nom : **renommer une source invalide ses anciens liens**. Le
+> repli évite la page morte, mais le lien ne pointe plus sur la même source.
+
 ## Pagination des routes de liste
 
 Toute route qui retourne une liste accepte `?limit=&offset=` et répond

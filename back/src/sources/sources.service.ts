@@ -29,6 +29,7 @@ export class SourcesService {
     const source = await this.prisma.source.create({
       data: {
         name: dto.name,
+        slug: await this.uniqueSlug(dto.name),
         kind: dto.kind,
         baseUrl: dto.baseUrl,
         authKind: dto.authKind,
@@ -56,6 +57,25 @@ export class SourcesService {
       this.prisma.source.count(),
     ]);
     return toPage(sources.map(toPublic), total, window);
+  }
+
+  /**
+   * Slugifies the name, appending a counter when another source already took
+   * it — names are not unique, slugs are.
+   */
+  private async uniqueSlug(name: string, excludeId?: string): Promise<string> {
+    const base = slugify(name);
+    const siblings = await this.prisma.source.findMany({
+      where: { slug: { startsWith: base }, ...(excludeId ? { id: { not: excludeId } } : {}) },
+      select: { slug: true },
+    });
+    const taken = new Set(siblings.map((s) => s.slug));
+    if (!taken.has(base)) return base;
+    // Terminates: `taken` is finite, so some suffix is always free.
+    for (let i = 2; ; i += 1) {
+      const candidate = `${base}-${i}`;
+      if (!taken.has(candidate)) return candidate;
+    }
   }
 
   /** Every source id, for internal fan-out — deliberately not paginated. */
@@ -92,10 +112,13 @@ export class SourcesService {
         ? this.crypto.encrypt(credentialPlaintext({ authKind, secret: dto.secret, app: dto.app }))
         : null;
 
+    const renamed = dto.name !== undefined && dto.name !== current.name;
     const source = await this.prisma.source.update({
       where: { id },
       data: {
         name: dto.name,
+        // The slug mirrors the name, so a rename invalidates older links.
+        slug: renamed ? await this.uniqueSlug(dto.name!, id) : undefined,
         kind,
         baseUrl: dto.baseUrl,
         authKind,
@@ -167,6 +190,22 @@ export class SourcesService {
   }
 }
 
+/**
+ * URL-safe form of a name: accents dropped, lowercased, every run of other
+ * characters collapsed to a single dash. Falls back to `source` for a name made
+ * only of symbols, so the result is never empty.
+ */
+function slugify(name: string): string {
+  return (
+    name
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '') || 'source'
+  );
+}
+
 /** Serializes the credential to encrypt from a create or update request. */
 function credentialPlaintext(input: {
   authKind: AuthKind;
@@ -202,6 +241,7 @@ function buildAuth(authKind: AuthKind, secret: string): SourceAuth {
 function toPublic(s: {
   id: string;
   name: string;
+  slug: string;
   kind: string;
   baseUrl: string;
   authKind: string;
@@ -212,6 +252,7 @@ function toPublic(s: {
   return {
     id: s.id,
     name: s.name,
+    slug: s.slug,
     kind: s.kind as SourceKind,
     baseUrl: s.baseUrl,
     authKind: s.authKind as SourcePublic['authKind'],

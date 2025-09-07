@@ -49,6 +49,12 @@ export interface ScopeRules {
 export interface SourcePublic {
   id: string;
   name: string;
+  /**
+   * URL-safe form of the name, unique across sources. The frontend routes on it
+   * so links stay readable; the API itself keeps addressing sources by `id`.
+   * Regenerated when the source is renamed, which invalidates older links.
+   */
+  slug: string;
   kind: SourceKind;
   baseUrl: string;
   authKind: AuthKind;

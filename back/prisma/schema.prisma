@@ -23,6 +23,8 @@ enum AuthKind {
 model Source {
   id        String     @id @default(uuid())
   name      String
+  /// URL-safe form of the name, used by the frontend routes.
+  slug      String     @unique
   kind      SourceKind
   baseUrl   String
   authKind  AuthKind
