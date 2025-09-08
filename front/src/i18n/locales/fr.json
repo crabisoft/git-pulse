@@ -50,6 +50,20 @@
     "testAll": "Tester le jeu de règles",
     "testRule": "Tester cette règle",
     "kind": { "simple": "simple", "meta": "méta" },
+    "target": {
+      "environment": {
+        "tab": "Environnements",
+        "listTitle": "Règles d'environnement",
+        "hint": "Appliquées aux noms d'environnements de déploiement. Alimentent la classification du dashboard et la ventilation des métriques de déploiement.",
+        "placeholder": "ex. AcmeProdExtranetBack"
+      },
+      "repository": {
+        "tab": "Repos",
+        "listTitle": "Règles de repo",
+        "hint": "Appliquées aux noms de repos. Une pull request n'a pas d'environnement : c'est par ici que le lead time se ventile par application ou par client.",
+        "placeholder": "ex. extranet-api"
+      }
+    },
     "form": {
       "name": "Nom",
       "pattern": "Pattern (RegEx)",

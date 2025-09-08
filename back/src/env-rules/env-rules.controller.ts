@@ -1,10 +1,12 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common';
 import { EnvRulesService } from './env-rules.service';
-import { PaginationQueryDto, toWindow } from '../common/pagination';
+import { toWindow } from '../common/pagination';
 import { SettingsService } from '../settings/settings.service';
 import { CreateEnvRuleDto } from './dto/create-env-rule.dto';
 import { UpdateEnvRuleDto } from './dto/update-env-rule.dto';
 import { PreviewEnvRulesDto } from './dto/preview-env-rules.dto';
+import { ListEnvRulesDto } from './dto/list-env-rules.dto';
+import { ClassifyNameDto } from './dto/classify-name.dto';
 import { classifyEnvironment } from './env-classifier';
 
 @Controller()
@@ -15,8 +17,12 @@ export class EnvRulesController {
   ) {}
 
   @Get('sources/:sourceId/env-rules')
-  async list(@Param('sourceId') sourceId: string, @Query() query: PaginationQueryDto) {
-    return this.envRules.findBySource(sourceId, toWindow(query, await this.settings.pageSize()));
+  async list(@Param('sourceId') sourceId: string, @Query() query: ListEnvRulesDto) {
+    return this.envRules.findBySource(
+      sourceId,
+      query.target ?? 'environment',
+      toWindow(query, await this.settings.pageSize()),
+    );
   }
 
   @Post('sources/:sourceId/env-rules')
@@ -26,8 +32,8 @@ export class EnvRulesController {
 
   @Post('sources/:sourceId/env-rules/classify')
   @HttpCode(200)
-  classify(@Param('sourceId') sourceId: string, @Body('name') name: string) {
-    return this.envRules.classify(sourceId, name);
+  classify(@Param('sourceId') sourceId: string, @Body() dto: ClassifyNameDto) {
+    return this.envRules.classify(sourceId, dto.name, dto.target ?? 'environment');
   }
 
   @Patch('env-rules/:id')

@@ -9,6 +9,7 @@ import type {
   DoraResult,
   MetricSnapshotPublic,
   Page,
+  RuleTarget,
 } from '@repo/shared';
 
 // Relative by default (same-origin, via the Vite dev proxy / nginx). An absolute
@@ -111,6 +112,8 @@ export interface CreateEnvRuleInput {
   name: string;
   pattern: string;
   kind: 'simple' | 'meta';
+  /** Omitted means `environment`. */
+  target?: RuleTarget;
   priority?: number;
 }
 
@@ -140,8 +143,8 @@ export const api = {
         }),
     ),
 
-  listEnvRules: (sourceId: string, page?: PageQuery) =>
-    request<Page<EnvRulePublic>>(`/sources/${sourceId}/env-rules${qs({ ...page })}`),
+  listEnvRules: (sourceId: string, target: RuleTarget, page?: PageQuery) =>
+    request<Page<EnvRulePublic>>(`/sources/${sourceId}/env-rules${qs({ target, ...page })}`),
   createEnvRule: (sourceId: string, input: CreateEnvRuleInput) =>
     request<EnvRulePublic>(`/sources/${sourceId}/env-rules`, {
       method: 'POST',
@@ -150,10 +153,10 @@ export const api = {
   updateEnvRule: (id: string, input: UpdateEnvRuleInput) =>
     request<EnvRulePublic>(`/env-rules/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   deleteEnvRule: (id: string) => request<void>(`/env-rules/${id}`, { method: 'DELETE' }),
-  classifyEnv: (sourceId: string, name: string) =>
+  classifyEnv: (sourceId: string, name: string, target: RuleTarget) =>
     request<ClassifiedEnvironment>(`/sources/${sourceId}/env-rules/classify`, {
       method: 'POST',
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, target }),
     }),
   /** Stateless classification: a name against an ad-hoc rule set. */
   previewEnvRules: (name: string, rules: CreateEnvRuleInput[]) =>

@@ -1,5 +1,5 @@
 import { IsEnum, IsInt, IsOptional, IsString, Min, MinLength } from 'class-validator';
-import type { EnvRuleKind } from '@repo/shared';
+import type { EnvRuleKind, RuleTarget } from '@repo/shared';
 
 export class CreateEnvRuleDto {
   @IsString()
@@ -12,6 +12,11 @@ export class CreateEnvRuleDto {
 
   @IsEnum(['simple', 'meta'] as const)
   kind!: EnvRuleKind;
+
+  /** Defaults to `environment` so existing clients keep working. */
+  @IsOptional()
+  @IsEnum(['environment', 'repository'] as const)
+  target?: RuleTarget;
 
   @IsOptional()
   @IsInt()

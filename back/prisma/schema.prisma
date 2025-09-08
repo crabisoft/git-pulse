@@ -58,9 +58,15 @@ enum EnvRuleKind {
   meta
 }
 
-/// RegEx-based environment classification rule (Phase 2).
+/// What the pattern is matched against: an environment name, or a repo name.
+enum RuleTarget {
+  environment
+  repository
+}
+
+/// RegEx-based classification rule (Phase 2).
 /// simple: extracts attributes via named groups (type, client, ...).
-/// meta:   groups every environment matching the pattern.
+/// meta:   groups every name matching the pattern.
 model EnvRule {
   id         String      @id @default(uuid())
   source     Source      @relation(fields: [sourceId], references: [id], onDelete: Cascade)
@@ -68,12 +74,13 @@ model EnvRule {
   name       String
   pattern    String
   kind       EnvRuleKind
+  target     RuleTarget  @default(environment)
   /// Client-defined priority (lower wins).
   priority   Int         @default(100)
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 
-  @@index([sourceId, priority])
+  @@index([sourceId, target, priority])
 }
 
 /// Application-wide setting, editable from the UI. A missing key falls back to

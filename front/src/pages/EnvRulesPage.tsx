@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { EnvRulePublic, ClassifiedEnvironment, PageInfo } from '@repo/shared';
+import { useSearchParams } from 'react-router-dom';
+import type { EnvRulePublic, ClassifiedEnvironment, PageInfo, RuleTarget } from '@repo/shared';
 import { api, apiErrorInfo, type CreateEnvRuleInput, type PageQuery } from '../api';
 import { DeleteIcon, EditIcon, PlusIcon, TestIcon } from '../icons';
 import { IconButton } from '../IconButton';
@@ -12,8 +13,18 @@ const EMPTY: CreateEnvRuleInput = { name: '', pattern: '', kind: 'simple', prior
 /** Module constant so resetting on source change never re-triggers a fetch. */
 const FIRST_PAGE: PageQuery = {};
 
+const TARGETS: RuleTarget[] = ['environment', 'repository'];
+
 export function EnvRulesPage({ sourceId }: { sourceId: string }) {
   const { t } = useTranslation();
+  // Rules are edited one target at a time: environment names on one side, repo
+  // names on the other. They never mix, so the tab drives every request — and
+  // it lives in the query string so a tab is a shareable URL.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const target: RuleTarget = searchParams.get('target') === 'repository' ? 'repository' : 'environment';
+  // The default target stays implicit, so the plain URL keeps working.
+  const setTarget = (next: RuleTarget) =>
+    setSearchParams(next === 'environment' ? {} : { target: next });
   const [rules, setRules] = useState<EnvRulePublic[]>([]);
   const [pageInfo, setPageInfo] = useState<PageInfo | null>(null);
   const [page, setPage] = useState<PageQuery>(FIRST_PAGE);
@@ -26,24 +37,24 @@ export function EnvRulesPage({ sourceId }: { sourceId: string }) {
 
   const load = useCallback(async () => {
     try {
-      const result = await api.listEnvRules(sourceId, page);
+      const result = await api.listEnvRules(sourceId, target, page);
       setRules(result.items);
       setPageInfo(result.page);
     } catch (err) {
       const { code, params } = apiErrorInfo(err);
       setMsg({ kind: 'err', text: t(code, params) });
     }
-  }, [sourceId, page, t]);
+  }, [sourceId, target, page, t]);
 
   useEffect(() => {
     void load();
     setMsg(null);
   }, [load]);
 
-  // Back to the first page when switching source.
+  // Back to the first page when switching source or target.
   useEffect(() => {
     setPage(FIRST_PAGE);
-  }, [sourceId]);
+  }, [sourceId, target]);
 
   async function remove(rule: EnvRulePublic) {
     setDeleting(null);
@@ -67,7 +78,7 @@ export function EnvRulesPage({ sourceId }: { sourceId: string }) {
     <>
       <section className="panel">
         <div className="panel-head">
-          <h2>{t('envRules.listTitle')}</h2>
+          <h2>{t(`envRules.target.${target}.listTitle`)}</h2>
           <div className="panel-head-actions">
             <button className="btn" onClick={() => setTesting({ rule: null })}>
               {t('envRules.testAll')}
@@ -77,6 +88,22 @@ export function EnvRulesPage({ sourceId }: { sourceId: string }) {
             </button>
           </div>
         </div>
+
+        <div className="subtabs" role="tablist">
+          {TARGETS.map((value) => (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={target === value}
+              className={target === value ? 'subtab active' : 'subtab'}
+              onClick={() => setTarget(value)}
+            >
+              {t(`envRules.target.${value}.tab`)}
+            </button>
+          ))}
+        </div>
+        <p className="muted subtabs-hint">{t(`envRules.target.${target}.hint`)}</p>
 
         {msg && <div className={`banner ${msg.kind === 'ok' ? 'ok' : 'error'}`}>{msg.text}</div>}
         {rules.length === 0 && <p className="muted">{t('envRules.listEmpty')}</p>}
@@ -116,6 +143,7 @@ export function EnvRulesPage({ sourceId }: { sourceId: string }) {
       {editing && (
         <EnvRuleDialog
           sourceId={sourceId}
+          target={target}
           rule={editing.rule}
           onClose={() => setEditing(null)}
           onSaved={saved}
@@ -125,6 +153,7 @@ export function EnvRulesPage({ sourceId }: { sourceId: string }) {
       {testing && (
         <EnvRuleTestDialog
           sourceId={sourceId}
+          target={target}
           rule={testing.rule}
           onClose={() => setTesting(null)}
         />
@@ -146,18 +175,23 @@ export function EnvRulesPage({ sourceId }: { sourceId: string }) {
 /** Create/edit form, in a modal. `rule` null means creation. */
 function EnvRuleDialog({
   sourceId,
+  target,
   rule,
   onClose,
   onSaved,
 }: {
   sourceId: string;
+  target: RuleTarget;
   rule: EnvRulePublic | null;
   onClose: () => void;
   onSaved: (created: boolean) => Promise<void>;
 }) {
   const { t } = useTranslation();
+  // A rule belongs to the tab it was created from; there is no target picker.
   const [form, setForm] = useState<CreateEnvRuleInput>(
-    rule ? { name: rule.name, pattern: rule.pattern, kind: rule.kind, priority: rule.priority } : EMPTY,
+    rule
+      ? { name: rule.name, pattern: rule.pattern, kind: rule.kind, priority: rule.priority, target }
+      : { ...EMPTY, target },
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -245,10 +279,12 @@ function EnvRuleDialog({
  */
 function EnvRuleTestDialog({
   sourceId,
+  target,
   rule,
   onClose,
 }: {
   sourceId: string;
+  target: RuleTarget;
   rule: EnvRulePublic | null;
   onClose: () => void;
 }) {
@@ -266,7 +302,7 @@ function EnvRuleTestDialog({
           ? await api.previewEnvRules(sample, [
               { name: rule.name, pattern: rule.pattern, kind: rule.kind, priority: rule.priority },
             ])
-          : await api.classifyEnv(sourceId, sample),
+          : await api.classifyEnv(sourceId, sample, target),
       );
     } catch (err) {
       const { code, params } = apiErrorInfo(err);
@@ -292,7 +328,7 @@ function EnvRuleTestDialog({
           className="mono-input"
           value={sample}
           onChange={(e) => setSample(e.target.value)}
-          placeholder={t('envRules.preview.placeholder')}
+          placeholder={t(`envRules.target.${target}.placeholder`)}
           spellCheck={false}
           autoFocus
         />

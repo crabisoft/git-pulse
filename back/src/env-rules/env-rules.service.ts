@@ -1,5 +1,11 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
-import type { ClassifiedEnvironment, EnvRuleKind, EnvRulePublic, Page } from '@repo/shared';
+import type {
+  ClassifiedEnvironment,
+  EnvRuleKind,
+  EnvRulePublic,
+  Page,
+  RuleTarget,
+} from '@repo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CodedException } from '../common/coded-exception';
 import { toPage, type PageWindow } from '../common/pagination';
@@ -20,21 +26,27 @@ export class EnvRulesService {
         name: dto.name,
         pattern: dto.pattern,
         kind: dto.kind,
+        target: dto.target ?? 'environment',
         priority: dto.priority ?? 100,
       },
     });
     return toPublic(rule);
   }
 
-  async findBySource(sourceId: string, window: PageWindow): Promise<Page<EnvRulePublic>> {
+  async findBySource(
+    sourceId: string,
+    target: RuleTarget,
+    window: PageWindow,
+  ): Promise<Page<EnvRulePublic>> {
+    const where = { sourceId, target };
     const [rules, total] = await this.prisma.$transaction([
       this.prisma.envRule.findMany({
-        where: { sourceId },
+        where,
         orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
         skip: window.offset,
         take: window.limit,
       }),
-      this.prisma.envRule.count({ where: { sourceId } }),
+      this.prisma.envRule.count({ where }),
     ]);
     return toPage(rules.map(toPublic), total, window);
   }
@@ -49,6 +61,7 @@ export class EnvRulesService {
           name: dto.name,
           pattern: dto.pattern,
           kind: dto.kind,
+          target: dto.target,
           priority: dto.priority,
         },
       })
@@ -64,16 +77,24 @@ export class EnvRulesService {
     });
   }
 
-  /** Classify an environment name against a source's saved rules. */
-  async classify(sourceId: string, name: string): Promise<ClassifiedEnvironment> {
-    const [classified] = await this.classifyMany(sourceId, [name]);
+  /** Classify one name against a source's saved rules for the given target. */
+  async classify(
+    sourceId: string,
+    name: string,
+    target: RuleTarget = 'environment',
+  ): Promise<ClassifiedEnvironment> {
+    const [classified] = await this.classifyMany(sourceId, [name], target);
     return classified;
   }
 
   /** Same as classify, for several names — the rules are read once. */
-  async classifyMany(sourceId: string, names: string[]): Promise<ClassifiedEnvironment[]> {
+  async classifyMany(
+    sourceId: string,
+    names: string[],
+    target: RuleTarget = 'environment',
+  ): Promise<ClassifiedEnvironment[]> {
     const rules = await this.prisma.envRule.findMany({
-      where: { sourceId },
+      where: { sourceId, target },
       orderBy: { priority: 'asc' },
     });
     const ruleLikes = rules.map(toRuleLike);
@@ -114,6 +135,7 @@ function toPublic(r: {
   name: string;
   pattern: string;
   kind: string;
+  target: string;
   priority: number;
   createdAt: Date;
   updatedAt: Date;
@@ -124,6 +146,7 @@ function toPublic(r: {
     name: r.name,
     pattern: r.pattern,
     kind: r.kind as EnvRuleKind,
+    target: r.target as RuleTarget,
     priority: r.priority,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),

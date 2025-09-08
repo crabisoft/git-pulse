@@ -91,6 +91,26 @@ fenêtre par liste — `prsLimit`/`prsOffset`, `pipelinesLimit`/`pipelinesOffset
 séparé par des virgules) appliqué en amont : les compteurs de `summary` portent
 sur l'ensemble filtré, jamais sur la seule fenêtre retournée.
 
+## Règles de classification
+
+Une règle est une RegEx associée à une source. Deux axes indépendants :
+
+- **`kind`** — `simple` extrait des attributs via les groupes nommés
+  (`(?<app>…)` donne `app=…`) ; `meta` ne teste que l'appartenance et ajoute le
+  **nom de la règle** comme méta-environnement. Une règle `meta` ignore
+  totalement ses groupes nommés.
+- **`target`** — `environment` s'applique aux noms d'environnements de
+  déploiement, `repository` aux noms de repos.
+
+Les règles `repository` existent parce qu'une pull request n'a pas
+d'environnement : sans elles, `lead_time`, `coding_time`, `pickup_time` et
+`review_time` retombent tous dans un seul bucket global. Classer le nom de repo
+leur donne les mêmes dimensions que les métriques de déploiement.
+
+`GET /api/sources/:id/env-rules?target=repository` liste une cible à la fois
+(`environment` par défaut). Le patterns sont testés **non ancrés** — pensez à
+`^` et `$` si vous voulez un match sur le nom entier.
+
 ## Démarrage — Docker (recommandé)
 
 Toute la configuration Docker vit dans `.docker/` :

@@ -146,13 +146,21 @@ export interface ConnectionTestResult {
 
 export type EnvRuleKind = 'simple' | 'meta';
 
-/** A RegEx-based environment classification rule. */
+/**
+ * What a rule is matched against. Both targets share the same engine: named
+ * capture groups become attributes. Repository rules exist so PR-based DORA
+ * metrics get dimensions too — a PR has no environment, only a repo.
+ */
+export type RuleTarget = 'environment' | 'repository';
+
+/** A RegEx-based classification rule. */
 export interface EnvRulePublic {
   id: string;
   sourceId: string;
   name: string;
   pattern: string;
   kind: EnvRuleKind;
+  target: RuleTarget;
   priority: number;
   createdAt: string;
   updatedAt: string;
@@ -207,7 +215,7 @@ export interface MetricSnapshotPublic {
   capturedAt: string;
 }
 
-/** An environment name resolved against a set of rules. */
+/** A name (environment or repository) resolved against a set of rules. */
 export interface ClassifiedEnvironment {
   name: string;
   /** Attributes extracted from named capture groups (e.g. type, client). */

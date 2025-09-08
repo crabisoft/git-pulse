@@ -50,6 +50,20 @@
     "testAll": "Test the rule set",
     "testRule": "Test this rule",
     "kind": { "simple": "simple", "meta": "meta" },
+    "target": {
+      "environment": {
+        "tab": "Environments",
+        "listTitle": "Environment rules",
+        "hint": "Matched against deployment environment names. Feeds the dashboard classification and the deployment metrics breakdown.",
+        "placeholder": "e.g. AcmeProdExtranetBack"
+      },
+      "repository": {
+        "tab": "Repositories",
+        "listTitle": "Repository rules",
+        "hint": "Matched against repo names. A pull request has no environment, so this is what breaks lead time down by application or customer.",
+        "placeholder": "e.g. extranet-api"
+      }
+    },
     "form": {
       "name": "Name",
       "pattern": "Pattern (RegEx)",

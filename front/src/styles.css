@@ -308,6 +308,13 @@ tr.stale td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
 .source-test.err { color: var(--crit); }
 .row-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
+/* Sub-tabs (rule targets) */
+.subtabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.subtab { padding: 7px 14px; border: none; border-bottom: 2px solid transparent; background: none; color: var(--muted); cursor: pointer; font-size: .86rem; font-family: var(--sans); }
+.subtab:hover { color: var(--ink); }
+.subtab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+.subtabs-hint { font-size: .78rem; margin: 0 0 14px; }
+
 /* Pagination */
 .pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-size: .82rem; }
 .pagination-controls { display: flex; align-items: center; gap: 8px; }

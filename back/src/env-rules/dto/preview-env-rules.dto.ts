@@ -9,7 +9,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import type { EnvRuleKind } from '@repo/shared';
+import type { EnvRuleKind, RuleTarget } from '@repo/shared';
 
 class RuleInputDto {
   @IsString()
@@ -22,6 +22,12 @@ class RuleInputDto {
 
   @IsEnum(['simple', 'meta'] as const)
   kind!: EnvRuleKind;
+
+  /** Ignored — the rules are supplied inline — but accepted so a client can
+   * post a saved rule verbatim without stripping the field. */
+  @IsOptional()
+  @IsEnum(['environment', 'repository'] as const)
+  target?: RuleTarget;
 
   @IsOptional()
   @IsInt()
