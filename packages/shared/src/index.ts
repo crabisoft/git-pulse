@@ -205,6 +205,45 @@ export interface DoraResult {
   samples: DoraSample[];
 }
 
+/**
+ * Lookback windows the UI offers, in days. A month counts as 30 days and a year
+ * as 365, so the labels stay round rather than calendar-exact. The API accepts
+ * any value in [DORA_WINDOW_MIN, DORA_WINDOW_MAX] — these are what the dropdowns
+ * propose, not what the backend enforces.
+ */
+export const DORA_WINDOW_PRESETS: readonly number[] = [15, 30, 60, 90, 180, 365, 730];
+
+export const DORA_WINDOW_MIN = 1;
+/** Widest window accepted, i.e. the largest preset. */
+export const DORA_WINDOW_MAX = 730;
+
+/** The period a report was computed over — ISO bounds, both inclusive. */
+export interface DoraPeriod {
+  from: string;
+  to: string;
+  /**
+   * The rolling window `from` was derived from, in days, or null when an
+   * explicit `from` was requested. Lets the UI show which window is in effect
+   * without duplicating the fallback logic.
+   */
+  windowDays: number | null;
+}
+
+/**
+ * The DORA endpoint payload. Beyond the paginated results it carries what the
+ * filter controls need: the vocabularies are computed before filtering, so
+ * narrowing a filter never empties the list you pick from.
+ */
+export interface DoraReport {
+  results: Page<DoraResult>;
+  /** Every repo in the source scope, filter applied or not. */
+  repos: string[];
+  /** Dimension key → observed values, over the repo-scoped results. */
+  dimensions: Record<string, string[]>;
+  /** The period actually used, defaults resolved. */
+  period: DoraPeriod;
+}
+
 /** A historized metric point (basis for time-series trends). */
 export interface MetricSnapshotPublic {
   id: string;
@@ -231,7 +270,7 @@ export interface ClassifiedEnvironment {
  * Settings section. Each one falls back to a built-in value until it is saved.
  */
 export interface AppSettings {
-  /** Lookback window for DORA metrics, in days. */
+  /** Default lookback window for DORA metrics, in days — see DORA_WINDOW_PRESETS. */
   doraWindowDays: number;
   /** Age beyond which a PR/MR counts as stale, in hours. */
   stalePrHours: number;

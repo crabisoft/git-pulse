@@ -111,6 +111,56 @@ leur donne les mêmes dimensions que les métriques de déploiement.
 (`environment` par défaut). Le patterns sont testés **non ancrés** — pensez à
 `^` et `$` si vous voulez un match sur le nom entier.
 
+## Filtres des métriques DORA
+
+`GET /api/sources/:id/dora` répond un `DoraReport` : les résultats paginés, plus
+les vocabulaires dont les contrôles de filtre ont besoin (`repos`,
+`dimensions`) et la `period` effectivement appliquée.
+
+| Paramètre | Effet |
+|---|---|
+| `from` / `to` | Période, dates ISO, bornes inclusives |
+| `windowDays` | Fenêtre glissante en jours, se terminant à `to` |
+| `repos` | **Scope la collecte** (répétable ou séparé par des virgules) |
+| `dimension` | **Tranche les résultats**, paires `key:value` répétables |
+
+`?from=2026-01-01&to=2026-01-31&repos=extranet-api&dimension=app:Extranet&dimension=type:Prod`
+
+Deux natures distinctes de filtre :
+
+- **`repos` agit avant les connecteurs.** Comme ils itèrent repo par repo, une
+  liste plus courte veut dire *moins* d'appels API, pas plus.
+- **`dimension` agit après le calcul.** Toutes les paires doivent correspondre.
+
+Les vocabulaires sont calculés **avant** le tranchage — restreindre un filtre ne
+vide jamais la liste dans laquelle on choisit, et `repos` reste toujours complet
+même quand la sélection courante ne ramène rien.
+
+### Période
+
+Trois façons de demander une période, par précédence décroissante : un `from`
+explicite, une fenêtre glissante `windowDays`, puis le réglage `doraWindowDays`.
+Une date sans heure (`2026-01-31`) est prise en fin de journée UTC, et `to` omis
+vaut maintenant. Sans paramètre on retrouve donc la fenêtre glissante des
+réglages — ce que fait le snapshot planifié, qui reste volontairement non filtré
+pour que l'historique et les sparklines restent cohérents.
+
+`period.windowDays` renvoie la fenêtre effectivement appliquée, ou `null` quand
+`from` était explicite. C'est ce qui permet à la page DORA d'afficher d'emblée
+l'entrée correspondant au réglage courant, sans avoir à rejouer la logique de
+repli côté front.
+
+Sur la page DORA, l'entrée « Personnalisée » saisit les bornes dans une modale
+et ne relance le calcul qu'à la validation : chaque requête DORA déclenche une
+salve d'appels connecteurs, trop coûteuse pour être rejouée à chaque frappe dans
+un champ date. Une borne laissée vide reste ouverte.
+
+Le sélecteur de période — page DORA comme réglages — propose les mêmes valeurs
+(`DORA_WINDOW_PRESETS` : 15 j, 1, 2, 3, 6 mois, 1 et 2 ans ; un mois compte 30
+jours, une année 365). L'API, elle, accepte n'importe quelle valeur entre
+`DORA_WINDOW_MIN` et `DORA_WINDOW_MAX` : une fenêtre hors presets déjà
+enregistrée reste donc proposée dans la liste plutôt que réécrite en silence.
+
 ## Démarrage — Docker (recommandé)
 
 Toute la configuration Docker vit dans `.docker/` :

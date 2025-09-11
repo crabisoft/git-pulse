@@ -1,5 +1,11 @@
 import { Injectable, HttpStatus, Logger } from '@nestjs/common';
-import { PAGE_LIMIT_DEFAULT, PAGE_LIMIT_MAX, type AppSettings } from '@repo/shared';
+import {
+  DORA_WINDOW_MAX,
+  DORA_WINDOW_MIN,
+  PAGE_LIMIT_DEFAULT,
+  PAGE_LIMIT_MAX,
+  type AppSettings,
+} from '@repo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CodedException } from '../common/coded-exception';
 import type { UpdateSettingsDto } from './dto/update-settings.dto';
@@ -13,7 +19,7 @@ const FALLBACKS: AppSettings = {
 };
 
 const LIMITS = {
-  doraWindowDays: { min: 1, max: 365 },
+  doraWindowDays: { min: DORA_WINDOW_MIN, max: DORA_WINDOW_MAX },
   stalePrHours: { min: 1, max: 8760 },
   pageSize: { min: 1, max: PAGE_LIMIT_MAX },
 };

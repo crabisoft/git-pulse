@@ -26,8 +26,8 @@
       "appTitle": "Application",
       "uiTitle": "Interface",
       "saved": "Réglages enregistrés.",
-      "doraWindowDays": "Fenêtre DORA (jours)",
-      "doraWindowDaysHint": "période d'analyse des métriques",
+      "doraWindowDays": "Fenêtre DORA",
+      "doraWindowDaysHint": "période d'analyse par défaut, surchargeable sur la page DORA",
       "stalePrHours": "Seuil PR bloquée (heures)",
       "stalePrHoursHint": "au-delà, une PR/MR est signalée comme bloquée",
       "pageSize": "Éléments par page",
@@ -129,6 +129,9 @@
     "settings": {
       "outOfRange": "Valeur invalide pour {{key}} : attendu un entier entre {{min}} et {{max}}.",
       "invalidCron": "Expression cron invalide : {{pattern}}"
+    },
+    "dora": {
+      "invalidRange": "Période invalide : la date de début ({{from}}) est postérieure à la date de fin ({{to}})."
     }
   },
   "empty": {
@@ -190,6 +193,34 @@
     "empty": "Aucune donnée — configurez des règles d'environnement et lancez une collecte.",
     "global": "global",
     "sample": "{{count}} événements",
+    "window": {
+      "15": "15 jours",
+      "30": "1 mois",
+      "60": "2 mois",
+      "90": "3 mois",
+      "180": "6 mois",
+      "365": "1 an",
+      "730": "2 ans",
+      "days": "{{count}} jours"
+    },
+    "period": {
+      "window": "Période",
+      "custom": "Personnalisée…",
+      "dialogTitle": "Période personnalisée",
+      "dialogHint": "Les métriques ne sont recalculées qu'à la validation. Une borne laissée vide reste ouverte : sans date de fin, la période court jusqu'à maintenant.",
+      "apply": "Appliquer",
+      "since": "Depuis le {{from}}",
+      "until": "Jusqu'au {{to}}",
+      "from": "Du",
+      "to": "Au",
+      "reset": "Fenêtre par défaut",
+      "resetHint": "Revenir à la fenêtre définie dans les paramètres",
+      "effective": "{{from}} → {{to}}"
+    },
+    "dimension": {
+      "any": "toutes",
+      "clear": "Réinitialiser"
+    },
     "detail": {
       "open": "Voir le détail",
       "shown": "{{shown}} événement(s) affiché(s) sur {{total}}",

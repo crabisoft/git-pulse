@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PAGE_LIMIT_MAX, type AppSettings } from '@repo/shared';
 import { api, apiErrorInfo } from '../../api';
+import { windowLabel, windowOptions } from '../../doraWindow';
 import { SUPPORTED_LANGUAGES, LANGUAGE_LABELS } from '../../i18n';
 
 export function GeneralSettings({
@@ -47,14 +48,16 @@ export function GeneralSettings({
           <label>
             {t('settings.general.doraWindowDays')}{' '}
             <span className="hint">{t('settings.general.doraWindowDaysHint')}</span>
-            <input
-              type="number"
-              min={1}
-              max={365}
+            <select
               value={form.doraWindowDays}
               onChange={(e) => set('doraWindowDays', Number(e.target.value))}
-              required
-            />
+            >
+              {windowOptions(form.doraWindowDays).map((days) => (
+                <option key={days} value={days}>
+                  {windowLabel(t, days)}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             {t('settings.general.stalePrHours')}{' '}

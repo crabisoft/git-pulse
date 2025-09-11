@@ -1,7 +1,8 @@
-import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DashboardEnvironment, DashboardLive, PipelineStatus } from '@repo/shared';
 import { api, apiErrorInfo, type DashboardLiveQuery, type PageQuery } from '../api';
+import { RepoFilter } from '../RepoFilter';
 import { Pagination } from '../Pagination';
 
 /** Used until the settings are loaded; the backend applies the stored value. */
@@ -87,7 +88,14 @@ export function DashboardPage({
       {data && summary && (
         <>
           {repos.length > 1 && (
-            <RepoFilter repos={repos} selected={selectedRepos} onChange={changeRepos} />
+            <div className="filters-row">
+              <RepoFilter
+                repos={repos}
+                selected={selectedRepos}
+                onChange={changeRepos}
+                disabled={loading}
+              />
+            </div>
           )}
 
           <div className="tiles">
@@ -248,79 +256,6 @@ export function DashboardPage({
   );
 }
 
-function RepoFilter({
-  repos,
-  selected,
-  onChange,
-}: {
-  repos: string[];
-  selected: Set<string>;
-  onChange: (next: Set<string>) => void;
-}) {
-  const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!open) return;
-    const onDocClick = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', onDocClick);
-    return () => document.removeEventListener('mousedown', onDocClick);
-  }, [open]);
-
-  const toggle = (repo: string) => {
-    const next = new Set(selected);
-    if (next.has(repo)) next.delete(repo);
-    else next.add(repo);
-    onChange(next);
-  };
-
-  const label =
-    selected.size === 0
-      ? t('dashboard.filter.all')
-      : t('dashboard.filter.selected', { count: selected.size });
-
-  return (
-    <div className="repo-filter">
-      <span className="repo-filter-label">{t('dashboard.filter.repos')}</span>
-      <div className="multiselect" ref={ref}>
-        <button
-          type="button"
-          className="multiselect-btn"
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={open}
-        >
-          <span>{label}</span>
-          <span className="caret">▾</span>
-        </button>
-        {open && (
-          <div className="multiselect-panel">
-            <div className="multiselect-actions">
-              <button type="button" onClick={() => onChange(new Set(repos))}>
-                {t('dashboard.filter.selectAll')}
-              </button>
-              <button type="button" onClick={() => onChange(new Set())}>
-                {t('dashboard.filter.clear')}
-              </button>
-            </div>
-            <ul>
-              {repos.map((r) => (
-                <li key={r}>
-                  <label>
-                    <input type="checkbox" checked={selected.has(r)} onChange={() => toggle(r)} />
-                    <span>{r}</span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
 
 /** Attributes and meta-environments of an environment, or a hint when no rule matched. */
 function Classification({ env }: { env: DashboardEnvironment }) {

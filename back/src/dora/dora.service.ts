@@ -1,5 +1,15 @@
-import { Injectable, Logger } from '@nestjs/common';
-import type { Deployment, DoraResult, MergedPullRequest, PipelineStatus } from '@repo/shared';
+import { Injectable, Logger, HttpStatus } from '@nestjs/common';
+import type {
+  Deployment,
+  DoraPeriod,
+  DoraReport,
+  DoraResult,
+  MergedPullRequest,
+  PipelineStatus,
+  RuleTarget,
+} from '@repo/shared';
+import { CodedException } from '../common/coded-exception';
+import { paginate, type PageWindow } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import { SourcesService } from '../sources/sources.service';
 import { ConnectorFactory } from '../sources/connectors/connector.factory';
@@ -14,6 +24,25 @@ import {
   type MergedPrEvent,
 } from './dora-metrics';
 
+/** Explicit reporting period; each bound falls back to the rolling window. */
+export interface DoraRange {
+  from?: string;
+  to?: string;
+  /** Length of the rolling window, in days. Unused once `from` is supplied. */
+  windowDays?: number;
+}
+
+/** The period, plus what scopes the collection and what slices the results. */
+export interface DoraQuery extends DoraRange {
+  /** Repos to collect from; empty or omitted means every repo in scope. */
+  repos?: string[];
+  /** Every entry must match for a result to be kept. */
+  dimensions?: Record<string, string>;
+}
+
+/** A resolved period — both bounds are ISO strings, `from` <= `to`. */
+type ResolvedRange = DoraPeriod;
+
 @Injectable()
 export class DoraService {
   private readonly logger = new Logger(DoraService.name);
@@ -26,12 +55,41 @@ export class DoraService {
     private readonly settings: SettingsService,
   ) {}
 
-  /** Compute DORA metrics over the lookback window for a source. */
-  async compute(sourceId: string): Promise<DoraResult[]> {
+  /**
+   * Raw computation, unsliced — what the scheduled snapshot persists. Both
+   * bounds are optional: an omitted `to` means now, an omitted `from` means
+   * `doraWindowDays` before `to`, so calling with no range keeps the historical
+   * rolling-window behavior.
+   */
+  async compute(sourceId: string, range: DoraRange = {}): Promise<DoraResult[]> {
+    return (await this.build(sourceId, range)).results;
+  }
+
+  /**
+   * Read-side view: the same computation, sliced by dimension and paginated,
+   * plus the vocabularies the filter controls are built from. Those are
+   * collected before slicing, so narrowing a filter never empties the list you
+   * pick from.
+   */
+  async report(sourceId: string, query: DoraQuery, window: PageWindow): Promise<DoraReport> {
+    const { results, repos, period } = await this.build(sourceId, query);
+    const dimensions = collectDimensions(results);
+    const sliced = results.filter((r) => matchesDimensions(r.dimensions, query.dimensions));
+    return { results: paginate(sliced, window), repos, dimensions, period };
+  }
+
+  /** Fetches and computes everything, before any slicing. */
+  private async build(
+    sourceId: string,
+    query: DoraQuery,
+  ): Promise<{ results: DoraResult[]; repos: string[]; period: ResolvedRange }> {
     const { ctx, kind } = await this.sources.resolveContext(sourceId);
     const connector = this.connectors.for(kind);
-    const since = await this.windowStart();
-    const repos = await connector.listRepositories(ctx);
+    const period = await this.resolveRange(query);
+    const allRepos = await connector.listRepositories(ctx);
+    // Scoping here rather than after the fact: the connectors iterate repo by
+    // repo, so a narrower list is also fewer API calls.
+    const repos = filterRepos(allRepos, query.repos);
 
     // Best-effort: a missing permission on one endpoint yields partial metrics
     // rather than failing the whole computation.
@@ -40,21 +98,28 @@ export class DoraService {
         this.logger.warn(`listDeployments échoué (${sourceId}) : ${asMessage(e)}`);
         return [] as Deployment[];
       }),
-      connector.listMergedPullRequests(ctx, repos, since).catch((e) => {
+      connector.listMergedPullRequests(ctx, repos, period.from).catch((e) => {
         this.logger.warn(`listMergedPullRequests échoué (${sourceId}) : ${asMessage(e)}`);
         return [] as MergedPullRequest[];
       }),
     ]);
 
-    const deploymentEvents = await this.toDeploymentEvents(sourceId, deployments, since);
-    const prEvents = mergedPrs.map(toMergedPrEvent);
+    const [deploymentEvents, prEvents] = await Promise.all([
+      this.toDeploymentEvents(sourceId, deployments, period),
+      this.toMergedPrEvents(sourceId, mergedPrs, period),
+    ]);
 
-    return [
-      ...deploymentFrequency(deploymentEvents),
-      ...changeFailureRate(deploymentEvents),
-      ...mttr(deploymentEvents),
-      ...leadTimeBreakdown(prEvents),
-    ];
+    return {
+      results: [
+        ...deploymentFrequency(deploymentEvents),
+        ...changeFailureRate(deploymentEvents),
+        ...mttr(deploymentEvents),
+        ...leadTimeBreakdown(prEvents),
+      ],
+      // The full list stays the filter vocabulary, exactly like the dashboard.
+      repos: allRepos,
+      period,
+    };
   }
 
   /** Compute and persist DORA metrics as snapshots. Returns the count written. */
@@ -78,25 +143,42 @@ export class DoraService {
     return created.length;
   }
 
-  private async windowStart(): Promise<string> {
-    const { doraWindowDays } = await this.settings.get();
-    return new Date(Date.now() - doraWindowDays * 86_400_000).toISOString();
+  /**
+   * Applies the defaults and rejects an inverted period. Three ways to ask for
+   * a period, by decreasing precedence: an explicit `from`, a rolling
+   * `windowDays`, and the configured `doraWindowDays`.
+   */
+  private async resolveRange(range: DoraRange): Promise<ResolvedRange> {
+    const to = range.to ? endOfDayIfDateOnly(range.to) : new Date();
+    // An explicit `to` with no `from` reads as "the window ending that day".
+    let windowDays: number | null = null;
+    let from: Date;
+    if (range.from) {
+      from = new Date(range.from);
+    } else {
+      windowDays = range.windowDays ?? (await this.settings.get()).doraWindowDays;
+      from = new Date(to.getTime() - windowDays * 86_400_000);
+    }
+    if (from.getTime() > to.getTime()) {
+      throw new CodedException('errors.dora.invalidRange', HttpStatus.BAD_REQUEST, {
+        from: from.toISOString(),
+        to: to.toISOString(),
+      });
+    }
+    return { from: from.toISOString(), to: to.toISOString(), windowDays };
   }
 
   private async toDeploymentEvents(
     sourceId: string,
     deployments: Deployment[],
-    since: string,
+    period: ResolvedRange,
   ): Promise<DeploymentEvent[]> {
-    const sinceMs = new Date(since).getTime();
-    const inWindow = deployments.filter((d) => new Date(d.createdAt).getTime() >= sinceMs);
-
-    // Classify each distinct environment name once.
-    const dimensionsByEnv = new Map<string, Record<string, string>>();
-    for (const name of new Set(inWindow.map((d) => d.environment))) {
-      const classified = await this.envRules.classify(sourceId, name);
-      dimensionsByEnv.set(name, classified.attributes);
-    }
+    const inWindow = deployments.filter((d) => within(d.createdAt, period));
+    const dimensionsByEnv = await this.dimensionsFor(
+      sourceId,
+      inWindow.map((d) => d.environment),
+      'environment',
+    );
 
     return inWindow.map((d) => ({
       environment: d.environment,
@@ -106,6 +188,98 @@ export class DoraService {
       dimensions: dimensionsByEnv.get(d.environment) ?? {},
     }));
   }
+
+  /**
+   * A PR has no environment, so its dimensions come from classifying the repo
+   * name against the `repository` rules. Without such rules every PR lands in
+   * the same bucket — the historical behavior.
+   */
+  private async toMergedPrEvents(
+    sourceId: string,
+    prs: MergedPullRequest[],
+    period: ResolvedRange,
+  ): Promise<MergedPrEvent[]> {
+    // The connector already filtered on `from`; only the upper bound is left.
+    const inWindow = prs.filter((p) => within(p.mergedAt, period));
+    const dimensionsByRepo = await this.dimensionsFor(
+      sourceId,
+      inWindow.map((p) => p.repo),
+      'repository',
+    );
+
+    return inWindow.map((p) => ({
+      repo: p.repo,
+      number: p.number,
+      url: p.url,
+      firstCommitAt: p.firstCommitAt,
+      openedAt: p.openedAt,
+      firstReviewAt: p.firstReviewAt,
+      mergedAt: p.mergedAt,
+      dimensions: dimensionsByRepo.get(p.repo) ?? {},
+    }));
+  }
+
+  /** Classifies each distinct name once; the rules are read in a single query. */
+  private async dimensionsFor(
+    sourceId: string,
+    names: string[],
+    target: RuleTarget,
+  ): Promise<Map<string, Record<string, string>>> {
+    const distinct = [...new Set(names)];
+    const classified = await this.envRules.classifyMany(sourceId, distinct, target);
+    return new Map(distinct.map((name, i) => [name, classified[i].attributes]));
+  }
+}
+
+/** Keeps the requested repos, ignoring names outside the source scope. */
+function filterRepos(all: string[], wanted?: string[]): string[] {
+  if (!wanted || wanted.length === 0) return all;
+  const set = new Set(wanted);
+  return all.filter((repo) => set.has(repo));
+}
+
+/** Dimension key → sorted distinct values, over every computed result. */
+function collectDimensions(results: DoraResult[]): Record<string, string[]> {
+  const values = new Map<string, Set<string>>();
+  for (const result of results) {
+    for (const [key, value] of Object.entries(result.dimensions)) {
+      const bucket = values.get(key);
+      if (bucket) bucket.add(value);
+      else values.set(key, new Set([value]));
+    }
+  }
+  return Object.fromEntries(
+    [...values.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, set]) => [
+      key,
+      [...set].sort(),
+    ]),
+  );
+}
+
+/** A result is kept only when it carries every requested key/value pair. */
+function matchesDimensions(
+  dimensions: Record<string, string>,
+  filter?: Record<string, string>,
+): boolean {
+  if (!filter) return true;
+  return Object.entries(filter).every(([key, value]) => dimensions[key] === value);
+}
+
+/**
+ * `2026-01-31` parses as UTC midnight, which would drop that whole day from an
+ * inclusive upper bound. A date without a time therefore means end of day (UTC);
+ * a full timestamp is taken as-is.
+ */
+function endOfDayIfDateOnly(value: string): Date {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value)
+    ? new Date(`${value}T23:59:59.999Z`)
+    : new Date(value);
+}
+
+/** Inclusive on both bounds. */
+function within(at: string, period: ResolvedRange): boolean {
+  const ms = new Date(at).getTime();
+  return ms >= new Date(period.from).getTime() && ms <= new Date(period.to).getTime();
 }
 
 function asMessage(e: unknown): string {
@@ -118,15 +292,3 @@ function toEventStatus(status: PipelineStatus): DeploymentEvent['status'] {
   return 'other';
 }
 
-function toMergedPrEvent(pr: MergedPullRequest): MergedPrEvent {
-  return {
-    repo: pr.repo,
-    number: pr.number,
-    url: pr.url,
-    firstCommitAt: pr.firstCommitAt,
-    openedAt: pr.openedAt,
-    firstReviewAt: pr.firstReviewAt,
-    mergedAt: pr.mergedAt,
-    dimensions: {},
-  };
-}

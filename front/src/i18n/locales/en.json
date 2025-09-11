@@ -26,8 +26,8 @@
       "appTitle": "Application",
       "uiTitle": "Interface",
       "saved": "Settings saved.",
-      "doraWindowDays": "DORA window (days)",
-      "doraWindowDaysHint": "metrics lookback period",
+      "doraWindowDays": "DORA window",
+      "doraWindowDaysHint": "default lookback period, overridable from the DORA page",
       "stalePrHours": "Stale PR threshold (hours)",
       "stalePrHoursHint": "beyond this age a PR/MR is flagged as stale",
       "pageSize": "Items per page",
@@ -129,6 +129,9 @@
     "settings": {
       "outOfRange": "Invalid value for {{key}}: expected an integer between {{min}} and {{max}}.",
       "invalidCron": "Invalid cron expression: {{pattern}}"
+    },
+    "dora": {
+      "invalidRange": "Invalid period: the start date ({{from}}) is after the end date ({{to}})."
     }
   },
   "empty": {
@@ -190,6 +193,34 @@
     "empty": "No data yet — configure environment rules and run a collection.",
     "global": "global",
     "sample": "{{count}} events",
+    "window": {
+      "15": "15 days",
+      "30": "1 month",
+      "60": "2 months",
+      "90": "3 months",
+      "180": "6 months",
+      "365": "1 year",
+      "730": "2 years",
+      "days": "{{count}} days"
+    },
+    "period": {
+      "window": "Period",
+      "custom": "Custom…",
+      "dialogTitle": "Custom period",
+      "dialogHint": "Metrics are recomputed only when you apply. A bound left empty stays open: with no end date the period runs up to now.",
+      "apply": "Apply",
+      "since": "Since {{from}}",
+      "until": "Until {{to}}",
+      "from": "From",
+      "to": "To",
+      "reset": "Default window",
+      "resetHint": "Back to the lookback window set in the settings",
+      "effective": "{{from}} → {{to}}"
+    },
+    "dimension": {
+      "any": "all",
+      "clear": "Clear"
+    },
     "detail": {
       "open": "View details",
       "shown": "showing {{shown}} of {{total}} events",

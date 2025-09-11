@@ -82,7 +82,7 @@ a:hover { text-decoration: underline; }
 .tile.accent .tile-value { color: var(--accent); }
 
 /* Repo filter (multi-select dropdown) */
-.repo-filter { display: flex; align-items: center; gap: 8px; margin-bottom: 18px; }
+.repo-filter { display: flex; align-items: center; gap: 8px; }
 .repo-filter-label { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
 .multiselect { position: relative; }
 .multiselect-btn {
@@ -94,7 +94,7 @@ a:hover { text-decoration: underline; }
 .multiselect-btn .caret { color: var(--muted); font-size: .7rem; }
 .multiselect-panel {
   position: absolute; top: calc(100% + 4px); left: 0; z-index: 20;
-  min-width: 230px; max-height: 300px; overflow-y: auto;
+  min-width: 230px; max-width: 340px; max-height: 300px; overflow-y: auto;
   background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
   box-shadow: 0 8px 28px rgba(0, 0, 0, .18); padding: 6px;
 }
@@ -108,6 +108,8 @@ a:hover { text-decoration: underline; }
 .multiselect-panel label {
   display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 6px;
   cursor: pointer; font-size: .84rem; font-family: var(--mono);
+  /* A long repo path wraps inside the panel instead of widening it. */
+  overflow-wrap: anywhere;
 }
 .multiselect-panel label:hover { background: var(--surface-2); }
 .multiselect-panel input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; }
@@ -142,10 +144,14 @@ input.mono-input { font-family: var(--mono); font-size: .84rem; }
 .dora-row:disabled .dora-caret { visibility: hidden; }
 .dora-row:last-child { border-bottom: none; }
 .dora-caret { color: var(--muted); font-size: 1.1rem; line-height: 1; }
+/* min-width: 0 lets the label column shrink past its content; without it a
+   flex item refuses to go below its longest word and pushes out of the panel. */
+.dora-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .dora-dims { display: flex; gap: 6px; flex-wrap: wrap; }
-.dora-right { display: flex; align-items: center; gap: 12px; }
-.dora-value { font-size: 1.1rem; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 58px; text-align: right; }
-.dora-sample { color: var(--muted); font-size: .74rem; white-space: nowrap; }
+/* The metric reading keeps its width; the dimensions absorb what is left. */
+.dora-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.dora-value { font-size: 1.1rem; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 58px; text-align: right; white-space: nowrap; }
+.dora-sample { color: var(--muted); font-size: .74rem; }
 .spark { color: var(--accent); display: block; }
 .spark-empty { color: var(--muted); font-size: .8rem; width: 84px; text-align: center; display: inline-block; }
 
@@ -262,7 +268,9 @@ table.data .num { text-align: right; font-variant-numeric: tabular-nums; }
 tr.stale td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
 
 /* Pills */
-.pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .74rem; font-weight: 600; border: 1px solid transparent; }
+/* A single unbreakable value — a long client or app name — breaks inside the
+   pill rather than stretching it past its container. */
+.pill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .74rem; font-weight: 600; border: 1px solid transparent; max-width: 100%; overflow-wrap: anywhere; }
 .status-success { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
 .status-failed { background: color-mix(in srgb, var(--crit) 15%, transparent); color: var(--crit); }
 .status-running { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent); }
@@ -314,6 +322,29 @@ tr.stale td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
 .subtab:hover { color: var(--ink); }
 .subtab.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
 .subtabs-hint { font-size: .78rem; margin: 0 0 14px; }
+
+/* Filter bars — the row owns the spacing, never the controls inside it, so a
+   control can sit in several bars without dragging its own margins along. */
+.filters-row { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; margin-bottom: 18px; }
+.period-filter, .dimension-filter { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+/* A select is as wide as its widest option — cap it so one long attribute value
+   cannot stretch the filter bar past the page. */
+.dimension-filter select { max-width: 180px; }
+.period-filter label, .dimension-filter label { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: .8rem; }
+.period-filter input, .period-filter select, .dimension-filter select {
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--surface); color: var(--ink); font-family: var(--sans);
+}
+.period-filter input:focus, .period-filter select:focus, .dimension-filter select:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.period-effective { font-size: .78rem; font-variant-numeric: tabular-nums; }
+
+/* One metric for every filter control, so the bars line up whatever they hold. */
+.repo-filter .multiselect-btn,
+.period-filter input,
+.period-filter select,
+.period-filter .btn,
+.dimension-filter select,
+.dimension-filter .btn { height: 32px; padding: 0 10px; font-size: .82rem; }
 
 /* Pagination */
 .pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); font-size: .82rem; }

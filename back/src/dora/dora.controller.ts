@@ -1,7 +1,8 @@
 import { Controller, Get, Param, Query } from '@nestjs/common';
 import { DoraService } from './dora.service';
-import { PaginationQueryDto, paginate, toWindow } from '../common/pagination';
+import { toWindow } from '../common/pagination';
 import { SettingsService } from '../settings/settings.service';
+import { DoraQueryDto, toDimensionFilter } from './dto/dora-query.dto';
 
 @Controller()
 export class DoraController {
@@ -10,15 +11,22 @@ export class DoraController {
     private readonly settings: SettingsService,
   ) {}
 
-  /** Live DORA metrics for a source over the lookback window. */
+  /** DORA metrics for a source over the requested period, scope and slice. */
   @Get('sources/:id/dora')
-  async compute(@Param('id') id: string, @Query() query: PaginationQueryDto) {
+  async compute(@Param('id') id: string, @Query() query: DoraQueryDto) {
     // Every metric comes from the same fetched data set, so the page window is
     // applied to the computed results rather than pushed down to the connector.
-    const [results, pageSize] = await Promise.all([
-      this.dora.compute(id),
-      this.settings.pageSize(),
-    ]);
-    return paginate(results, toWindow(query, pageSize));
+    const pageSize = await this.settings.pageSize();
+    return this.dora.report(
+      id,
+      {
+        from: query.from,
+        to: query.to,
+        windowDays: query.windowDays,
+        repos: query.repos,
+        dimensions: toDimensionFilter(query.dimension),
+      },
+      toWindow(query, pageSize),
+    );
   }
 }

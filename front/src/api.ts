@@ -6,7 +6,7 @@ import type {
   CodedMessage,
   EnvRulePublic,
   ClassifiedEnvironment,
-  DoraResult,
+  DoraReport,
   MetricSnapshotPublic,
   Page,
   RuleTarget,
@@ -95,6 +95,19 @@ export interface MetricsQuery extends PageQuery {
   to?: string;
 }
 
+/** Period, scope and slice of the DORA endpoint. Every field is optional. */
+export interface DoraQuery extends PageQuery {
+  /** Explicit bounds; `from` takes precedence over `windowDays`. */
+  from?: string;
+  to?: string;
+  /** Rolling window in days; omitted means the one set in the settings. */
+  windowDays?: number;
+  /** Scopes the collection; empty means every repo in scope. */
+  repos?: string[];
+  /** Keeps only the results carrying every key/value pair. */
+  dimensions?: Record<string, string>;
+}
+
 export interface CreateSourceInput {
   name: string;
   kind: 'github' | 'gitlab';
@@ -169,8 +182,20 @@ export const api = {
   updateSettings: (input: Partial<AppSettings>) =>
     request<AppSettings>('/settings', { method: 'PATCH', body: JSON.stringify(input) }),
 
-  dora: (sourceId: string, page?: PageQuery) =>
-    request<Page<DoraResult>>(`/sources/${sourceId}/dora${qs({ ...page })}`),
+  dora: (sourceId: string, query: DoraQuery = {}) =>
+    request<DoraReport>(
+      `/sources/${sourceId}/dora` +
+        qs({
+          limit: query.limit,
+          offset: query.offset,
+          from: query.from,
+          to: query.to,
+          windowDays: query.windowDays,
+          repos: query.repos?.length ? query.repos : undefined,
+          // The API takes `key:value` pairs, repeatable.
+          dimension: Object.entries(query.dimensions ?? {}).map(([k, v]) => `${k}:${v}`),
+        }),
+    ),
   metrics: (sourceId: string, query?: MetricsQuery) =>
     request<Page<MetricSnapshotPublic>>(`/sources/${sourceId}/metrics${qs({ ...query })}`),
 };
