@@ -19,6 +19,13 @@ export class GitLabConnector implements SourceConnector {
   readonly kind = 'gitlab';
   private readonly logger = new Logger(GitLabConnector.name);
 
+  /**
+   * gitbeaker gives no way in: its request helper rebuilds the signal from
+   * `queryTimeout` and drops any the caller passes into the query string
+   * (@gitbeaker/core, `get()`). Cancellation is therefore honoured between
+   * repos rather than at the HTTP call — which is where the cost is anyway,
+   * since these methods iterate repo by repo.
+   */
   private client(ctx: ConnectorContext): GitlabClient {
     if (ctx.auth.kind !== 'token') {
       throw new Error('GitLab supports token authentication only.');
@@ -60,6 +67,7 @@ export class GitLabConnector implements SourceConnector {
     const gl = this.client(ctx);
     const out: PullRequest[] = [];
     for (const repo of repos) {
+      ctx.signal?.throwIfAborted();
       const mrs = await gl.MergeRequests.all({
         projectId: repo,
         state: 'opened',
@@ -91,6 +99,7 @@ export class GitLabConnector implements SourceConnector {
     const gl = this.client(ctx);
     const out: Pipeline[] = [];
     for (const repo of repos) {
+      ctx.signal?.throwIfAborted();
       const pipelines = await gl.Pipelines.all(repo, { perPage: 20 });
       for (const p of pipelines) {
         out.push({
@@ -114,6 +123,7 @@ export class GitLabConnector implements SourceConnector {
     const gl = this.client(ctx);
     const out: Deployment[] = [];
     for (const repo of repos) {
+      ctx.signal?.throwIfAborted();
       const deployments = await gl.Deployments.all(repo, { perPage: 30 });
       for (const d of deployments) {
         out.push({
@@ -138,6 +148,7 @@ export class GitLabConnector implements SourceConnector {
     const sinceMs = new Date(since).getTime();
     const out: MergedPullRequest[] = [];
     for (const repo of repos) {
+      ctx.signal?.throwIfAborted();
       const mrs = await gl.MergeRequests.all({
         projectId: repo,
         state: 'merged',
@@ -147,6 +158,8 @@ export class GitLabConnector implements SourceConnector {
       for (const mr of mrs) {
         const mergedAt = mr.merged_at as string | null;
         if (!mergedAt || new Date(mergedAt).getTime() < sinceMs) continue;
+        // One extra call per MR: worth checking inside this loop too.
+        ctx.signal?.throwIfAborted();
         out.push({
           id: `gl:${repo}:${mr.iid}`,
           repo,

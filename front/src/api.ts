@@ -33,6 +33,14 @@ export function apiErrorInfo(e: unknown): CodedMessage {
   return { code: 'errors.network', params: { error: e instanceof Error ? e.message : String(e) } };
 }
 
+/**
+ * True when the caller cancelled the request rather than the request failing.
+ * An abort is a decision, not an incident: it must never surface as an error.
+ */
+export function isAbort(e: unknown): boolean {
+  return e instanceof DOMException && e.name === 'AbortError';
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
@@ -41,6 +49,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       ...init,
     });
   } catch (e) {
+    if (isAbort(e)) throw e;
     throw new ApiError('errors.network', { error: e instanceof Error ? e.message : String(e) });
   }
 
@@ -142,7 +151,8 @@ export const api = {
   deleteSource: (id: string) => request<void>(`/sources/${id}`, { method: 'DELETE' }),
   testSource: (id: string) =>
     request<ConnectionTestResult>(`/sources/${id}/test`, { method: 'POST' }),
-  live: (sourceId: string, query: DashboardLiveQuery = {}) =>
+  /** `signal` lets a newer filter cancel the request this one supersedes. */
+  live: (sourceId: string, query: DashboardLiveQuery = {}, signal?: AbortSignal) =>
     request<DashboardLive>(
       `/dashboard/${sourceId}/live` +
         qs({
@@ -154,6 +164,7 @@ export const api = {
           environmentsLimit: query.environments?.limit,
           environmentsOffset: query.environments?.offset,
         }),
+      { signal },
     ),
 
   listEnvRules: (sourceId: string, target: RuleTarget, page?: PageQuery) =>
@@ -182,7 +193,8 @@ export const api = {
   updateSettings: (input: Partial<AppSettings>) =>
     request<AppSettings>('/settings', { method: 'PATCH', body: JSON.stringify(input) }),
 
-  dora: (sourceId: string, query: DoraQuery = {}) =>
+  /** `signal` lets a newer filter cancel the request this one supersedes. */
+  dora: (sourceId: string, query: DoraQuery = {}, signal?: AbortSignal) =>
     request<DoraReport>(
       `/sources/${sourceId}/dora` +
         qs({
@@ -195,7 +207,10 @@ export const api = {
           // The API takes `key:value` pairs, repeatable.
           dimension: Object.entries(query.dimensions ?? {}).map(([k, v]) => `${k}:${v}`),
         }),
+      { signal },
     ),
-  metrics: (sourceId: string, query?: MetricsQuery) =>
-    request<Page<MetricSnapshotPublic>>(`/sources/${sourceId}/metrics${qs({ ...query })}`),
+  metrics: (sourceId: string, query?: MetricsQuery, signal?: AbortSignal) =>
+    request<Page<MetricSnapshotPublic>>(`/sources/${sourceId}/metrics${qs({ ...query })}`, {
+      signal,
+    }),
 };

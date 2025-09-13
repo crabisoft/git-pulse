@@ -12,6 +12,7 @@ import { ConnectorFactory } from '../sources/connectors/connector.factory';
 import { EnvRulesService } from '../env-rules/env-rules.service';
 import { SettingsService } from '../settings/settings.service';
 import { paginate, toWindow } from '../common/pagination';
+import { throwIfAborted } from '../common/request-abort';
 import type { DashboardLiveQueryDto } from './dto/dashboard-live-query.dto';
 
 @Injectable()
@@ -30,12 +31,17 @@ export class DashboardService {
    * filter is applied before anything else, so the summary always describes the
    * whole filtered data set — never just the returned windows.
    */
-  async live(sourceId: string, query: DashboardLiveQueryDto = {}): Promise<DashboardLive> {
-    const { ctx, kind } = await this.sources.resolveContext(sourceId);
+  async live(
+    sourceId: string,
+    query: DashboardLiveQueryDto = {},
+    signal?: AbortSignal,
+  ): Promise<DashboardLive> {
+    const { ctx, kind } = await this.sources.resolveContext(sourceId, signal);
     const connector = this.connectors.for(kind);
     const warnings: CodedMessage[] = [];
 
     const allRepos = await connector.listRepositories(ctx).catch((e) => {
+      throwIfAborted(signal);
       warnings.push({ code: 'dashboard.warn.reposFailed', params: { error: asMessage(e) } });
       return [] as string[];
     });
@@ -45,16 +51,19 @@ export class DashboardService {
       () => connector.listPullRequests(ctx, repos),
       warnings,
       'dashboard.warn.prsFailed',
+      signal,
     );
     const pipelines = await safe(
       () => connector.listPipelines(ctx, repos),
       warnings,
       'dashboard.warn.pipelinesFailed',
+      signal,
     );
     const deployments = await safe(
       () => connector.listDeployments(ctx, repos),
       warnings,
       'dashboard.warn.deploymentsFailed',
+      signal,
     );
     const environments = await this.toEnvironments(sourceId, deployments);
     const { stalePrHours, pageSize } = await this.settings.get();
@@ -117,14 +126,21 @@ export class DashboardService {
   }
 }
 
+/**
+ * Degrades a failed collection into a warning and an empty list, so one missing
+ * permission never costs the whole view. A cancellation is the exception: there
+ * is nothing to show it to, so it propagates instead.
+ */
 async function safe<T>(
   fn: () => Promise<T[]>,
   warnings: CodedMessage[],
   code: string,
+  signal?: AbortSignal,
 ): Promise<T[]> {
   try {
     return await fn();
   } catch (e) {
+    throwIfAborted(signal);
     warnings.push({ code, params: { error: asMessage(e) } });
     return [];
   }

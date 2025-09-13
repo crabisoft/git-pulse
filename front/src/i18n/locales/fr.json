@@ -113,6 +113,7 @@
   "errors": {
     "http": "Échec de la requête ({{status}}) : {{detail}}",
     "internal": "Erreur interne du serveur.",
+    "aborted": "Requête annulée.",
     "network": "Erreur réseau : {{error}}",
     "source": {
       "notFound": "Source introuvable.",

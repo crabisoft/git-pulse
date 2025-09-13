@@ -161,6 +161,64 @@ jours, une année 365). L'API, elle, accepte n'importe quelle valeur entre
 `DORA_WINDOW_MIN` et `DORA_WINDOW_MAX` : une fenêtre hors presets déjà
 enregistrée reste donc proposée dans la liste plutôt que réécrite en silence.
 
+> Les attributs des règles `environment` et `repository` partagent le même
+> espace de noms. Si `app` existe des deux côtés, les valeurs doivent être
+> **identiques au caractère près** : `app=Extranet` côté environnements et
+> `app=extranet` côté repos donneraient deux entrées distinctes, et filtrer sur
+> l'une exclurait les métriques de l'autre.
+
+### Rythme des requêtes (front)
+
+Le dashboard et la page DORA lancent tous deux une requête coûteuse à chaque
+état de leurs filtres. Deux garde-fous, mutualisés dans `front/src/hooks.ts` :
+
+- **`useDebounced` (500 ms)** — cocher les dépôts un par un, ou enchaîner les
+  pages, n'émet qu'une requête une fois la rafale terminée. C'est ce qui épargne
+  le back : une requête annulée reste calculée côté serveur, NestJS ne
+  s'interrompt pas parce que le client a raccroché.
+- **`useCancellableLoad`** — chaque chargement annule celui qu'il remplace, et
+  quitter la page annule aussi. Garantit que la vue affiche la réponse à sa
+  dernière question, pas celle qui arrive en dernier.
+
+Un abort n'est pas une erreur : `isAbort()` le distingue dans `api.ts` pour
+qu'une annulation ne s'affiche jamais en bannière rouge, et le chargement
+abandonné laisse le drapeau `loading` à celui qui l'a remplacé.
+
+### Annulation côté back
+
+Fermer la connexion ne suffit pas à arrêter Nest : sans rien faire, la collecte
+irait au bout pour une réponse que personne ne lira. Les deux routes coûteuses
+(`/dashboard/:id/live` et `/sources/:id/dora`) propagent donc l'abandon jusqu'aux
+connecteurs.
+
+`abortOnDisconnect(res)` (`common/request-abort.ts`) écoute le `close` de la
+**réponse** — il signale soit la fin normale, soit une connexion coupée, et
+`writableEnded` départage les deux. Le signal voyage ensuite dans
+`ConnectorContext`, qui atteint déjà toutes les méthodes de `SourceConnector` :
+aucune signature à changer.
+
+Un connecteur l'honore de deux façons :
+
+- **Au niveau HTTP**, quand le client le permet. Octokit accepte
+  `request: { signal }` posé à la construction, ce qui couvre tous ses appels,
+  `paginate()` compris. gitbeaker, lui, ne laisse pas passer : son helper
+  reconstruit le signal depuis `queryTimeout` et pousse celui du caller dans la
+  query string.
+- **Entre deux repos**, via `ctx.signal?.throwIfAborted()` dans chaque boucle —
+  et dans les boucles internes qui déclenchent un appel par PR/MR. C'est le
+  garde-fou qui compte : le coût est le fan-out, pas un appel isolé. Il ne
+  dépend d'aucune bibliothèque, et c'est donc lui qui couvre GitLab.
+
+Deux conséquences à ne pas perdre de vue :
+
+- Les `catch` best-effort des services (une permission manquante dégrade en
+  métriques partielles) appellent `throwIfAborted(signal)` **avant** de dégrader.
+  Une annulation n'a rien à dégrader : elle doit arrêter le travail, pas
+  retourner une liste vide qui ressemblerait à « aucune donnée ».
+- Une requête annulée répond **499** (`errors.aborted`), hors du bucket 5xx :
+  le filtre ne la journalise pas comme une erreur serveur. La collecte planifiée
+  n'a pas de signal — personne ne l'attend, rien ne l'annule.
+
 ## Démarrage — Docker (recommandé)
 
 Toute la configuration Docker vit dans `.docker/` :

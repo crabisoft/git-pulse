@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { DashboardEnvironment, DashboardLive, PipelineStatus } from '@repo/shared';
-import { api, apiErrorInfo, type DashboardLiveQuery, type PageQuery } from '../api';
+import { api, type DashboardLiveQuery, type PageQuery } from '../api';
+import { FILTER_DEBOUNCE_MS, useCancellableLoad, useDebounced } from '../hooks';
 import { RepoFilter } from '../RepoFilter';
 import { Pagination } from '../Pagination';
 
@@ -26,28 +27,18 @@ export function DashboardPage({
   const stale = staleHours ?? DEFAULT_STALE_HOURS;
   const { t } = useTranslation();
   const [data, setData] = useState<DashboardLive | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   // Repo filter and the three page windows are resolved by the backend, so the
   // tiles keep counting the whole filtered data set rather than the visible page.
   const [query, setQuery] = useState<Required<DashboardLiveQuery>>(EMPTY_QUERY);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setData(await api.live(sourceId, query));
-    } catch (e) {
-      const { code, params } = apiErrorInfo(e);
-      setError(t(code, params));
-    } finally {
-      setLoading(false);
-    }
-  }, [sourceId, query, t]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  // Every filter goes through the debounce: a burst of clicks — repos ticked one
+  // at a time, pages stepped through — settles into a single request.
+  const settled = useDebounced(query, FILTER_DEBOUNCE_MS);
+  const load = useCallback(
+    async (signal: AbortSignal) => setData(await api.live(sourceId, settled, signal)),
+    [sourceId, settled],
+  );
+  const { reload, loading, error } = useCancellableLoad(load);
 
   // Reset the repo filter and the windows when switching source.
   useEffect(() => {
@@ -78,7 +69,7 @@ export function DashboardPage({
     <div>
       <div className="page-head">
         <h2>{t('dashboard.title')}</h2>
-        <button className="btn" onClick={load} disabled={loading}>
+        <button className="btn" onClick={reload} disabled={loading}>
           {loading ? t('common.refreshing') : `↻ ${t('common.refresh')}`}
         </button>
       </div>

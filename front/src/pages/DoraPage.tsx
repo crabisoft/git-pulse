@@ -10,8 +10,9 @@ import {
   type DoraSample,
   type MetricSnapshotPublic,
 } from '@repo/shared';
-import { api, apiErrorInfo, type DoraQuery, type PageQuery } from '../api';
+import { api, type DoraQuery, type PageQuery } from '../api';
 import { windowLabel, windowOptions } from '../doraWindow';
+import { FILTER_DEBOUNCE_MS, useCancellableLoad, useDebounced } from '../hooks';
 import { HelpTip } from '../HelpTip';
 import { Modal } from '../Modal';
 import { Pagination } from '../Pagination';
@@ -40,13 +41,17 @@ type PeriodValue = Pick<DoraQuery, 'from' | 'to' | 'windowDays'>;
  * Sparklines only need the tail of the series. Snapshots come back in ascending
  * order, so grab the last window rather than the first.
  */
-async function loadRecentHistory(sourceId: string): Promise<MetricSnapshotPublic[]> {
-  const first = await api.metrics(sourceId, { limit: PAGE_LIMIT_MAX });
+async function loadRecentHistory(
+  sourceId: string,
+  signal: AbortSignal,
+): Promise<MetricSnapshotPublic[]> {
+  const first = await api.metrics(sourceId, { limit: PAGE_LIMIT_MAX }, signal);
   if (!first.page.hasMore) return first.items;
-  const tail = await api.metrics(sourceId, {
-    limit: PAGE_LIMIT_MAX,
-    offset: first.page.total - PAGE_LIMIT_MAX,
-  });
+  const tail = await api.metrics(
+    sourceId,
+    { limit: PAGE_LIMIT_MAX, offset: first.page.total - PAGE_LIMIT_MAX },
+    signal,
+  );
   return tail.items;
 }
 
@@ -55,28 +60,23 @@ export function DoraPage({ sourceId }: { sourceId: string }) {
   const [report, setReport] = useState<DoraReport | null>(null);
   const [query, setQuery] = useState<DoraQuery>(EMPTY_QUERY);
   const [history, setHistory] = useState<MetricSnapshotPublic[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<DoraResult | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [live, hist] = await Promise.all([api.dora(sourceId, query), loadRecentHistory(sourceId)]);
+  // Every filter goes through the debounce: a burst of clicks — repos ticked one
+  // at a time, pages stepped through — settles into a single request.
+  const settled = useDebounced(query, FILTER_DEBOUNCE_MS);
+  const load = useCallback(
+    async (signal: AbortSignal) => {
+      const [live, hist] = await Promise.all([
+        api.dora(sourceId, settled, signal),
+        loadRecentHistory(sourceId, signal),
+      ]);
       setReport(live);
       setHistory(hist);
-    } catch (e) {
-      const { code, params } = apiErrorInfo(e);
-      setError(t(code, params));
-    } finally {
-      setLoading(false);
-    }
-  }, [sourceId, query, t]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+    },
+    [sourceId, settled],
+  );
+  const { reload, loading, error } = useCancellableLoad(load);
 
   // Back to the defaults when switching source.
   useEffect(() => {
@@ -104,7 +104,7 @@ export function DoraPage({ sourceId }: { sourceId: string }) {
     <div>
       <div className="page-head">
         <h2>{t('dora.title')}</h2>
-        <button className="btn" onClick={load} disabled={loading}>
+        <button className="btn" onClick={reload} disabled={loading}>
           {loading ? t('common.refreshing') : `↻ ${t('common.refresh')}`}
         </button>
       </div>

@@ -7,6 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import type { Response } from 'express';
+import { CLIENT_CLOSED_REQUEST, isAbortError } from './request-abort';
 
 /** Normalized error response shape consumed by the frontend. */
 interface ErrorBody {
@@ -34,6 +35,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
   }
 
   private toBody(exception: unknown): ErrorBody {
+    // A cancellation noticed deep in a connector surfaces as a raw AbortError.
+    // Nobody is listening any more, so it is an outcome, not an incident.
+    if (isAbortError(exception)) {
+      return { statusCode: CLIENT_CLOSED_REQUEST, code: 'errors.aborted' };
+    }
     if (exception instanceof HttpException) {
       const statusCode = exception.getStatus();
       const response = exception.getResponse();

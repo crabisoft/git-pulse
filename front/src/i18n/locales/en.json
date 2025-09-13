@@ -113,6 +113,7 @@
   "errors": {
     "http": "Request failed ({{status}}): {{detail}}",
     "internal": "Internal server error.",
+    "aborted": "Request cancelled.",
     "network": "Network error: {{error}}",
     "source": {
       "notFound": "Source not found.",

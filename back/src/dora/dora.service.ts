@@ -10,6 +10,7 @@ import type {
 } from '@repo/shared';
 import { CodedException } from '../common/coded-exception';
 import { paginate, type PageWindow } from '../common/pagination';
+import { throwIfAborted } from '../common/request-abort';
 import { PrismaService } from '../prisma/prisma.service';
 import { SourcesService } from '../sources/sources.service';
 import { ConnectorFactory } from '../sources/connectors/connector.factory';
@@ -71,8 +72,13 @@ export class DoraService {
    * collected before slicing, so narrowing a filter never empties the list you
    * pick from.
    */
-  async report(sourceId: string, query: DoraQuery, window: PageWindow): Promise<DoraReport> {
-    const { results, repos, period } = await this.build(sourceId, query);
+  async report(
+    sourceId: string,
+    query: DoraQuery,
+    window: PageWindow,
+    signal?: AbortSignal,
+  ): Promise<DoraReport> {
+    const { results, repos, period } = await this.build(sourceId, query, signal);
     const dimensions = collectDimensions(results);
     const sliced = results.filter((r) => matchesDimensions(r.dimensions, query.dimensions));
     return { results: paginate(sliced, window), repos, dimensions, period };
@@ -82,8 +88,9 @@ export class DoraService {
   private async build(
     sourceId: string,
     query: DoraQuery,
+    signal?: AbortSignal,
   ): Promise<{ results: DoraResult[]; repos: string[]; period: ResolvedRange }> {
-    const { ctx, kind } = await this.sources.resolveContext(sourceId);
+    const { ctx, kind } = await this.sources.resolveContext(sourceId, signal);
     const connector = this.connectors.for(kind);
     const period = await this.resolveRange(query);
     const allRepos = await connector.listRepositories(ctx);
@@ -92,13 +99,16 @@ export class DoraService {
     const repos = filterRepos(allRepos, query.repos);
 
     // Best-effort: a missing permission on one endpoint yields partial metrics
-    // rather than failing the whole computation.
+    // rather than failing the whole computation — except for a cancellation,
+    // which has nothing to degrade into and must stop the run (throwIfAborted).
     const [deployments, mergedPrs] = await Promise.all([
       connector.listDeployments(ctx, repos).catch((e) => {
+        throwIfAborted(signal);
         this.logger.warn(`listDeployments échoué (${sourceId}) : ${asMessage(e)}`);
         return [] as Deployment[];
       }),
       connector.listMergedPullRequests(ctx, repos, period.from).catch((e) => {
+        throwIfAborted(signal);
         this.logger.warn(`listMergedPullRequests échoué (${sourceId}) : ${asMessage(e)}`);
         return [] as MergedPullRequest[];
       }),

@@ -164,6 +164,7 @@ export class SourcesService {
    */
   async resolveContext(
     id: string,
+    signal?: AbortSignal,
   ): Promise<{ ctx: ConnectorContext; kind: SourceKind }> {
     const source = await this.prisma.source.findUnique({
       where: { id },
@@ -185,6 +186,7 @@ export class SourcesService {
         baseUrl: source.baseUrl,
         auth: buildAuth(source.authKind as AuthKind, secret),
         scope: source.scope as unknown as ScopeRules,
+        signal,
       },
     };
   }

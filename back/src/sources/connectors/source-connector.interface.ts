@@ -17,6 +17,17 @@ export interface ConnectorContext {
   baseUrl: string;
   auth: SourceAuth;
   scope: ScopeRules;
+  /**
+   * Cancels the collection when the caller gives up — a client that closed its
+   * connection, typically. It travels in the context rather than in every
+   * signature because the context already reaches every method here.
+   *
+   * A connector honours it two ways: by handing it to its HTTP client when that
+   * one accepts it, and by checking it between repos. The second matters most:
+   * the cost is the fan-out, not any single call. Absent for the scheduled
+   * collection, which nobody is waiting on.
+   */
+  signal?: AbortSignal;
 }
 
 /**

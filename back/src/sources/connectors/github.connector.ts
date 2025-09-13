@@ -25,6 +25,10 @@ export class GitHubConnector implements SourceConnector {
       ? 'https://api.github.com'
       : `${ctx.baseUrl.replace(/\/$/, '')}/api/v3`;
 
+    // Set on the client rather than per call: it then reaches every request the
+    // instance makes, `paginate` included.
+    const request = { signal: ctx.signal };
+
     if (ctx.auth.kind === 'app') {
       // GitHub App: Octokit mints and caches installation tokens on demand.
       const { appId, privateKey, installationId } = ctx.auth;
@@ -32,9 +36,10 @@ export class GitHubConnector implements SourceConnector {
         authStrategy: createAppAuth,
         auth: { appId, privateKey, installationId },
         baseUrl,
+        request,
       });
     }
-    return new Octokit({ auth: ctx.auth.token, baseUrl });
+    return new Octokit({ auth: ctx.auth.token, baseUrl, request });
   }
 
   /** Web URL of a repository (github.com or GHE). */
@@ -72,6 +77,7 @@ export class GitHubConnector implements SourceConnector {
     const gh = this.client(ctx);
     const out: PullRequest[] = [];
     for (const repo of repos) {
+      ctx.signal?.throwIfAborted();
       const prs = await gh.paginate(gh.rest.pulls.list, {
         owner: ctx.scope.owner,
         repo,
@@ -103,6 +109,7 @@ export class GitHubConnector implements SourceConnector {
     const gh = this.client(ctx);
     const out: Pipeline[] = [];
     for (const repo of repos) {
+      ctx.signal?.throwIfAborted();
       const runs = await gh.rest.actions.listWorkflowRunsForRepo({
         owner: ctx.scope.owner,
         repo,
@@ -134,12 +141,16 @@ export class GitHubConnector implements SourceConnector {
     const gh = this.client(ctx);
     const out: Deployment[] = [];
     for (const repo of repos) {
+      ctx.signal?.throwIfAborted();
       const deps = await gh.rest.repos.listDeployments({
         owner: ctx.scope.owner,
         repo,
         per_page: 30,
       });
       for (const d of deps.data) {
+        // One status call per deployment, and the helper below swallows errors:
+        // without this check a cancelled run would keep polling to no end.
+        ctx.signal?.throwIfAborted();
         out.push({
           id: `gh:${repo}:${d.id}`,
           repo,
@@ -162,6 +173,7 @@ export class GitHubConnector implements SourceConnector {
     const sinceMs = new Date(since).getTime();
     const out: MergedPullRequest[] = [];
     for (const repo of repos) {
+      ctx.signal?.throwIfAborted();
       const prs = await gh.rest.pulls.list({
         owner: ctx.scope.owner,
         repo,
@@ -172,6 +184,8 @@ export class GitHubConnector implements SourceConnector {
       });
       for (const pr of prs.data) {
         if (!pr.merged_at || new Date(pr.merged_at).getTime() < sinceMs) continue;
+        // Two extra calls per PR: worth checking inside this loop too.
+        ctx.signal?.throwIfAborted();
         const [firstCommitAt, firstReviewAt] = await Promise.all([
           this.firstCommitAt(gh, ctx.scope.owner, repo, pr.number),
           this.firstReviewAt(gh, ctx.scope.owner, repo, pr.number),
