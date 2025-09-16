@@ -1,327 +1,333 @@
 # Git Dashboard — GitHub / GitLab
 
-Dashboard **self-hosted** de monitoring GitHub et GitLab : vue live PR/MR &
-pipelines, avec un socle prêt pour l'historisation DORA (Phase 2), la
-génération de release notes assistée par IA (Phase 3) et les métriques
-étendues (Phase 4).
+**Self-hosted** monitoring dashboard for GitHub and GitLab: a live PR/MR &
+pipeline view, on a foundation ready for DORA historization, AI-assisted
+release notes and extended metrics.
 
-> Spécification complète : voir le document de cadrage partagé à l'équipe.
+> Full specification: see the scoping document shared with the team.
 
-## Commandes courantes
+## Common commands
 
-Un `Makefile` regroupe les tâches du quotidien — tapez `make` (sans argument)
-pour la liste complète auto-documentée :
+A `Makefile` groups the day-to-day tasks — run `make` (no argument) for the
+full self-documented list:
 
-| Commande | Effet |
+| Command | Effect |
 |---|---|
-| `make dev` | Stack de dev (db + redis + API watch + Vite HMR) |
-| `make logs` | Suivre les logs |
-| `make migrate name=x` | Créer une migration |
-| `make deploy` | Appliquer les migrations en attente |
-| `make prod` | Stack de prod (build + nginx) |
-| `make build` | Build complet du monorepo |
-| `make clean` | Nettoyer les artefacts de build |
+| `make dev` | Dev stack (db + redis + API watch + Vite HMR) |
+| `make logs` | Follow the logs |
+| `make migrate name=x` | Create a migration |
+| `make deploy` | Apply pending migrations |
+| `make prod` | Prod stack (build + nginx) |
+| `make build` | Full monorepo build |
+| `make clean` | Clean build artifacts |
 
-Les cibles délèguent aux scripts npm et au wrapper Docker décrits ci-dessous.
+Targets delegate to the npm scripts and the Docker wrapper described below.
 
 ## Stack
 
-| Couche | Techno |
+| Layer | Technology |
 |--------|--------|
 | Frontend | React + TypeScript (Vite) |
 | Backend | NestJS (TypeScript) |
-| Base de données | PostgreSQL (Prisma) |
-| Jobs / cache | Redis (BullMQ — Phase 2) |
+| Database | PostgreSQL (Prisma) |
+| Jobs / cache | Redis (BullMQ) |
 | Sources | Octokit (GitHub) · @gitbeaker (GitLab) |
 
-Monorepo **npm workspaces** : `back`, `front`, `packages/shared`.
+**npm workspaces** monorepo: `back`, `front`, `packages/shared`.
 
-## Architecture (Phase 1)
+## Architecture
 
-- **`SourceConnector`** — interface commune ; implémentations `GitHubConnector`
-  et `GitLabConnector` normalisent PR/MR, pipelines, déploiements. URLs de base
-  paramétrables (GitLab self-hosted / GitHub Enterprise).
-- **`CryptoModule`** — secrets (tokens, clés) chiffrés au repos en AES-256-GCM.
-  Master key générée au premier démarrage dans un fichier `0600`, ou fournie
-  via `MASTER_KEY` (base64) pour Kubernetes / secret manager.
-- **`SourcesModule`** — CRUD des sources + test de connexion.
-- **`DashboardModule`** — agrégation live par source.
+- **`SourceConnector`** — common interface; the `GitHubConnector` and
+  `GitLabConnector` implementations normalize PRs/MRs, pipelines and
+  deployments. Base URLs are configurable (self-hosted GitLab / GitHub
+  Enterprise).
+- **`CryptoModule`** — secrets (tokens, keys) encrypted at rest with
+  AES-256-GCM. The master key is generated on first boot into a `0600` file, or
+  supplied through `MASTER_KEY` (base64) for Kubernetes / a secret manager.
+- **`SourcesModule`** — source CRUD plus connection testing.
+- **`DashboardModule`** — live aggregation per source.
 
 ## Navigation (front)
 
-Chaque module, section et page a son URL — react-router en `BrowserRouter`, le
-fallback SPA étant déjà assuré par nginx en prod et par Vite en dev.
+Every module, section and page has its own URL — react-router in
+`BrowserRouter` mode, the SPA fallback already being handled by nginx in prod
+and by Vite in dev.
 
 | URL | Page |
 |---|---|
-| `/dashboard/:slug` | Vue live d'une source |
-| `/dora/:slug` | Métriques DORA d'une source |
-| `/settings/general` | Réglages applicatifs |
-| `/settings/sources` | Sources GitHub / GitLab |
-| `/settings/environments/:slug` | Règles de classification (`?target=repository` pour l'onglet repos) |
+| `/dashboard/:slug` | Live view of a source |
+| `/dora/:slug` | DORA metrics for a source |
+| `/settings/general` | Application settings |
+| `/settings/sources` | GitHub / GitLab sources |
+| `/settings/environments/:slug` | Classification rules (`?target=repository` for the repos tab) |
 
-`/`, `/dashboard`, `/dora` et `/settings/environments` redirigent vers la
-première source ; `/settings` vers `/settings/general` ; tout le reste vers le
-dashboard.
+`/`, `/dashboard`, `/dora` and `/settings/environments` redirect to the first
+source; `/settings` to `/settings/general`; everything else to the dashboard.
 
-Le segment de source est le **slug** (`Source.slug`), forme URL-safe et unique
-du nom : `SISMIC — Prod` donne `/dashboard/sismic-prod`. Deux sources de même
-nom sont départagées par un suffixe (`prod`, `prod-2`). L'API, elle, continue
-d'adresser les sources par `id` : le front résout slug → id depuis la liste
-qu'il charge déjà pour le sélecteur, sans requête supplémentaire.
+The source segment is the **slug** (`Source.slug`), a URL-safe and unique form
+of the name: `SISMIC — Prod` gives `/dashboard/sismic-prod`. Two sources with
+the same name are disambiguated by a suffix (`prod`, `prod-2`). The API itself
+keeps addressing sources by `id`: the front resolves slug → id from the list it
+already loads for the picker, with no extra request.
 
-L'URL est la source de vérité du sélecteur : en changer garde la page courante
-et ne remplace que le slug. Un slug inconnu — source supprimée ou renommée —
-bascule sur la première source, ou sur l'état vide s'il n'en reste aucune.
+The URL is the picker's source of truth: changing it keeps the current page and
+replaces only the slug. An unknown slug — deleted or renamed source — falls
+back to the first source, or to the empty state if none remain.
 
-> Le slug suit le nom : **renommer une source invalide ses anciens liens**. Le
-> repli évite la page morte, mais le lien ne pointe plus sur la même source.
+> The slug follows the name: **renaming a source invalidates its older links**.
+> The fallback avoids a dead page, but the link no longer points at the same
+> source.
 
-## Pagination des routes de liste
+## Pagination on list routes
 
-Toute route qui retourne une liste accepte `?limit=&offset=` et répond
-`{ items, page: { total, limit, offset, hasMore } }`. Omettre `limit` applique
-la taille de page configurée — réglage `pageSize` de la section Paramètres, à
-`PAGE_LIMIT_DEFAULT` (10) sur une nouvelle installation. `limit` reste plafonné
-à `PAGE_LIMIT_MAX` (200) ; au-delà la requête est rejetée en 400.
+Every route returning a list accepts `?limit=&offset=` and answers
+`{ items, page: { total, limit, offset, hasMore } }`. Omitting `limit` applies
+the configured page size — the `pageSize` setting in the Settings section,
+defaulting to `PAGE_LIMIT_DEFAULT` (10) on a fresh install. `limit` stays
+capped at `PAGE_LIMIT_MAX` (200); beyond that the request is rejected with a
+400.
 
-`GET /api/dashboard/:sourceId/live` agrège trois listes et expose donc une
-fenêtre par liste — `prsLimit`/`prsOffset`, `pipelinesLimit`/`pipelinesOffset`,
-`environmentsLimit`/`environmentsOffset` — plus un filtre `repos` (répétable ou
-séparé par des virgules) appliqué en amont : les compteurs de `summary` portent
-sur l'ensemble filtré, jamais sur la seule fenêtre retournée.
+`GET /api/dashboard/:sourceId/live` aggregates three lists and therefore
+exposes one window per list — `prsLimit`/`prsOffset`,
+`pipelinesLimit`/`pipelinesOffset`, `environmentsLimit`/`environmentsOffset` —
+plus a `repos` filter (repeatable or comma-separated) applied upstream: the
+`summary` counters cover the whole filtered set, never just the returned
+window.
 
-## Règles de classification
+## Classification rules
 
-Une règle est une RegEx associée à une source. Deux axes indépendants :
+A rule is a RegEx bound to a source. Two independent axes:
 
-- **`kind`** — `simple` extrait des attributs via les groupes nommés
-  (`(?<app>…)` donne `app=…`) ; `meta` ne teste que l'appartenance et ajoute le
-  **nom de la règle** comme méta-environnement. Une règle `meta` ignore
-  totalement ses groupes nommés.
-- **`target`** — `environment` s'applique aux noms d'environnements de
-  déploiement, `repository` aux noms de repos.
+- **`kind`** — `simple` extracts attributes through named groups (`(?<app>…)`
+  yields `app=…`); `meta` only tests membership and adds the **rule name** as a
+  meta-environment. A `meta` rule ignores its named groups entirely.
+- **`target`** — `environment` applies to deployment environment names,
+  `repository` to repo names.
 
-Les règles `repository` existent parce qu'une pull request n'a pas
-d'environnement : sans elles, `lead_time`, `coding_time`, `pickup_time` et
-`review_time` retombent tous dans un seul bucket global. Classer le nom de repo
-leur donne les mêmes dimensions que les métriques de déploiement.
+`repository` rules exist because a pull request has no environment: without
+them, `lead_time`, `coding_time`, `pickup_time` and `review_time` all fall into
+a single global bucket. Classifying the repo name gives them the same
+dimensions deployment metrics already have.
 
-`GET /api/sources/:id/env-rules?target=repository` liste une cible à la fois
-(`environment` par défaut). Le patterns sont testés **non ancrés** — pensez à
-`^` et `$` si vous voulez un match sur le nom entier.
+`GET /api/sources/:id/env-rules?target=repository` lists one target at a time
+(`environment` by default). Patterns are tested **unanchored** — remember `^`
+and `$` if you want a match on the whole name.
 
-## Filtres des métriques DORA
+## DORA metric filters
 
-`GET /api/sources/:id/dora` répond un `DoraReport` : les résultats paginés, plus
-les vocabulaires dont les contrôles de filtre ont besoin (`repos`,
-`dimensions`) et la `period` effectivement appliquée.
+`GET /api/sources/:id/dora` answers a `DoraReport`: the paginated results, plus
+the vocabularies the filter controls need (`repos`, `dimensions`) and the
+`period` actually applied.
 
-| Paramètre | Effet |
+| Parameter | Effect |
 |---|---|
-| `from` / `to` | Période, dates ISO, bornes inclusives |
-| `windowDays` | Fenêtre glissante en jours, se terminant à `to` |
-| `repos` | **Scope la collecte** (répétable ou séparé par des virgules) |
-| `dimension` | **Tranche les résultats**, paires `key:value` répétables |
+| `from` / `to` | Period, ISO dates, inclusive bounds |
+| `windowDays` | Rolling window in days, ending at `to` |
+| `repos` | **Scopes collection** (repeatable or comma-separated) |
+| `dimension` | **Slices the results**, repeatable `key:value` pairs |
 
 `?from=2026-01-01&to=2026-01-31&repos=extranet-api&dimension=app:Extranet&dimension=type:Prod`
 
-Deux natures distinctes de filtre :
+Two distinct kinds of filter:
 
-- **`repos` agit avant les connecteurs.** Comme ils itèrent repo par repo, une
-  liste plus courte veut dire *moins* d'appels API, pas plus.
-- **`dimension` agit après le calcul.** Toutes les paires doivent correspondre.
+- **`repos` acts before the connectors.** Since they iterate repo by repo, a
+  shorter list means *fewer* API calls, not more.
+- **`dimension` acts after computation.** All pairs must match.
 
-Les vocabulaires sont calculés **avant** le tranchage — restreindre un filtre ne
-vide jamais la liste dans laquelle on choisit, et `repos` reste toujours complet
-même quand la sélection courante ne ramène rien.
+Vocabularies are computed **before** slicing — narrowing a filter never empties
+the list you pick from, and `repos` stays complete even when the current
+selection returns nothing.
 
-### Période
+### Period
 
-Trois façons de demander une période, par précédence décroissante : un `from`
-explicite, une fenêtre glissante `windowDays`, puis le réglage `doraWindowDays`.
-Une date sans heure (`2026-01-31`) est prise en fin de journée UTC, et `to` omis
-vaut maintenant. Sans paramètre on retrouve donc la fenêtre glissante des
-réglages — ce que fait le snapshot planifié, qui reste volontairement non filtré
-pour que l'historique et les sparklines restent cohérents.
+Three ways to request a period, in decreasing precedence: an explicit `from`, a
+`windowDays` rolling window, then the `doraWindowDays` setting. A date without
+a time (`2026-01-31`) is taken at end of day UTC, and an omitted `to` means
+now. With no parameter you therefore get the rolling window from settings —
+which is what the scheduled snapshot does, deliberately left unfiltered so that
+history and sparklines stay consistent.
 
-`period.windowDays` renvoie la fenêtre effectivement appliquée, ou `null` quand
-`from` était explicite. C'est ce qui permet à la page DORA d'afficher d'emblée
-l'entrée correspondant au réglage courant, sans avoir à rejouer la logique de
-repli côté front.
+`period.windowDays` returns the window actually applied, or `null` when `from`
+was explicit. That is what lets the DORA page show the entry matching the
+current setting right away, without replaying the fallback logic on the front.
 
-Sur la page DORA, l'entrée « Personnalisée » saisit les bornes dans une modale
-et ne relance le calcul qu'à la validation : chaque requête DORA déclenche une
-salve d'appels connecteurs, trop coûteuse pour être rejouée à chaque frappe dans
-un champ date. Une borne laissée vide reste ouverte.
+On the DORA page, the "Custom" entry captures the bounds in a modal and only
+re-runs the computation on submit: every DORA request triggers a burst of
+connector calls, too expensive to replay on each keystroke in a date field. A
+bound left empty stays open.
 
-Le sélecteur de période — page DORA comme réglages — propose les mêmes valeurs
-(`DORA_WINDOW_PRESETS` : 15 j, 1, 2, 3, 6 mois, 1 et 2 ans ; un mois compte 30
-jours, une année 365). L'API, elle, accepte n'importe quelle valeur entre
-`DORA_WINDOW_MIN` et `DORA_WINDOW_MAX` : une fenêtre hors presets déjà
-enregistrée reste donc proposée dans la liste plutôt que réécrite en silence.
+The period picker — DORA page and settings alike — offers the same values
+(`DORA_WINDOW_PRESETS`: 15 d, 1, 2, 3, 6 months, 1 and 2 years; a month counts
+as 30 days, a year as 365). The API itself accepts any value between
+`DORA_WINDOW_MIN` and `DORA_WINDOW_MAX`: an already-stored window outside the
+presets therefore stays offered in the list rather than being silently
+rewritten.
 
-> Les attributs des règles `environment` et `repository` partagent le même
-> espace de noms. Si `app` existe des deux côtés, les valeurs doivent être
-> **identiques au caractère près** : `app=Extranet` côté environnements et
-> `app=extranet` côté repos donneraient deux entrées distinctes, et filtrer sur
-> l'une exclurait les métriques de l'autre.
+> Attributes of `environment` and `repository` rules share the same namespace.
+> If `app` exists on both sides, the values must be **identical to the
+> character**: `app=Extranet` on environments and `app=extranet` on repos would
+> yield two distinct entries, and filtering on one would exclude the other's
+> metrics.
 
-### Rythme des requêtes (front)
+### Request pacing (front)
 
-Le dashboard et la page DORA lancent tous deux une requête coûteuse à chaque
-état de leurs filtres. Deux garde-fous, mutualisés dans `front/src/hooks.ts` :
+Both the dashboard and the DORA page fire an expensive request on every state
+of their filters. Two safeguards, shared in `front/src/hooks.ts`:
 
-- **`useDebounced` (500 ms)** — cocher les dépôts un par un, ou enchaîner les
-  pages, n'émet qu'une requête une fois la rafale terminée. C'est ce qui épargne
-  le back : une requête annulée reste calculée côté serveur, NestJS ne
-  s'interrompt pas parce que le client a raccroché.
-- **`useCancellableLoad`** — chaque chargement annule celui qu'il remplace, et
-  quitter la page annule aussi. Garantit que la vue affiche la réponse à sa
-  dernière question, pas celle qui arrive en dernier.
+- **`useDebounced` (500 ms)** — ticking repos one at a time, or paging through
+  results, emits a single request once the burst is over. This is what spares
+  the back: a cancelled request is still computed server-side, NestJS does not
+  stop because the client hung up.
+- **`useCancellableLoad`** — every load cancels the one it supersedes, and
+  leaving the page cancels too. Guarantees the view shows the answer to its
+  latest question, not whichever reply lands last.
 
-Un abort n'est pas une erreur : `isAbort()` le distingue dans `api.ts` pour
-qu'une annulation ne s'affiche jamais en bannière rouge, et le chargement
-abandonné laisse le drapeau `loading` à celui qui l'a remplacé.
+An abort is not an error: `isAbort()` singles it out in `api.ts` so a
+cancellation never shows up as a red banner, and the abandoned load leaves the
+`loading` flag to whichever load replaced it.
 
-### Annulation côté back
+### Cancellation on the back
 
-Fermer la connexion ne suffit pas à arrêter Nest : sans rien faire, la collecte
-irait au bout pour une réponse que personne ne lira. Les deux routes coûteuses
-(`/dashboard/:id/live` et `/sources/:id/dora`) propagent donc l'abandon jusqu'aux
-connecteurs.
+Closing the connection is not enough to stop Nest: left alone, collection would
+run to completion for a response nobody will read. Both expensive routes
+(`/dashboard/:id/live` and `/sources/:id/dora`) therefore propagate the
+abandonment down to the connectors.
 
-`abortOnDisconnect(res)` (`common/request-abort.ts`) écoute le `close` de la
-**réponse** — il signale soit la fin normale, soit une connexion coupée, et
-`writableEnded` départage les deux. Le signal voyage ensuite dans
-`ConnectorContext`, qui atteint déjà toutes les méthodes de `SourceConnector` :
-aucune signature à changer.
+`abortOnDisconnect(res)` (`common/request-abort.ts`) listens for `close` on the
+**response** — which signals either a normal end or a dropped connection, with
+`writableEnded` telling the two apart. The signal then travels in
+`ConnectorContext`, which already reaches every `SourceConnector` method: no
+signature to change.
 
-Un connecteur l'honore de deux façons :
+A connector honours it in two ways:
 
-- **Au niveau HTTP**, quand le client le permet. Octokit accepte
-  `request: { signal }` posé à la construction, ce qui couvre tous ses appels,
-  `paginate()` compris. gitbeaker, lui, ne laisse pas passer : son helper
-  reconstruit le signal depuis `queryTimeout` et pousse celui du caller dans la
-  query string.
-- **Entre deux repos**, via `ctx.signal?.throwIfAborted()` dans chaque boucle —
-  et dans les boucles internes qui déclenchent un appel par PR/MR. C'est le
-  garde-fou qui compte : le coût est le fan-out, pas un appel isolé. Il ne
-  dépend d'aucune bibliothèque, et c'est donc lui qui couvre GitLab.
+- **At the HTTP level**, when the client allows it. Octokit accepts
+  `request: { signal }` set at construction, which covers all of its calls,
+  `paginate()` included. gitbeaker does not let it through: its helper rebuilds
+  the signal from `queryTimeout` and pushes the caller's into the query string.
+- **Between two repos**, through `ctx.signal?.throwIfAborted()` in each loop —
+  and in the inner loops that trigger one call per PR/MR. That is the safeguard
+  that matters: the cost is the fan-out, not an isolated call. It depends on no
+  library, and is therefore what covers GitLab.
 
-Deux conséquences à ne pas perdre de vue :
+Two consequences worth keeping in mind:
 
-- Les `catch` best-effort des services (une permission manquante dégrade en
-  métriques partielles) appellent `throwIfAborted(signal)` **avant** de dégrader.
-  Une annulation n'a rien à dégrader : elle doit arrêter le travail, pas
-  retourner une liste vide qui ressemblerait à « aucune donnée ».
-- Une requête annulée répond **499** (`errors.aborted`), hors du bucket 5xx :
-  le filtre ne la journalise pas comme une erreur serveur. La collecte planifiée
-  n'a pas de signal — personne ne l'attend, rien ne l'annule.
+- The services' best-effort `catch` blocks (a missing permission degrades into
+  partial metrics) call `throwIfAborted(signal)` **before** degrading. A
+  cancellation has nothing to degrade: it must stop the work, not return an
+  empty list that would look like "no data".
+- A cancelled request answers **499** (`errors.aborted`), outside the 5xx
+  bucket: the filter does not log it as a server error. Scheduled collection
+  has no signal — nobody is waiting on it, nothing cancels it.
 
-## Démarrage — Docker (recommandé)
+## Getting started — Docker (recommended)
 
-Toute la configuration Docker vit dans `.docker/` :
+All the Docker configuration lives in `.docker/`:
 
 ```
 .docker/
-  docker-compose.yml       # base : db + redis
-  docker-compose.dev.yml   # override DEV : watch / HMR, code monté en volume
-  docker-compose.prod.yml  # override PROD : images buildées + nginx
+  docker-compose.yml       # base: db + redis
+  docker-compose.dev.yml   # DEV override: watch / HMR, code mounted as a volume
+  docker-compose.prod.yml  # PROD override: built images + nginx
   Dockerfile.back · Dockerfile.front · nginx.conf
-  .env                     # défauts versionnés (aucun secret réel)
-  .env.local               # vos surcharges locales (git-ignoré)
-  .env.local.example       # modèle à copier
-  compose.sh               # wrapper : mode + chaînage .env/.env.local
+  .env                     # versioned defaults (no real secrets)
+  .env.local               # your local overrides (git-ignored)
+  .env.local.example       # template to copy
+  compose.sh               # wrapper: mode + .env/.env.local chaining
 ```
 
-**Mode dev (recommandé au quotidien)** — rechargement à chaud : `nest start
---watch` côté API, serveur Vite (HMR) côté front. Le code source est monté en
-volume, aucune reconstruction d'image à chaque modification.
+**Dev mode (recommended day to day)** — hot reload: `nest start --watch` on the
+API, the Vite server (HMR) on the front. Source code is mounted as a volume, no
+image rebuild on every change.
 
 ```bash
 npm run docker:dev         # db + redis + API (watch) + front (Vite/HMR)
-# Front : http://localhost:5173   ·   API : http://localhost:3001/api
-npm run docker:logs        # logs suivis
-npm run docker:dev:down    # arrêt
+# Front: http://localhost:5173   ·   API: http://localhost:3001/api
+npm run docker:logs        # followed logs
+npm run docker:dev:down    # stop
 ```
 
-> Premier lancement : les conteneurs dev exécutent `npm install` dans un volume
-> `node_modules` dédié (binaires Alpine) — comptez une minute la première fois,
-> instantané ensuite.
+> First run: the dev containers execute `npm install` into a dedicated
+> `node_modules` volume (Alpine binaries) — expect a minute the first time,
+> instant afterwards.
 
-**Mode prod (validation d'un build)** — API compilée + front statique servi par nginx.
+**Prod mode (validating a build)** — compiled API + static front served by nginx.
 
 ```bash
-npm run docker:prod        # build les images + démarre
-# Web : http://localhost:8080   ·   API : http://localhost:3001/api
-npm run docker:prod:down   # arrêt
+npm run docker:prod        # builds the images + starts
+# Web: http://localhost:8080   ·   API: http://localhost:3001/api
+npm run docker:prod:down   # stop
 ```
 
-**Personnaliser l'environnement** — ne modifiez pas `.docker/.env` (versionné) :
-copiez le modèle et surchargez seulement ce qui vous concerne.
+**Customizing the environment** — do not edit `.docker/.env` (versioned): copy
+the template and override only what concerns you.
 
 ```bash
 cp .docker/.env.local.example .docker/.env.local
-# éditez .docker/.env.local — ex. WEB_PORT=9090, API_PORT=3100
+# edit .docker/.env.local — e.g. WEB_PORT=9090, API_PORT=3100
 npm run docker:up
 ```
 
-`.env.local` écrase `.env` au lancement (le wrapper `compose.sh` chaîne les
-deux `--env-file`). Variables disponibles : ports hôte, identifiants Postgres,
+`.env.local` overrides `.env` at startup (the `compose.sh` wrapper chains both
+`--env-file`). Available variables: host ports, Postgres credentials,
 `WEB_ORIGIN`, `VITE_API_URL`, images…
 
-> ⚠️ **Master key** : persistée dans le volume `master-key`. Sa perte rend tous
-> les secrets stockés irrécupérables — sauvegardez-la séparément.
+> ⚠️ **Master key**: persisted in the `master-key` volume. Losing it makes every
+> stored secret unrecoverable — back it up separately.
 
-## Démarrage — local (dev)
+## Getting started — local (dev)
 
-Prérequis : Node 20+, un PostgreSQL et un Redis accessibles (voir `.env`).
+Prerequisites: Node 20+, a reachable PostgreSQL and Redis (see `.env`).
 
 ```bash
 npm install
 npm run build:shared
-npm run db:deploy                        # applique les migrations
+npm run db:deploy                        # applies the migrations
 npm run dev:back                         # http://localhost:3001
 npm run dev:front                        # http://localhost:5173
 ```
 
-## Configurer une source
+## Configuring a source
 
-1. Onglet **Sources** → *Ajouter une source*.
-2. Plateforme, URL de base (ex. `https://gitlab.example.com`), organisation/groupe,
-   méthode d'auth et secret (token). Le secret est chiffré immédiatement.
-3. **Tester** la connexion, puis basculer sur l'onglet **Dashboard**.
+1. **Sources** tab → *Add a source*.
+2. Platform, base URL (e.g. `https://gitlab.example.com`), organization/group,
+   auth method and secret (token). The secret is encrypted immediately.
+3. **Test** the connection, then switch to the **Dashboard** tab.
 
-## Migrations de base de données
+## Database migrations
 
-Le schéma est géré par des **migrations versionnées** (Prisma), commitées dans
-`back/prisma/migrations/` et embarquées dans l'image de prod.
+The schema is managed through **versioned migrations** (Prisma), committed to
+`back/prisma/migrations/` and bundled into the prod image.
 
-**Appliquer les migrations** — automatique au démarrage des conteneurs :
-`prisma migrate deploy` s'exécute avant l'API, en **dev** comme en **prod**
-(non-interactif, idempotent). En local sans Docker : `npm run db:deploy`.
+**Applying migrations** — automatic when the containers start:
+`prisma migrate deploy` runs before the API, in **dev** as in **prod**
+(non-interactive, idempotent). Locally without Docker: `npm run db:deploy`.
 
-**Créer une migration** — après avoir modifié `back/prisma/schema.prisma` :
+**Creating a migration** — after editing `back/prisma/schema.prisma`:
 
 ```bash
-# base de dev accessible sur localhost:5432 (npm run docker:dev en cours)
-npm run db:migrate -- --name ajout_table_x
-# → génère back/prisma/migrations/<horodatage>_ajout_table_x/  → à commiter
+# dev database reachable on localhost:5432 (npm run docker:dev running)
+npm run db:migrate -- --name add_table_x
+# → generates back/prisma/migrations/<timestamp>_add_table_x/  → to commit
 ```
 
-> `db:migrate` (= `prisma migrate dev`) crée le fichier SQL, l'applique à la
-> base de dev et régénère le client. En équipe, les fichiers de migration sont
-> la source de vérité : commitez-les.
+> `db:migrate` (= `prisma migrate dev`) creates the SQL file, applies it to the
+> dev database and regenerates the client. In a team, migration files are the
+> source of truth: commit them.
 
-Autres commandes : `npm run db:deploy` (appliquer), `npm run db:studio`
-(explorateur de données Prisma).
+Other commands: `npm run db:deploy` (apply), `npm run db:studio` (Prisma data
+browser).
 
 ## Roadmap
 
-- **Phase 1 ✅** Socle, connecteurs, chiffrement, dashboard live.
-- **Phase 2** Historisation + DORA (4 métriques + décomposition lead time),
-  moteur RegEx d'environnements (méta-env, priorité + cumul), jobs BullMQ.
-- **Phase 3** Release notes tag→tag + reformulation IA (`LLMProvider`
-  multi-fournisseurs), publication de Release.
-- **Phase 4** Métriques review/CI/débit, alertes/seuils.
+Shipped:
+
+- Foundation, connectors, encryption, live dashboard.
+- Historization + DORA (4 metrics + lead time breakdown), RegEx environment
+  engine (meta-env, priority + accumulation), BullMQ jobs.
+
+Planned:
+
+- Release notes tag→tag with AI rewriting (multi-provider `LLMProvider`),
+  Release publishing.
+- Review/CI/throughput metrics, alerts and thresholds.
