@@ -147,11 +147,12 @@ export interface ConnectionTestResult {
 export type EnvRuleKind = 'simple' | 'meta';
 
 /**
- * What a rule is matched against. Both targets share the same engine: named
- * capture groups become attributes. Repository rules exist so PR-based DORA
- * metrics get dimensions too — a PR has no environment, only a repo.
+ * What a rule is matched against. Every target shares the same engine: named
+ * capture groups become attributes. The extra targets exist so things that have
+ * no environment get dimensions too — a PR has only a repo, an incident only
+ * its labels.
  */
-export type RuleTarget = 'environment' | 'repository';
+export type RuleTarget = 'environment' | 'repository' | 'incident';
 
 /** A RegEx-based classification rule. */
 export interface EnvRulePublic {
@@ -165,6 +166,40 @@ export interface EnvRulePublic {
   createdAt: string;
   updatedAt: string;
 }
+
+// ─── Incidents ───────────────────────────────────────────────────────
+
+/**
+ * A production incident, normalized across trackers. Deliberately poor: DORA
+ * only needs when it started and when it was over, so every tracker-specific
+ * notion of "done" (closed issue, Jira status, Linear state) collapses into
+ * `resolvedAt`.
+ */
+export interface Incident {
+  /** Provider-prefixed, like the other entity ids: `gh:repo:number`. */
+  id: string;
+  /** Human reference — `#42`, `OPS-123`. */
+  key: string;
+  title: string;
+  url: string;
+  openedAt: string;
+  /** null while still open — an incident in progress has no restore time. */
+  resolvedAt: string | null;
+  /** Labels, tags or components: what the `incident` rules classify. */
+  labels: string[];
+  /** Repo the incident was filed against, when the tracker ties it to one. */
+  repo?: string;
+}
+
+/**
+ * What counts as a failure for change failure rate and MTTR.
+ * - `pipelines`: a failed deployment, the historical behavior.
+ * - `incidents`: an incident opened in the tracker.
+ * - `both`: either signal. The rate can then exceed 100% when incidents
+ *   outnumber deployments in a slice — a legible sign that the label filter or
+ *   the dimensions are misaligned, which clamping would only hide.
+ */
+export type FailureSource = 'pipelines' | 'incidents' | 'both';
 
 // ─── DORA ────────────────────────────────────────────────────────────
 
@@ -281,6 +316,14 @@ export interface AppSettings {
    * `limit`. Capped at PAGE_LIMIT_MAX.
    */
   pageSize: number;
+  /** Which signals feed change failure rate and MTTR. */
+  failureSource: FailureSource;
+  /**
+   * An issue is an incident when it carries one of these labels. Required as
+   * soon as incidents are used: without it every issue in the scope would count
+   * as a production failure.
+   */
+  incidentLabels: string[];
 }
 
 // ─── Aggregated dashboard responses ──────────────────────────────────

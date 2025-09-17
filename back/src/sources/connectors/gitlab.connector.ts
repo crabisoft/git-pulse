@@ -11,7 +11,7 @@ import type {
 import type { ConnectorContext, SourceConnector } from './source-connector.interface';
 import { applyScope, ageHours } from './scope.util';
 
-type GitlabClient = InstanceType<typeof Gitlab>;
+export type GitlabClient = InstanceType<typeof Gitlab>;
 
 /** GitLab connector — gitlab.com or a self-hosted instance via baseUrl. */
 @Injectable()
@@ -27,13 +27,7 @@ export class GitLabConnector implements SourceConnector {
    * since these methods iterate repo by repo.
    */
   private client(ctx: ConnectorContext): GitlabClient {
-    if (ctx.auth.kind !== 'token') {
-      throw new Error('GitLab supports token authentication only.');
-    }
-    return new Gitlab({
-      host: ctx.baseUrl.replace(/\/$/, ''),
-      token: ctx.auth.token,
-    });
+    return gitlabFor(ctx);
   }
 
   /** Web URL of a project from its path_with_namespace. */
@@ -189,6 +183,17 @@ export class GitLabConnector implements SourceConnector {
       return null;
     }
   }
+}
+
+/** GitLab client for a source context — shared with the incident provider. */
+export function gitlabFor(ctx: ConnectorContext): GitlabClient {
+  if (ctx.auth.kind !== 'token') {
+    throw new Error('GitLab supports token authentication only.');
+  }
+  return new Gitlab({
+    host: ctx.baseUrl.replace(/\/$/, ''),
+    token: ctx.auth.token,
+  });
 }
 
 function mapGitLabStatus(status: string): PipelineStatus {

@@ -5,6 +5,14 @@ import { api, apiErrorInfo } from '../../api';
 import { windowLabel, windowOptions } from '../../doraWindow';
 import { SUPPORTED_LANGUAGES, LANGUAGE_LABELS } from '../../i18n';
 
+/** Typed as a list end to end; comma separation is only how it is edited. */
+function toLabels(raw: string): string[] {
+  return raw
+    .split(',')
+    .map((label) => label.trim())
+    .filter(Boolean);
+}
+
 export function GeneralSettings({
   settings,
   onChange,
@@ -83,6 +91,35 @@ export function GeneralSettings({
               required
             />
           </label>
+          <label>
+            {t('settings.general.failureSource')}{' '}
+            <span className="hint">{t('settings.general.failureSourceHint')}</span>
+            <select
+              value={form.failureSource}
+              onChange={(e) => set('failureSource', e.target.value as AppSettings['failureSource'])}
+            >
+              {(['pipelines', 'incidents', 'both'] as const).map((value) => (
+                <option key={value} value={value}>
+                  {t(`settings.general.failure.${value}`)}
+                </option>
+              ))}
+            </select>
+          </label>
+          {/* Only asked for when it is about to be used: an incident label list
+              is meaningless while failures come from pipelines alone. */}
+          {form.failureSource !== 'pipelines' && (
+            <label>
+              {t('settings.general.incidentLabels')}{' '}
+              <span className="hint">{t('settings.general.incidentLabelsHint')}</span>
+              <input
+                className="mono-input"
+                value={form.incidentLabels.join(', ')}
+                onChange={(e) => set('incidentLabels', toLabels(e.target.value))}
+                spellCheck={false}
+                required
+              />
+            </label>
+          )}
           <label>
             {t('settings.general.collectCron')}{' '}
             <span className="hint">{t('settings.general.collectCronHint')}</span>

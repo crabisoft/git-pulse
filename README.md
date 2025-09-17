@@ -102,16 +102,57 @@ A rule is a RegEx bound to a source. Two independent axes:
   yields `app=…`); `meta` only tests membership and adds the **rule name** as a
   meta-environment. A `meta` rule ignores its named groups entirely.
 - **`target`** — `environment` applies to deployment environment names,
-  `repository` to repo names.
+  `repository` to repo names, `incident` to incident labels.
 
 `repository` rules exist because a pull request has no environment: without
 them, `lead_time`, `coding_time`, `pickup_time` and `review_time` all fall into
 a single global bucket. Classifying the repo name gives them the same
 dimensions deployment metrics already have.
 
+`incident` rules exist for the same reason: an incident has no environment
+either, and its labels are how it joins the deployment dimensions. An incident
+accumulates the attributes of every label it carries; on conflict the first
+label wins, labels being sorted so the outcome does not depend on the tracker's
+ordering.
+
 `GET /api/sources/:id/env-rules?target=repository` lists one target at a time
 (`environment` by default). Patterns are tested **unanchored** — remember `^`
 and `$` if you want a match on the whole name.
+
+## Incidents and failure rate
+
+The `failureSource` setting decides what counts as a failure for **change
+failure rate** and **MTTR**:
+
+| Value | Rate numerator | MTTR |
+|---|---|---|
+| `pipelines` (default) | failed deployments | failure → next successful deployment in the same env |
+| `incidents` | incidents opened | opened → resolved |
+| `both` | either | median over the union of both |
+
+Incidents come from an `IncidentProvider`, an abstraction kept **separate** from
+`SourceConnector`: Jira or Linear have neither repos nor pipelines and could not
+honour the latter. Two implementations today, GitHub and GitLab, reading issues
+**with the Git source's own credentials** — nothing to configure beyond the
+labels. The label filter is an OR, which neither API can express (their `labels`
+parameter is an AND), hence one call per label and per repo, then dedup.
+
+`incidentLabels` is required as soon as `failureSource` leaves `pipelines`,
+otherwise **every** issue in scope would become a production failure.
+
+> The rate's denominator is **always** the number of deployments. A dimension
+> combination carrying incidents but no deployment therefore yields no rate at
+> all — it would be a division by nothing. Those orphan combinations are
+> **logged as warnings**: they are the symptom of a mismatch between attributes
+> extracted from incident labels and those extracted from environment names.
+> MTTR has no such problem — it divides nothing, so it also reports slices known
+> only through their incidents.
+
+An incident still open stays out of MTTR: with no resolution date it has no
+restore time, and counting it as zero would drag the median down instead of up.
+Under `both` the rate may exceed 100% when incidents outnumber deployments in a
+slice — deliberately unclamped, since a ceiling would only hide a misconfigured
+label filter or misaligned dimensions.
 
 ## DORA metric filters
 

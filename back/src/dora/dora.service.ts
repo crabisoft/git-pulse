@@ -4,6 +4,7 @@ import type {
   DoraPeriod,
   DoraReport,
   DoraResult,
+  Incident,
   MergedPullRequest,
   PipelineStatus,
   RuleTarget,
@@ -15,13 +16,16 @@ import { PrismaService } from '../prisma/prisma.service';
 import { SourcesService } from '../sources/sources.service';
 import { ConnectorFactory } from '../sources/connectors/connector.factory';
 import { EnvRulesService } from '../env-rules/env-rules.service';
+import { IncidentProviderFactory } from '../incidents/incident-provider.factory';
 import { SettingsService } from '../settings/settings.service';
 import {
   deploymentFrequency,
   changeFailureRate,
   mttr,
   leadTimeBreakdown,
+  orphanIncidentDimensions,
   type DeploymentEvent,
+  type IncidentEvent,
   type MergedPrEvent,
 } from './dora-metrics';
 
@@ -52,6 +56,7 @@ export class DoraService {
     private readonly prisma: PrismaService,
     private readonly sources: SourcesService,
     private readonly connectors: ConnectorFactory,
+    private readonly incidents: IncidentProviderFactory,
     private readonly envRules: EnvRulesService,
     private readonly settings: SettingsService,
   ) {}
@@ -98,10 +103,12 @@ export class DoraService {
     // repo, so a narrower list is also fewer API calls.
     const repos = filterRepos(allRepos, query.repos);
 
+    const { failureSource, incidentLabels } = await this.settings.get();
+
     // Best-effort: a missing permission on one endpoint yields partial metrics
     // rather than failing the whole computation — except for a cancellation,
     // which has nothing to degrade into and must stop the run (throwIfAborted).
-    const [deployments, mergedPrs] = await Promise.all([
+    const [deployments, mergedPrs, incidents] = await Promise.all([
       connector.listDeployments(ctx, repos).catch((e) => {
         throwIfAborted(signal);
         this.logger.warn(`listDeployments échoué (${sourceId}) : ${asMessage(e)}`);
@@ -112,18 +119,41 @@ export class DoraService {
         this.logger.warn(`listMergedPullRequests échoué (${sourceId}) : ${asMessage(e)}`);
         return [] as MergedPullRequest[];
       }),
+      // Not fetched at all while failures come from pipelines only: the issues
+      // endpoint costs one call per label and per repo.
+      failureSource === 'pipelines'
+        ? Promise.resolve([] as Incident[])
+        : this.incidents
+            .for(kind)
+            .listIncidents({ access: ctx, repos, labels: incidentLabels }, period)
+            .catch((e) => {
+              throwIfAborted(signal);
+              this.logger.warn(`listIncidents échoué (${sourceId}) : ${asMessage(e)}`);
+              return [] as Incident[];
+            }),
     ]);
 
-    const [deploymentEvents, prEvents] = await Promise.all([
+    const [deploymentEvents, prEvents, incidentEvents] = await Promise.all([
       this.toDeploymentEvents(sourceId, deployments, period),
       this.toMergedPrEvents(sourceId, mergedPrs, period),
+      this.toIncidentEvents(sourceId, incidents, period),
     ]);
+
+    // Incidents divide by deployments, so a slice with no deployment produces
+    // no rate at all. Saying so beats letting the numbers quietly go missing.
+    const orphans = orphanIncidentDimensions(deploymentEvents, incidentEvents);
+    if (orphans.length > 0) {
+      this.logger.warn(
+        `${orphans.length} combinaison(s) de dimensions ont des incidents sans déploiement ` +
+          `(${sourceId}) : ${orphans.map((d) => JSON.stringify(d)).join(', ')}`,
+      );
+    }
 
     return {
       results: [
         ...deploymentFrequency(deploymentEvents),
-        ...changeFailureRate(deploymentEvents),
-        ...mttr(deploymentEvents),
+        ...changeFailureRate(deploymentEvents, incidentEvents, failureSource),
+        ...mttr(deploymentEvents, incidentEvents, failureSource),
         ...leadTimeBreakdown(prEvents),
       ],
       // The full list stays the filter vocabulary, exactly like the dashboard.
@@ -227,6 +257,47 @@ export class DoraService {
       mergedAt: p.mergedAt,
       dimensions: dimensionsByRepo.get(p.repo) ?? {},
     }));
+  }
+
+  /**
+   * An incident has neither environment nor, usefully, a single name: its
+   * dimensions come from classifying each of its labels against the `incident`
+   * rules, then merging. On conflict the first label wins, labels being sorted
+   * so the outcome does not depend on the tracker's ordering.
+   *
+   * Deliberately not classified by repo: the failure rate divides incidents by
+   * deployments, which are dimensioned by environment. Adding repo-derived
+   * attributes would create slices no deployment can ever match.
+   */
+  private async toIncidentEvents(
+    sourceId: string,
+    incidents: Incident[],
+    period: ResolvedRange,
+  ): Promise<IncidentEvent[]> {
+    const inWindow = incidents.filter((i) => within(i.openedAt, period));
+    const dimensionsByLabel = await this.dimensionsFor(
+      sourceId,
+      inWindow.flatMap((i) => i.labels),
+      'incident',
+    );
+
+    return inWindow.map((i) => {
+      const dimensions: Record<string, string> = {};
+      for (const label of [...i.labels].sort()) {
+        for (const [key, value] of Object.entries(dimensionsByLabel.get(label) ?? {})) {
+          if (!(key in dimensions)) dimensions[key] = value;
+        }
+      }
+      return {
+        key: i.key,
+        title: i.title,
+        url: i.url,
+        openedAt: i.openedAt,
+        resolvedAt: i.resolvedAt,
+        repo: i.repo,
+        dimensions,
+      };
+    });
   }
 
   /** Classifies each distinct name once; the rules are read in a single query. */

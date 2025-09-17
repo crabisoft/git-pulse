@@ -34,7 +34,16 @@
       "pageSizeHint": "taille de page par défaut de toutes les listes",
       "collectCron": "Cron de collecte",
       "collectCronHint": "ex. */15 * * * * (toutes les 15 minutes)",
-      "languageHint": "conservée sur ce navigateur"
+      "languageHint": "conservée sur ce navigateur",
+      "failureSource": "Source des échecs",
+      "failureSourceHint": "ce qui compte comme échec pour le taux d'échec et le MTTR",
+      "failure": {
+        "pipelines": "Pipelines de déploiement en échec",
+        "incidents": "Incidents déclarés",
+        "both": "Les deux"
+      },
+      "incidentLabels": "Labels d'incident",
+      "incidentLabelsHint": "séparés par des virgules ; une issue portant l'un d'eux est un incident"
     }
   },
   "envRules": {
@@ -62,6 +71,12 @@
         "listTitle": "Règles de repo",
         "hint": "Appliquées aux noms de repos. Une pull request n'a pas d'environnement : c'est par ici que le lead time se ventile par application ou par client.",
         "placeholder": "ex. extranet-api"
+      },
+      "incident": {
+        "tab": "Incidents",
+        "listTitle": "Règles d'incident",
+        "hint": "Appliquées aux labels des incidents. Un incident n'a pas d'environnement : c'est par ici qu'il rejoint les dimensions des déploiements, faute de quoi le taux d'échec ne trouvera aucun déploiement à diviser.",
+        "placeholder": "ex. incident-prod-acme"
       }
     },
     "form": {
@@ -129,7 +144,8 @@
     },
     "settings": {
       "outOfRange": "Valeur invalide pour {{key}} : attendu un entier entre {{min}} et {{max}}.",
-      "invalidCron": "Expression cron invalide : {{pattern}}"
+      "invalidCron": "Expression cron invalide : {{pattern}}",
+      "incidentLabelsRequired": "Renseignez au moins un label d'incident avant de les compter comme échecs."
     },
     "dora": {
       "invalidRange": "Période invalide : la date de début ({{from}}) est postérieure à la date de fin ({{to}})."

@@ -1,4 +1,4 @@
-import type { DoraMetric, DoraResult, DoraSample } from '@repo/shared';
+import type { DoraMetric, DoraResult, DoraSample, FailureSource } from '@repo/shared';
 
 /** Most recent contributing events kept per result for the detail view. */
 const MAX_SAMPLES = 50;
@@ -9,6 +9,17 @@ export interface DeploymentEvent {
   repo: string;
   status: 'success' | 'failed' | 'other';
   createdAt: string;
+  dimensions: Record<string, string>;
+}
+
+/** An incident, already classified into dimensions from its labels. */
+export interface IncidentEvent {
+  key: string;
+  title: string;
+  url: string;
+  openedAt: string;
+  resolvedAt: string | null;
+  repo?: string;
   dimensions: Record<string, string>;
 }
 
@@ -36,34 +47,79 @@ export function deploymentFrequency(deployments: DeploymentEvent[]): DoraResult[
   }));
 }
 
-/** Failed deployments / total, per dimension combination. */
-export function changeFailureRate(deployments: DeploymentEvent[]): DoraResult[] {
+/**
+ * Failures / deployments, per dimension combination. Deployments are always the
+ * denominator — the rate answers "how many of our deployments went wrong" — but
+ * what counts as a failure depends on `source`.
+ *
+ * Only slices that actually deployed produce a result: a ratio over an empty
+ * denominator would be meaningless. Incidents landing in a slice with no
+ * deployment are reported by the caller instead of being silently averaged in.
+ */
+export function changeFailureRate(
+  deployments: DeploymentEvent[],
+  incidents: IncidentEvent[],
+  source: FailureSource,
+): DoraResult[] {
   const known = deployments.filter((d) => d.status !== 'other');
-  return [...groupByDimensions(known)].map(([, items]) => {
-    const failed = items.filter((d) => d.status === 'failed').length;
+  const incidentsByDimensions = groupByDimensions(incidents);
+
+  return [...groupByDimensions(known)].map(([key, items]) => {
+    const failedDeploys = source === 'incidents' ? [] : items.filter((d) => d.status === 'failed');
+    const related = source === 'pipelines' ? [] : (incidentsByDimensions.get(key) ?? []);
+    const failures = failedDeploys.length + related.length;
     return {
       metric: 'change_failure_rate',
-      value: items.length ? failed / items.length : 0,
+      value: items.length ? failures / items.length : 0,
       unit: 'ratio',
       dimensions: items[0].dimensions,
       sampleSize: items.length,
-      // Failures first: they are what the rate is about.
-      samples: takeRecent(items.map(deploymentSample), (a, b) =>
-        a.status === b.status ? 0 : a.status === 'failed' ? -1 : 1,
+      // Failures first: they are what the rate is about, and what a reader
+      // opening the detail wants to see without scrolling past the successes.
+      samples: takeRecent(
+        [...related.map(incidentSample), ...items.map(deploymentSample)],
+        (a, b) => (a.status === b.status ? 0 : a.status === 'failed' ? -1 : 1),
       ),
     };
   });
 }
 
+/** Dimension keys carrying incidents but no deployment to divide them by. */
+export function orphanIncidentDimensions(
+  deployments: DeploymentEvent[],
+  incidents: IncidentEvent[],
+): Record<string, string>[] {
+  const deployed = new Set(groupByDimensions(deployments.filter((d) => d.status !== 'other')).keys());
+  return [...groupByDimensions(incidents)]
+    .filter(([key]) => !deployed.has(key))
+    .map(([, items]) => items[0].dimensions);
+}
+
 /**
- * Median time to restore: for each failed deployment, the delay until the next
- * successful deployment in the same environment.
+ * Median time to restore, per dimension combination. Two ways to measure it,
+ * combined when `source` is `both`:
+ *   pipelines — a failed deployment until the next success in the same environment
+ *   incidents — an incident from opened to resolved
+ *
+ * Unlike the failure rate this needs no deployments at all, so a slice known
+ * only through its incidents still yields a value.
  */
-export function mttr(deployments: DeploymentEvent[]): DoraResult[] {
-  return [...groupByDimensions(deployments)].map(([, items]) => {
+export function mttr(
+  deployments: DeploymentEvent[],
+  incidents: IncidentEvent[],
+  source: FailureSource,
+): DoraResult[] {
+  const deploysByDimensions = source === 'incidents' ? new Map() : groupByDimensions(deployments);
+  const incidentsByDimensions = source === 'pipelines' ? new Map() : groupByDimensions(incidents);
+
+  const keys = new Set([...deploysByDimensions.keys(), ...incidentsByDimensions.keys()]);
+  return [...keys].map((key) => {
+    const deploys: DeploymentEvent[] = deploysByDimensions.get(key) ?? [];
+    const related: IncidentEvent[] = incidentsByDimensions.get(key) ?? [];
     const restores: number[] = [];
     const samples: DoraSample[] = [];
-    for (const [, envItems] of groupBy(items, (d) => d.environment)) {
+
+    for (const [, envItems] of groupBy(deploys, (d) => d.environment)) {
       const sorted = [...envItems].sort(byCreatedAt);
       for (let i = 0; i < sorted.length; i++) {
         if (sorted[i].status !== 'failed') continue;
@@ -80,11 +136,21 @@ export function mttr(deployments: DeploymentEvent[]): DoraResult[] {
         });
       }
     }
+
+    for (const incident of related) {
+      // An incident still open has no restore time yet — it would drag the
+      // median toward zero rather than upward, so it is left out entirely.
+      if (!incident.resolvedAt) continue;
+      const durationSec = clamp(seconds(incident.openedAt, incident.resolvedAt));
+      restores.push(durationSec);
+      samples.push({ ...incidentSample(incident), value: durationSec });
+    }
+
     return {
       metric: 'mttr',
       value: median(restores),
       unit: 'seconds',
-      dimensions: items[0].dimensions,
+      dimensions: (deploys[0] ?? related[0]).dimensions,
       sampleSize: restores.length,
       samples: takeRecent(samples),
     };
@@ -142,6 +208,22 @@ function deploymentSample(d: DeploymentEvent): DoraSample {
     value: null,
     status: d.status,
     details: { repo: d.repo },
+  };
+}
+
+function incidentSample(i: IncidentEvent): DoraSample {
+  return {
+    label: `${i.key} ${i.title}`,
+    at: i.openedAt,
+    value: null,
+    // Reuses the deployment vocabulary so the failure-first sort in the change
+    // failure rate orders incidents and failed deployments together.
+    status: 'failed',
+    url: i.url,
+    details: {
+      ...(i.repo ? { repo: i.repo } : {}),
+      ...(i.resolvedAt ? { restoredAt: i.resolvedAt } : {}),
+    },
   };
 }
 

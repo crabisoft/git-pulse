@@ -5,6 +5,7 @@ import {
   PAGE_LIMIT_DEFAULT,
   PAGE_LIMIT_MAX,
   type AppSettings,
+  type FailureSource,
 } from '@repo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CodedException } from '../common/coded-exception';
@@ -16,6 +17,10 @@ const FALLBACKS: AppSettings = {
   stalePrHours: 72,
   collectCron: '*/15 * * * *',
   pageSize: PAGE_LIMIT_DEFAULT,
+  // Pipelines only: the historical behavior, and the only one that needs no
+  // configuration to be correct.
+  failureSource: 'pipelines',
+  incidentLabels: [],
 };
 
 const LIMITS = {
@@ -46,6 +51,8 @@ export class SettingsService {
       stalePrHours: readNumber(stored.get('stalePrHours'), FALLBACKS.stalePrHours),
       collectCron: stored.get('collectCron') ?? FALLBACKS.collectCron,
       pageSize: readNumber(stored.get('pageSize'), FALLBACKS.pageSize),
+      failureSource: readFailureSource(stored.get('failureSource')),
+      incidentLabels: readList(stored.get('incidentLabels')),
     };
   }
 
@@ -60,6 +67,7 @@ export class SettingsService {
     assertInRange('stalePrHours', dto.stalePrHours);
     assertInRange('pageSize', dto.pageSize);
     if (dto.collectCron !== undefined) assertValidCron(dto.collectCron);
+    await this.assertIncidentsConfigured(dto);
 
     const entries = Object.entries(dto).filter(([, value]) => value !== undefined);
     await this.prisma.$transaction(
@@ -84,6 +92,21 @@ export class SettingsService {
   }
 
   /**
+   * Incidents without labels would make every issue in the scope a production
+   * failure. Checked against the merged state, since an update may set either
+   * key on its own.
+   */
+  private async assertIncidentsConfigured(dto: UpdateSettingsDto): Promise<void> {
+    if (dto.failureSource === undefined && dto.incidentLabels === undefined) return;
+    const current = await this.get();
+    const failureSource = dto.failureSource ?? current.failureSource;
+    const labels = dto.incidentLabels ?? current.incidentLabels;
+    if (failureSource !== 'pipelines' && labels.length === 0) {
+      throw new CodedException('errors.settings.incidentLabelsRequired', HttpStatus.BAD_REQUEST);
+    }
+  }
+
+  /**
    * Registers a callback invoked after every update. Lets other modules react
    * to a change (rescheduling the collection, ...) without this service having
    * to depend on them.
@@ -91,6 +114,18 @@ export class SettingsService {
   onChange(listener: Listener): void {
     this.listeners.push(listener);
   }
+}
+
+/** Comma-separated in storage — `AppSetting.value` is a plain string column. */
+function readList(raw: string | undefined): string[] {
+  return (raw ?? '')
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function readFailureSource(raw: string | undefined): FailureSource {
+  return raw === 'incidents' || raw === 'both' ? raw : FALLBACKS.failureSource;
 }
 
 function readNumber(raw: string | undefined, fallback: number): number {

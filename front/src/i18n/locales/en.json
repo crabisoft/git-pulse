@@ -34,7 +34,16 @@
       "pageSizeHint": "default page size of every list",
       "collectCron": "Collection cron",
       "collectCronHint": "e.g. */15 * * * * (every 15 minutes)",
-      "languageHint": "kept in this browser"
+      "languageHint": "kept in this browser",
+      "failureSource": "Failure source",
+      "failureSourceHint": "what counts as a failure for change failure rate and MTTR",
+      "failure": {
+        "pipelines": "Failed deployment pipelines",
+        "incidents": "Declared incidents",
+        "both": "Both"
+      },
+      "incidentLabels": "Incident labels",
+      "incidentLabelsHint": "comma separated; an issue carrying one of them is an incident"
     }
   },
   "envRules": {
@@ -62,6 +71,12 @@
         "listTitle": "Repository rules",
         "hint": "Matched against repo names. A pull request has no environment, so this is what breaks lead time down by application or customer.",
         "placeholder": "e.g. extranet-api"
+      },
+      "incident": {
+        "tab": "Incidents",
+        "listTitle": "Incident rules",
+        "hint": "Matched against incident labels. An incident has no environment: this is how it joins the deployment dimensions — without it the failure rate finds no deployment to divide by.",
+        "placeholder": "e.g. incident-prod-acme"
       }
     },
     "form": {
@@ -129,7 +144,8 @@
     },
     "settings": {
       "outOfRange": "Invalid value for {{key}}: expected an integer between {{min}} and {{max}}.",
-      "invalidCron": "Invalid cron expression: {{pattern}}"
+      "invalidCron": "Invalid cron expression: {{pattern}}",
+      "incidentLabelsRequired": "Set at least one incident label before counting incidents as failures."
     },
     "dora": {
       "invalidRange": "Invalid period: the start date ({{from}}) is after the end date ({{to}})."

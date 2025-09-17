@@ -13,7 +13,7 @@ const EMPTY: CreateEnvRuleInput = { name: '', pattern: '', kind: 'simple', prior
 /** Module constant so resetting on source change never re-triggers a fetch. */
 const FIRST_PAGE: PageQuery = {};
 
-const TARGETS: RuleTarget[] = ['environment', 'repository'];
+const TARGETS: RuleTarget[] = ['environment', 'repository', 'incident'];
 
 export function EnvRulesPage({ sourceId }: { sourceId: string }) {
   const { t } = useTranslation();
@@ -21,7 +21,8 @@ export function EnvRulesPage({ sourceId }: { sourceId: string }) {
   // names on the other. They never mix, so the tab drives every request — and
   // it lives in the query string so a tab is a shareable URL.
   const [searchParams, setSearchParams] = useSearchParams();
-  const target: RuleTarget = searchParams.get('target') === 'repository' ? 'repository' : 'environment';
+  const requested = searchParams.get('target');
+  const target: RuleTarget = isTarget(requested) ? requested : 'environment';
   // The default target stays implicit, so the plain URL keeps working.
   const setTarget = (next: RuleTarget) =>
     setSearchParams(next === 'environment' ? {} : { target: next });
@@ -170,6 +171,11 @@ export function EnvRulesPage({ sourceId }: { sourceId: string }) {
       )}
     </>
   );
+}
+
+/** Narrows the query-string value; anything else falls back to the default tab. */
+function isTarget(value: string | null): value is RuleTarget {
+  return value !== null && (TARGETS as string[]).includes(value);
 }
 
 /** Create/edit form, in a modal. `rule` null means creation. */

@@ -19,27 +19,7 @@ export class GitHubConnector implements SourceConnector {
   private readonly logger = new Logger(GitHubConnector.name);
 
   private client(ctx: ConnectorContext): Octokit {
-    // GHE serves the API under /api/v3; github.com uses api.github.com.
-    const isDotCom = /(^|\/\/)(www\.)?github\.com/.test(ctx.baseUrl);
-    const baseUrl = isDotCom
-      ? 'https://api.github.com'
-      : `${ctx.baseUrl.replace(/\/$/, '')}/api/v3`;
-
-    // Set on the client rather than per call: it then reaches every request the
-    // instance makes, `paginate` included.
-    const request = { signal: ctx.signal };
-
-    if (ctx.auth.kind === 'app') {
-      // GitHub App: Octokit mints and caches installation tokens on demand.
-      const { appId, privateKey, installationId } = ctx.auth;
-      return new Octokit({
-        authStrategy: createAppAuth,
-        auth: { appId, privateKey, installationId },
-        baseUrl,
-        request,
-      });
-    }
-    return new Octokit({ auth: ctx.auth.token, baseUrl, request });
+    return octokitFor(ctx);
   }
 
   /** Web URL of a repository (github.com or GHE). */
@@ -275,6 +255,34 @@ export class GitHubConnector implements SourceConnector {
       return null;
     }
   }
+}
+
+/**
+ * Octokit for a source context — shared with the incident provider, which talks
+ * to the same API with the same credentials.
+ */
+export function octokitFor(ctx: ConnectorContext): Octokit {
+  // GHE serves the API under /api/v3; github.com uses api.github.com.
+  const isDotCom = /(^|\/\/)(www\.)?github\.com/.test(ctx.baseUrl);
+  const baseUrl = isDotCom
+    ? 'https://api.github.com'
+    : `${ctx.baseUrl.replace(/\/$/, '')}/api/v3`;
+
+  // Set on the client rather than per call: it then reaches every request the
+  // instance makes, `paginate` included.
+  const request = { signal: ctx.signal };
+
+  if (ctx.auth.kind === 'app') {
+    // GitHub App: Octokit mints and caches installation tokens on demand.
+    const { appId, privateKey, installationId } = ctx.auth;
+    return new Octokit({
+      authStrategy: createAppAuth,
+      auth: { appId, privateKey, installationId },
+      baseUrl,
+      request,
+    });
+  }
+  return new Octokit({ auth: ctx.auth.token, baseUrl, request });
 }
 
 function mapGitHubStatus(status: string | null, conclusion: string | null): PipelineStatus {

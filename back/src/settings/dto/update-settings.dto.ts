@@ -1,4 +1,5 @@
-import { IsInt, IsOptional, IsString, MinLength } from 'class-validator';
+import { ArrayUnique, IsArray, IsEnum, IsInt, IsOptional, IsString, MinLength } from 'class-validator';
+import type { FailureSource } from '@repo/shared';
 
 /** Partial update — only the supplied keys are persisted. */
 export class UpdateSettingsDto {
@@ -18,4 +19,16 @@ export class UpdateSettingsDto {
   @IsOptional()
   @IsInt()
   pageSize?: number;
+
+  @IsOptional()
+  @IsEnum(['pipelines', 'incidents', 'both'] as const)
+  failureSource?: FailureSource;
+
+  /** Stored comma-separated, so a label may not contain a comma. */
+  @IsOptional()
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  incidentLabels?: string[];
 }

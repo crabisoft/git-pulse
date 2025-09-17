@@ -58,10 +58,12 @@ enum EnvRuleKind {
   meta
 }
 
-/// What the pattern is matched against: an environment name, or a repo name.
+/// What the pattern is matched against: an environment name, a repo name, or
+/// an incident label.
 enum RuleTarget {
   environment
   repository
+  incident
 }
 
 /// RegEx-based classification rule.
