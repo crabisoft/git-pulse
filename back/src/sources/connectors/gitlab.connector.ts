@@ -111,7 +111,7 @@ export class GitLabConnector implements SourceConnector {
           url: p.web_url as string,
           createdAt: p.created_at as string,
           updatedAt: (p.updated_at as string) ?? (p.created_at as string),
-          // Duration needs a per-pipeline Pipelines.show call — Phase 2.
+          // Duration needs a per-pipeline Pipelines.show call.
           durationSec: null,
         });
       }

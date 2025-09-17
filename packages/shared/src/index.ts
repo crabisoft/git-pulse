@@ -142,7 +142,7 @@ export interface ConnectionTestResult {
   message: CodedMessage;
 }
 
-// ─── Environment classification (Phase 2) ────────────────────────────
+// ─── Environment classification ──────────────────────────────────────
 
 export type EnvRuleKind = 'simple' | 'meta';
 
@@ -166,7 +166,7 @@ export interface EnvRulePublic {
   updatedAt: string;
 }
 
-// ─── DORA (Phase 2) ──────────────────────────────────────────────────
+// ─── DORA ────────────────────────────────────────────────────────────
 
 export type DoraMetric =
   | 'deployment_frequency'

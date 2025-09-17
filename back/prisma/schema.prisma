@@ -1,4 +1,4 @@
-// Prisma schema — Phase 1 core + Phase 2 seeds (EnvRule, MetricSnapshot).
+// Prisma schema — sources and dashboard core, EnvRule, MetricSnapshot.
 generator client {
   provider      = "prisma-client-js"
   binaryTargets = ["native", "debian-openssl-3.0.x"]
@@ -64,7 +64,7 @@ enum RuleTarget {
   repository
 }
 
-/// RegEx-based classification rule (Phase 2).
+/// RegEx-based classification rule.
 /// simple: extracts attributes via named groups (type, client, ...).
 /// meta:   groups every name matching the pattern.
 model EnvRule {
@@ -91,7 +91,7 @@ model AppSetting {
   updatedAt DateTime @updatedAt
 }
 
-/// Historized metric snapshot (Phase 2) — the basis for DORA trends.
+/// Historized metric snapshot — the basis for DORA trends.
 model MetricSnapshot {
   id         String   @id @default(uuid())
   source     Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
