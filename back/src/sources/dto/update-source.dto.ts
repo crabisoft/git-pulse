@@ -1,4 +1,12 @@
-import { IsEnum, IsOptional, IsString, IsUrl, MinLength, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUrl,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import type { AuthKind, SourceKind } from '@repo/shared';
 import { GitHubAppDto, ScopeDto } from './create-source.dto';
@@ -39,4 +47,15 @@ export class UpdateSourceDto {
   @ValidateNested()
   @Type(() => ScopeDto)
   scope?: ScopeDto;
+
+  /** Supplied means "these are the trackers now" — the set is replaced. */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  trackerIds?: string[];
+
+  /** Explicit null stops collecting incidents for this source. */
+  @IsOptional()
+  @IsString()
+  incidentTrackerId?: string | null;
 }

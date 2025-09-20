@@ -59,11 +59,104 @@ export interface SourcePublic {
   baseUrl: string;
   authKind: AuthKind;
   scope: ScopeRules;
+  /** Trackers this source's pull requests may reference. */
+  trackerIds: string[];
+  /**
+   * Tracker its incidents are read from, among the attached ones. Null means
+   * none, and then no incident is collected whatever `failureSource` says.
+   * Single by design: two would leave the collector with no way to choose.
+   */
+  incidentTrackerId: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
 // ─── Normalized entities ─────────────────────────────────────────────
+
+/** Which product an issue tracker is. Decides the default link shape. */
+export type TrackerKind = 'jira' | 'linear' | 'github' | 'gitlab';
+
+/**
+ * Link shape per tracker kind, used whenever a tracker defines no template of
+ * its own. `{base}` is the tracker's base URL and `{key}` the extracted
+ * reference; `{owner}` and `{repo}` are resolved per pull request, which is why
+ * git-hosted trackers cannot be linked from a static template.
+ */
+export const TRACKER_URL_TEMPLATES: Record<TrackerKind, string> = {
+  jira: '{base}/browse/{key}',
+  linear: '{base}/issue/{key}',
+  github: '{base}/{owner}/{repo}/issues/{key}',
+  gitlab: '{base}/{repo}/-/issues/{key}',
+};
+
+/**
+ * A source using a tracker. Written from the source — a tracker is declared
+ * once and lists its sources read-only, because "what does this source use" is
+ * the question one actually asks while setting things up.
+ */
+export interface TrackerBinding {
+  sourceId: string;
+  incidents: boolean;
+}
+
+/** Tracker kinds an incident provider exists for. */
+export const INCIDENT_TRACKER_KINDS: readonly TrackerKind[] = ['github', 'gitlab'];
+
+/**
+ * An issue tracker, declared once and attached to the sources it serves. Its
+ * base URL lives here rather than on every rule, so moving an instance is a
+ * single edit.
+ */
+export interface TrackerPublic {
+  id: string;
+  name: string;
+  /** URL-safe form of the name, unique across trackers. */
+  slug: string;
+  kind: TrackerKind;
+  baseUrl: string;
+  /** Null falls back to TRACKER_URL_TEMPLATES[kind]. */
+  urlTemplate: string | null;
+  sources: TrackerBinding[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** The tracker a reference belongs to, denormalized for display. */
+export interface TicketRefTracker {
+  id: string;
+  name: string;
+  kind: TrackerKind;
+}
+
+/** A ticket referenced by a pull request. */
+export interface TicketRef {
+  /** The reference as written: `OPS-123`, `42`. */
+  key: string;
+  /** Built from the tracker's template; absent when it resolves to nothing. */
+  url?: string;
+  /** Which text it came from — the first thing to look at when a rule matches too much. */
+  foundIn: TicketSource;
+  tracker: TicketRefTracker;
+}
+
+/** Texts a ticket reference is looked for in, in that order. */
+export type TicketSource = 'branch' | 'title';
+
+/**
+ * A RegEx extracting ticket references from a branch name or a PR title. Kept
+ * apart from EnvRule: it yields references rather than attributes, and points
+ * at the tracker the reference belongs to.
+ */
+export interface TicketRulePublic {
+  id: string;
+  sourceId: string;
+  trackerId: string;
+  name: string;
+  pattern: string;
+  priority: number;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export type PullRequestState = 'open' | 'merged' | 'closed' | 'draft';
 
@@ -76,6 +169,8 @@ export interface PullRequest {
   repo: string;
   repoUrl: string;
   url: string;
+  /** Source branch — where ticket references are usually found. */
+  headRef: string;
   createdAt: string;
   updatedAt: string;
   mergedAt: string | null;
@@ -83,6 +178,8 @@ export interface PullRequest {
   reviewers: number;
   /** Hours since the PR was opened, computed on the backend. */
   ageHours: number;
+  /** Tickets referenced by the branch name or the title, deduplicated. */
+  tickets: TicketRef[];
 }
 
 export type PipelineStatus =
@@ -121,7 +218,10 @@ export interface MergedPullRequest {
   id: string;
   repo: string;
   number: number;
+  title: string;
   url: string;
+  /** Source branch, for ticket extraction. */
+  headRef: string;
   openedAt: string;
   firstCommitAt: string | null;
   firstReviewAt: string | null;

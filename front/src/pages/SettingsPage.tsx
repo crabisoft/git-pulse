@@ -2,23 +2,33 @@ import { type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import type { AppSettings, SourcePublic } from '@repo/shared';
-import { LayersIcon, ServerIcon, SlidersIcon } from '../icons';
+import { LayersIcon, LinkIcon, ServerIcon, SlidersIcon, TicketIcon } from '../icons';
 import { GeneralSettings } from './settings/GeneralSettings';
 import { SourcesPage } from './SourcesPage';
 import { EnvRulesPage } from './EnvRulesPage';
+import { TicketRulesPage } from './TicketRulesPage';
+import { TrackersPage } from './TrackersPage';
 
-export type SettingsSection = 'general' | 'sources' | 'env';
+export type SettingsSection = 'general' | 'sources' | 'trackers' | 'env' | 'tickets';
 
 const SECTIONS: { key: SettingsSection; icon: ReactNode }[] = [
   { key: 'general', icon: <SlidersIcon /> },
   { key: 'sources', icon: <ServerIcon /> },
+  { key: 'trackers', icon: <LinkIcon /> },
   { key: 'env', icon: <LayersIcon /> },
+  { key: 'tickets', icon: <TicketIcon /> },
 ];
 
-/** Each section has its own URL; `env` also carries the source it applies to. */
+/** Sections bound to a source carry its slug; the others are source-less. */
+const SOURCE_SECTIONS: Record<string, string> = {
+  env: '/settings/environments',
+  tickets: '/settings/tickets',
+};
+
 function sectionPath(section: SettingsSection, source: SourcePublic | null): string {
-  if (section !== 'env') return `/settings/${section}`;
-  return source ? `/settings/environments/${source.slug}` : '/settings/environments';
+  const base = SOURCE_SECTIONS[section];
+  if (!base) return `/settings/${section}`;
+  return source ? `${base}/${source.slug}` : base;
 }
 
 export function SettingsPage({
@@ -74,9 +84,16 @@ export function SettingsPage({
           <GeneralSettings settings={settings} onChange={onSettingsChange} />
         )}
         {section === 'sources' && <SourcesPage onChange={onSourcesChange} />}
+        {section === 'trackers' && <TrackersPage sources={sources} />}
         {section === 'env' &&
           (selectedSource ? (
             <EnvRulesPage sourceId={selectedSource.id} />
+          ) : (
+            <p className="muted">{t('settings.env.noSource')}</p>
+          ))}
+        {section === 'tickets' &&
+          (selectedSource ? (
+            <TicketRulesPage sourceId={selectedSource.id} />
           ) : (
             <p className="muted">{t('settings.env.noSource')}</p>
           ))}

@@ -13,15 +13,28 @@ import {
 } from 'react-router-dom';
 import { PAGE_LIMIT_MAX, type AppSettings, type SourcePublic } from '@repo/shared';
 import { api, apiErrorInfo } from './api';
-import { SettingsPage } from './pages/SettingsPage';
+import { SettingsPage, type SettingsSection } from './pages/SettingsPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { DoraPage } from './pages/DoraPage';
+
+/**
+ * Settings sections scoped to one source. Each contributes the same pair of
+ * routes, so adding one is a line here rather than another copy of the block.
+ */
+const SOURCE_SETTINGS: Array<{ section: SettingsSection; base: string }> = [
+  { section: 'env', base: '/settings/environments' },
+  { section: 'tickets', base: '/settings/tickets' },
+];
 
 /**
  * Routes whose path carries a source slug. Switching source in the picker keeps
  * you on the page you were reading, so the pattern is needed as well as the slug.
  */
-const SOURCE_ROUTES = ['/dashboard/:slug', '/dora/:slug', '/settings/environments/:slug'];
+const SOURCE_ROUTES = [
+  '/dashboard/:slug',
+  '/dora/:slug',
+  ...SOURCE_SETTINGS.map(({ base }) => `${base}/:slug`),
+];
 
 /** The source slug the current URL points at, or null on the source-less pages. */
 function useRouteSlug(): { pattern: string; slug: string } | null {
@@ -173,7 +186,7 @@ export function App() {
           />
 
           <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
-          {(['general', 'sources'] as const).map((section) => (
+          {(['general', 'sources', 'trackers'] as const).map((section) => (
             <Route
               key={section}
               path={`/settings/${section}`}
@@ -189,41 +202,45 @@ export function App() {
               }
             />
           ))}
-          <Route
-            path="/settings/environments"
-            element={
-              // No source yet: stay in the settings shell, which explains why.
-              loaded && sources.length > 0 ? (
-                <Navigate to={`/settings/environments/${sources[0].slug}`} replace />
-              ) : (
-                <SettingsPage
-                  section="env"
-                  sources={sources}
-                  selectedSource={null}
-                  settings={settings}
-                  onSourcesChange={refresh}
-                  onSettingsChange={setSettings}
-                />
-              )
-            }
-          />
-          <Route
-            path="/settings/environments/:slug"
-            element={
-              <SourcePage sources={sources} loaded={loaded} base="/settings/environments">
-                {(source) => (
+          {SOURCE_SETTINGS.flatMap(({ section, base }) => [
+            <Route
+              key={base}
+              path={base}
+              element={
+                // No source yet: stay in the settings shell, which explains why.
+                loaded && sources.length > 0 ? (
+                  <Navigate to={`${base}/${sources[0].slug}`} replace />
+                ) : (
                   <SettingsPage
-                    section="env"
+                    section={section}
                     sources={sources}
-                    selectedSource={source}
+                    selectedSource={null}
                     settings={settings}
                     onSourcesChange={refresh}
                     onSettingsChange={setSettings}
                   />
-                )}
-              </SourcePage>
-            }
-          />
+                )
+              }
+            />,
+            <Route
+              key={`${base}/:slug`}
+              path={`${base}/:slug`}
+              element={
+                <SourcePage sources={sources} loaded={loaded} base={base}>
+                  {(source) => (
+                    <SettingsPage
+                      section={section}
+                      sources={sources}
+                      selectedSource={source}
+                      settings={settings}
+                      onSourcesChange={refresh}
+                      onSettingsChange={setSettings}
+                    />
+                  )}
+                </SourcePage>
+              }
+            />,
+          ])}
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>

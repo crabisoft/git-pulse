@@ -74,11 +74,14 @@ export class GitHubConnector implements SourceConnector {
           repo,
           repoUrl: this.repoUrl(ctx, repo),
           url: pr.html_url,
+          headRef: pr.head.ref,
           createdAt: pr.created_at,
           updatedAt: pr.updated_at,
           mergedAt: pr.merged_at ?? null,
           reviewers: pr.requested_reviewers?.length ?? 0,
           ageHours: ageHours(pr.created_at),
+          // Filled by the service, which owns the rules.
+          tickets: [],
         });
       }
     }
@@ -174,7 +177,9 @@ export class GitHubConnector implements SourceConnector {
           id: `gh:${repo}:${pr.number}`,
           repo,
           number: pr.number,
+          title: pr.title,
           url: pr.html_url,
+          headRef: pr.head.ref,
           openedAt: pr.created_at,
           firstCommitAt,
           firstReviewAt,

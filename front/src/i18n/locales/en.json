@@ -12,12 +12,16 @@
     "section": {
       "general": "General",
       "sources": "Sources",
-      "env": "Environments"
+      "env": "Environments",
+      "tickets": "Tickets",
+      "trackers": "Trackers"
     },
     "desc": {
       "general": "Collection and thresholds",
       "sources": "GitHub and GitLab",
-      "env": "Classification rules"
+      "env": "Classification rules",
+      "tickets": "PR → ticket linking",
+      "trackers": "Jira, Linear, issues"
     },
     "env": {
       "noSource": "Add a source to define environment rules."
@@ -136,7 +140,9 @@
       "unsupportedKind": "Unsupported source type: {{kind}}",
       "missingToken": "A token is required.",
       "missingAppCredentials": "GitHub App credentials are required.",
-      "appUnsupported": "GitHub App authentication is not supported by GitLab."
+      "appUnsupported": "GitHub App authentication is not supported by GitLab.",
+      "incidentTrackerNotAttached": "The incident tracker must be one of the trackers attached to the source.",
+      "incidentTrackerUnsupported": "Incidents cannot be read from a {{kind}} tracker yet."
     },
     "envRule": {
       "notFound": "Rule not found.",
@@ -149,6 +155,13 @@
     },
     "dora": {
       "invalidRange": "Invalid period: the start date ({{from}}) is after the end date ({{to}})."
+    },
+    "ticketRule": {
+      "notFound": "Ticket rule not found.",
+      "invalidPattern": "Invalid regular expression: {{pattern}}"
+    },
+    "tracker": {
+      "notFound": "Tracker not found."
     }
   },
   "empty": {
@@ -313,7 +326,76 @@
       "privateKey": "Private key (PEM)",
       "privateKeyHint": "(paste the .pem contents)",
       "submit": "Add source",
-      "submitting": "Saving…"
+      "submitting": "Saving…",
+      "trackers": "Attached trackers",
+      "trackersHint": "this source's PRs will be able to reference their tickets",
+      "noTrackers": "Declare a tracker first, in the Trackers section.",
+      "incidentTracker": "Incidents read from",
+      "incidentTrackerHint": "among the attached trackers; without one, no incident is collected",
+      "noIncidentTracker": "None"
     }
+  },
+  "ticketRules": {
+    "listTitle": "Ticket rules",
+    "hint": "Extracted from the branch name, then the PR title. The lowest priority wins when two rules claim the same key.",
+    "listEmpty": "No rule yet.",
+    "addTitle": "Add a rule",
+    "editTitle": "Edit \"{{name}}\"",
+    "added": "Rule added.",
+    "updated": "Rule updated.",
+    "deleted": "Rule deleted.",
+    "deleteTitle": "Delete the rule",
+    "confirmDelete": "Delete the rule \"{{name}}\"? PRs it linked will lose their ticket on the next load.",
+    "testAll": "Test the rule set",
+    "source": {
+      "branch": "branch",
+      "title": "title"
+    },
+    "form": {
+      "name": "Name",
+      "pattern": "Pattern (RegEx)",
+      "patternHint": "the (?<key>…) named group yields the key; otherwise the whole match",
+      "tracker": "Tracker",
+      "priority": "Priority",
+      "priorityHint": "lower wins when two rules claim the same key",
+      "submit": "Add rule",
+      "trackerHint": "only trackers attached to this source"
+    },
+    "preview": {
+      "title": "Test extraction",
+      "hint": "Runs the saved rule set over a branch and a title. The way to catch a pattern that matches too much: [A-Z]{2,}-\\\\d+ also eats UTF-8.",
+      "branch": "Branch name",
+      "prTitle": "PR title",
+      "run": "Extract",
+      "found": "Tickets found",
+      "none": "none",
+      "repo": "Repo",
+      "repoHint": "required for GitHub and GitLab links",
+      "noUrl": "no link"
+    },
+    "noTracker": "Declare a tracker first and attach it to this source."
+  },
+  "trackers": {
+    "listTitle": "Ticket trackers",
+    "hint": "Declared once, then attached from each source. The base URL lives here rather than on every rule: moving an instance is a single edit.",
+    "listEmpty": "No tracker yet.",
+    "addTitle": "Add a tracker",
+    "editTitle": "Edit \"{{name}}\"",
+    "added": "Tracker added.",
+    "updated": "Tracker updated.",
+    "deleted": "Tracker deleted.",
+    "deleteTitle": "Delete the tracker",
+    "confirmDelete": "Delete \"{{name}}\"? The ticket rules pointing at it go with it.",
+    "noSource": "no source",
+    "form": {
+      "name": "Name",
+      "kind": "Kind",
+      "baseUrl": "Base URL",
+      "urlTemplate": "Link template (optional)",
+      "urlTemplateHint": "empty = derived from the kind; {key}, plus {owner}/{repo} for GitHub and GitLab",
+      "submit": "Add tracker",
+      "sources": "Sources"
+    },
+    "incidentsBadge": "incidents"
   }
 }

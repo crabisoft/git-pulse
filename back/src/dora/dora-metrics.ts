@@ -1,4 +1,4 @@
-import type { DoraMetric, DoraResult, DoraSample, FailureSource } from '@repo/shared';
+import type { DoraMetric, DoraResult, DoraSample, FailureSource, TicketRef } from '@repo/shared';
 
 /** Most recent contributing events kept per result for the detail view. */
 const MAX_SAMPLES = 50;
@@ -32,6 +32,8 @@ export interface MergedPrEvent {
   openedAt: string;
   firstReviewAt: string | null;
   mergedAt: string;
+  /** Tickets the PR references, surfaced in the detail view. */
+  tickets: TicketRef[];
   dimensions: Record<string, string>;
 }
 
@@ -233,7 +235,10 @@ function prSample(p: MergedPrEvent, value: number): DoraSample {
     at: p.mergedAt,
     value,
     url: p.url,
-    details: { openedAt: p.openedAt },
+    details: {
+      openedAt: p.openedAt,
+      ...(p.tickets.length > 0 ? { tickets: p.tickets.map((t) => t.key).join(', ') } : {}),
+    },
   };
 }
 

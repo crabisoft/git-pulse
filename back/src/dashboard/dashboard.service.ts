@@ -10,6 +10,7 @@ import type {
 import { SourcesService } from '../sources/sources.service';
 import { ConnectorFactory } from '../sources/connectors/connector.factory';
 import { EnvRulesService } from '../env-rules/env-rules.service';
+import { TicketRulesService } from '../ticket-rules/ticket-rules.service';
 import { SettingsService } from '../settings/settings.service';
 import { paginate, toWindow } from '../common/pagination';
 import { throwIfAborted } from '../common/request-abort';
@@ -23,6 +24,7 @@ export class DashboardService {
     private readonly sources: SourcesService,
     private readonly connectors: ConnectorFactory,
     private readonly envRules: EnvRulesService,
+    private readonly ticketRules: TicketRulesService,
     private readonly settings: SettingsService,
   ) {}
 
@@ -65,13 +67,14 @@ export class DashboardService {
       'dashboard.warn.deploymentsFailed',
       signal,
     );
+    const withTickets = await this.withTickets(sourceId, ctx.scope.owner, pullRequests);
     const environments = await this.toEnvironments(sourceId, deployments);
     const { stalePrHours, pageSize } = await this.settings.get();
 
     return {
       sourceId,
       pullRequests: paginate(
-        sortByAge(pullRequests),
+        sortByAge(withTickets),
         toWindow({ limit: query.prsLimit, offset: query.prsOffset }, pageSize),
       ),
       pipelines: paginate(
@@ -83,7 +86,7 @@ export class DashboardService {
         toWindow({ limit: query.environmentsLimit, offset: query.environmentsOffset }, pageSize),
       ),
       repos: allRepos,
-      summary: summarize(pullRequests, pipelines, environments, stalePrHours),
+      summary: summarize(withTickets, pipelines, environments, stalePrHours),
       warnings,
     };
   }
@@ -92,6 +95,20 @@ export class DashboardService {
    * Environments observed in the deployments, resolved against the source's
    * rules. Names no rule matches are kept as-is, without attributes.
    */
+  /** Resolves the ticket references of a batch of PRs — rules read once. */
+  private async withTickets(
+    sourceId: string,
+    owner: string,
+    prs: PullRequest[],
+  ): Promise<PullRequest[]> {
+    const refs = await this.ticketRules.extractMany(
+      sourceId,
+      prs.map((pr) => ({ branch: pr.headRef, title: pr.title })),
+      prs.map((pr) => ({ owner, repo: pr.repo })),
+    );
+    return prs.map((pr, i) => ({ ...pr, tickets: refs[i] }));
+  }
+
   private async toEnvironments(
     sourceId: string,
     deployments: Deployment[],

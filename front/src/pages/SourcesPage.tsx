@@ -1,6 +1,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { SourcePublic, ConnectionTestResult, PageInfo } from '@repo/shared';
+import {
+  INCIDENT_TRACKER_KINDS,
+  PAGE_LIMIT_MAX,
+  type SourcePublic,
+  type ConnectionTestResult,
+  type PageInfo,
+  type TrackerPublic,
+} from '@repo/shared';
 import {
   api,
   apiErrorInfo,
@@ -23,6 +30,10 @@ interface FormState {
   appId: string;
   privateKey: string;
   installationId: string;
+  /** Trackers this source's pull requests may reference. */
+  trackerIds: string[];
+  /** One of `trackerIds`, or empty for "collect no incident". */
+  incidentTrackerId: string;
 }
 
 const EMPTY: FormState = {
@@ -35,6 +46,8 @@ const EMPTY: FormState = {
   appId: '',
   privateKey: '',
   installationId: '',
+  trackerIds: [],
+  incidentTrackerId: '',
 };
 
 function toInput(form: FormState): CreateSourceInput {
@@ -44,6 +57,9 @@ function toInput(form: FormState): CreateSourceInput {
     baseUrl: form.baseUrl,
     authKind: form.authKind,
     scope: { owner: form.owner },
+    trackerIds: form.trackerIds,
+    // Empty means none; the API spells that null.
+    incidentTrackerId: form.incidentTrackerId || null,
   };
   return form.authKind === 'app'
     ? {
@@ -74,6 +90,8 @@ function toForm(source: SourcePublic): FormState {
     baseUrl: source.baseUrl,
     authKind: source.authKind,
     owner: source.scope.owner,
+    trackerIds: source.trackerIds,
+    incidentTrackerId: source.incidentTrackerId ?? '',
   };
 }
 
@@ -231,6 +249,32 @@ function SourceDialog({
   const [form, setForm] = useState<FormState>(source ? toForm(source) : EMPTY);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [trackers, setTrackers] = useState<TrackerPublic[]>([]);
+
+  useEffect(() => {
+    // Few by nature, and all of them are selectable here: ask for the cap.
+    api.listTrackers({ limit: PAGE_LIMIT_MAX }).then(({ items }) => setTrackers(items), () => {});
+  }, []);
+
+  const attached = trackers.filter((tracker) => form.trackerIds.includes(tracker.id));
+  // Only a kind an incident provider exists for may be designated; the API
+  // refuses the rest, and offering them would be a promise it does not keep.
+  const incidentCandidates = attached.filter((tracker) =>
+    INCIDENT_TRACKER_KINDS.includes(tracker.kind),
+  );
+
+  const toggleTracker = (id: string) =>
+    setForm((f) => {
+      const trackerIds = f.trackerIds.includes(id)
+        ? f.trackerIds.filter((t) => t !== id)
+        : [...f.trackerIds, id];
+      return {
+        ...f,
+        trackerIds,
+        // Detaching the incident tracker clears the designation with it.
+        incidentTrackerId: trackerIds.includes(f.incidentTrackerId) ? f.incidentTrackerId : '',
+      };
+    });
 
   // Stored credentials can be kept as-is, unless the auth scheme itself changes.
   const secretRequired = !source || source.authKind !== form.authKind;
@@ -361,6 +405,46 @@ function SourceDialog({
             </label>
           </>
         )}
+
+        <fieldset className="source-trackers">
+          <legend>
+            {t('sources.form.trackers')}{' '}
+            <span className="hint">{t('sources.form.trackersHint')}</span>
+          </legend>
+          {trackers.length === 0 ? (
+            <p className="muted">{t('sources.form.noTrackers')}</p>
+          ) : (
+            trackers.map((tracker) => (
+              <label key={tracker.id}>
+                <input
+                  type="checkbox"
+                  checked={form.trackerIds.includes(tracker.id)}
+                  onChange={() => toggleTracker(tracker.id)}
+                />
+                <span>
+                  {tracker.name} <span className="muted">({tracker.kind})</span>
+                </span>
+              </label>
+            ))
+          )}
+        </fieldset>
+
+        <label>
+          {t('sources.form.incidentTracker')}{' '}
+          <span className="hint">{t('sources.form.incidentTrackerHint')}</span>
+          <select
+            value={form.incidentTrackerId}
+            onChange={(e) => set('incidentTrackerId', e.target.value)}
+            disabled={incidentCandidates.length === 0}
+          >
+            <option value="">{t('sources.form.noIncidentTracker')}</option>
+            {incidentCandidates.map((tracker) => (
+              <option key={tracker.id} value={tracker.id}>
+                {tracker.name} ({tracker.kind})
+              </option>
+            ))}
+          </select>
+        </label>
 
         {error && <div className="banner error">{error}</div>}
       </form>

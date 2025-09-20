@@ -10,6 +10,10 @@ import type {
   MetricSnapshotPublic,
   Page,
   RuleTarget,
+  TicketRef,
+  TicketRulePublic,
+  TrackerKind,
+  TrackerPublic,
 } from '@repo/shared';
 
 // Relative by default (same-origin, via the Vite dev proxy / nginx). An absolute
@@ -125,6 +129,10 @@ export interface CreateSourceInput {
   secret?: string;
   app?: { appId: string; privateKey: string; installationId: string };
   scope: { owner: string; include?: string[]; exclude?: string[] };
+  /** Trackers this source's PRs may reference — supplying it replaces the set. */
+  trackerIds?: string[];
+  /** One of `trackerIds`, or null to collect no incident. */
+  incidentTrackerId?: string | null;
 }
 
 /** Every field is optional; omitting the secret keeps the stored one. */
@@ -141,6 +149,25 @@ export interface CreateEnvRuleInput {
 
 /** Every field is optional; omitted ones keep their stored value. */
 export type UpdateEnvRuleInput = Partial<CreateEnvRuleInput>;
+
+export interface CreateTicketRuleInput {
+  trackerId: string;
+  name: string;
+  pattern: string;
+  priority?: number;
+}
+
+export type UpdateTicketRuleInput = Partial<CreateTicketRuleInput>;
+
+export interface CreateTrackerInput {
+  name: string;
+  kind: TrackerKind;
+  baseUrl: string;
+  /** Omitted or null falls back to the link shape derived from the kind. */
+  urlTemplate?: string | null;
+}
+
+export type UpdateTrackerInput = Partial<CreateTrackerInput>;
 
 export const api = {
   listSources: (page?: PageQuery) => request<Page<SourcePublic>>(`/sources${qs({ ...page })}`),
@@ -188,6 +215,37 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ name, rules }),
     }),
+
+  listTicketRules: (sourceId: string, page?: PageQuery) =>
+    request<Page<TicketRulePublic>>(`/sources/${sourceId}/ticket-rules${qs({ ...page })}`),
+  createTicketRule: (sourceId: string, input: CreateTicketRuleInput) =>
+    request<TicketRulePublic>(`/sources/${sourceId}/ticket-rules`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateTicketRule: (id: string, input: UpdateTicketRuleInput) =>
+    request<TicketRulePublic>(`/ticket-rules/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  deleteTicketRule: (id: string) => request<void>(`/ticket-rules/${id}`, { method: 'DELETE' }),
+  /** Runs the source's saved rules over a sample branch and title. */
+  previewTicketRules: (sourceId: string, sample: { branch: string; title: string; repo?: string }) =>
+    request<TicketRef[]>(`/sources/${sourceId}/ticket-rules/preview`, {
+      method: 'POST',
+      body: JSON.stringify(sample),
+    }),
+
+  listTrackers: (page?: PageQuery) =>
+    request<Page<TrackerPublic>>(`/trackers${qs({ ...page })}`),
+  /** Trackers attached to a source — what its ticket rules may point at. */
+  listSourceTrackers: (sourceId: string) =>
+    request<TrackerPublic[]>(`/sources/${sourceId}/trackers`),
+  createTracker: (input: CreateTrackerInput) =>
+    request<TrackerPublic>('/trackers', { method: 'POST', body: JSON.stringify(input) }),
+  updateTracker: (id: string, input: UpdateTrackerInput) =>
+    request<TrackerPublic>(`/trackers/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  deleteTracker: (id: string) => request<void>(`/trackers/${id}`, { method: 'DELETE' }),
 
   settings: () => request<AppSettings>('/settings'),
   updateSettings: (input: Partial<AppSettings>) =>

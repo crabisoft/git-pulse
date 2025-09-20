@@ -1,15 +1,15 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
-import type { SourceKind } from '@repo/shared';
+import type { TrackerKind } from '@repo/shared';
 import { CodedException } from '../common/coded-exception';
 import type { IncidentProvider } from './incident-provider.interface';
 import { GitHubIncidentProvider } from './github.incident-provider';
 import { GitLabIncidentProvider } from './gitlab.incident-provider';
 
 /**
- * Resolves the incident provider for a source. Keyed on `SourceKind` while
- * every tracker is the Git platform itself; a standalone tracker will be picked
- * by its own kind instead, which is why callers go through the factory rather
- * than reaching for a provider directly.
+ * Resolves the incident provider of a tracker. Jira and Linear are declarable
+ * as trackers — for ticket links — long before they can supply incidents, so
+ * they are rejected here rather than assumed absent. `SourcesService` refuses
+ * to designate one, which is where a user gets a legible message.
  */
 @Injectable()
 export class IncidentProviderFactory {
@@ -18,14 +18,16 @@ export class IncidentProviderFactory {
     private readonly gitlab: GitLabIncidentProvider,
   ) {}
 
-  for(kind: SourceKind): IncidentProvider {
+  for(kind: TrackerKind): IncidentProvider {
     switch (kind) {
       case 'github':
         return this.github;
       case 'gitlab':
         return this.gitlab;
       default:
-        throw new CodedException('errors.source.unsupportedKind', HttpStatus.BAD_REQUEST, { kind });
+        throw new CodedException('errors.source.incidentTrackerUnsupported', HttpStatus.BAD_REQUEST, {
+          kind,
+        });
     }
   }
 }

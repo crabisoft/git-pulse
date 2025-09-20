@@ -12,12 +12,16 @@
     "section": {
       "general": "Général",
       "sources": "Sources",
-      "env": "Environnements"
+      "env": "Environnements",
+      "tickets": "Tickets",
+      "trackers": "Trackers"
     },
     "desc": {
       "general": "Collecte et seuils",
       "sources": "GitHub et GitLab",
-      "env": "Règles de classification"
+      "env": "Règles de classification",
+      "tickets": "Rattachement PR → ticket",
+      "trackers": "Jira, Linear, issues"
     },
     "env": {
       "noSource": "Ajoutez une source pour définir des règles d'environnement."
@@ -136,7 +140,9 @@
       "unsupportedKind": "Type de source non supporté : {{kind}}",
       "missingToken": "Un token est requis.",
       "missingAppCredentials": "Les identifiants de la GitHub App sont requis.",
-      "appUnsupported": "L'authentification GitHub App n'est pas supportée par GitLab."
+      "appUnsupported": "L'authentification GitHub App n'est pas supportée par GitLab.",
+      "incidentTrackerNotAttached": "Le tracker d'incidents doit faire partie des trackers associés à la source.",
+      "incidentTrackerUnsupported": "Les incidents ne peuvent pas encore être lus depuis un tracker {{kind}}."
     },
     "envRule": {
       "notFound": "Règle introuvable.",
@@ -149,6 +155,13 @@
     },
     "dora": {
       "invalidRange": "Période invalide : la date de début ({{from}}) est postérieure à la date de fin ({{to}})."
+    },
+    "ticketRule": {
+      "notFound": "Règle de ticket introuvable.",
+      "invalidPattern": "Expression régulière invalide : {{pattern}}"
+    },
+    "tracker": {
+      "notFound": "Tracker introuvable."
     }
   },
   "empty": {
@@ -313,7 +326,76 @@
       "privateKey": "Clé privée (PEM)",
       "privateKeyHint": "(collez le contenu du .pem)",
       "submit": "Ajouter la source",
-      "submitting": "Enregistrement…"
+      "submitting": "Enregistrement…",
+      "trackers": "Trackers associés",
+      "trackersHint": "les PR de cette source pourront référencer leurs tickets",
+      "noTrackers": "Déclarez d'abord un tracker dans la section Trackers.",
+      "incidentTracker": "Incidents lus depuis",
+      "incidentTrackerHint": "parmi les trackers associés ; sans lui, aucun incident n'est collecté",
+      "noIncidentTracker": "Aucun"
     }
+  },
+  "ticketRules": {
+    "listTitle": "Règles de ticket",
+    "hint": "Extraites du nom de la branche puis du titre de la PR. La priorité la plus basse l'emporte quand deux règles revendiquent la même clé.",
+    "listEmpty": "Aucune règle pour l'instant.",
+    "addTitle": "Ajouter une règle",
+    "editTitle": "Modifier « {{name}} »",
+    "added": "Règle ajoutée.",
+    "updated": "Règle mise à jour.",
+    "deleted": "Règle supprimée.",
+    "deleteTitle": "Supprimer la règle",
+    "confirmDelete": "Supprimer la règle « {{name}} » ? Les PR qu'elle rattachait perdront leur ticket au prochain chargement.",
+    "testAll": "Tester le jeu de règles",
+    "source": {
+      "branch": "branche",
+      "title": "titre"
+    },
+    "form": {
+      "name": "Nom",
+      "pattern": "Pattern (RegEx)",
+      "patternHint": "le groupe nommé (?<key>…) donne la clé ; à défaut, le match entier",
+      "tracker": "Tracker",
+      "priority": "Priorité",
+      "priorityHint": "le plus petit gagne quand deux règles revendiquent la même clé",
+      "submit": "Ajouter la règle",
+      "trackerHint": "seuls les trackers rattachés à cette source"
+    },
+    "preview": {
+      "title": "Tester l'extraction",
+      "hint": "Passe une branche et un titre au jeu de règles enregistré. Indispensable pour repérer un pattern trop large : [A-Z]{2,}-\\\\d+ attrape aussi UTF-8.",
+      "branch": "Nom de branche",
+      "prTitle": "Titre de PR",
+      "run": "Extraire",
+      "found": "Tickets trouvés",
+      "none": "aucun",
+      "repo": "Repo",
+      "repoHint": "requis pour les liens GitHub et GitLab",
+      "noUrl": "pas de lien"
+    },
+    "noTracker": "Déclarez d'abord un tracker et rattachez-le à cette source."
+  },
+  "trackers": {
+    "listTitle": "Trackers de tickets",
+    "hint": "Déclarés une fois, puis associés depuis chaque source. L'URL de base vit ici et non sur chaque règle : changer d'instance est une seule modification.",
+    "listEmpty": "Aucun tracker pour l'instant.",
+    "addTitle": "Ajouter un tracker",
+    "editTitle": "Modifier « {{name}} »",
+    "added": "Tracker ajouté.",
+    "updated": "Tracker mis à jour.",
+    "deleted": "Tracker supprimé.",
+    "deleteTitle": "Supprimer le tracker",
+    "confirmDelete": "Supprimer « {{name}} » ? Les règles de ticket qui le désignent seront supprimées avec lui.",
+    "noSource": "aucune source",
+    "form": {
+      "name": "Nom",
+      "kind": "Type",
+      "baseUrl": "URL de base",
+      "urlTemplate": "Modèle de lien (optionnel)",
+      "urlTemplateHint": "vide = déduit du type ; {key}, et {owner}/{repo} pour GitHub et GitLab",
+      "submit": "Ajouter le tracker",
+      "sources": "Sources"
+    },
+    "incidentsBadge": "incidents"
   }
 }

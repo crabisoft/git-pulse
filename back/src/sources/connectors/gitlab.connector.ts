@@ -78,11 +78,14 @@ export class GitLabConnector implements SourceConnector {
           repo,
           repoUrl: this.repoUrl(ctx, repo),
           url: mr.web_url as string,
+          headRef: (mr.source_branch as string | undefined) ?? '',
           createdAt,
           updatedAt: mr.updated_at as string,
           mergedAt: (mr.merged_at as string) ?? null,
           reviewers: Array.isArray(mr.reviewers) ? mr.reviewers.length : 0,
           ageHours: ageHours(createdAt),
+          // Filled by the service, which owns the rules.
+          tickets: [],
         });
       }
     }
@@ -158,7 +161,9 @@ export class GitLabConnector implements SourceConnector {
           id: `gl:${repo}:${mr.iid}`,
           repo,
           number: mr.iid as number,
+          title: mr.title as string,
           url: mr.web_url as string,
+          headRef: (mr.source_branch as string | undefined) ?? '',
           openedAt: mr.created_at as string,
           firstCommitAt: await this.firstCommitAt(gl, repo, mr.iid as number),
           // GitLab has no GitHub-style reviews; pickup/review are not derived.

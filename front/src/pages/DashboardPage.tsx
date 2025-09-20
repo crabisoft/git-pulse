@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { DashboardEnvironment, DashboardLive, PipelineStatus } from '@repo/shared';
+import type { DashboardEnvironment, DashboardLive, PipelineStatus, TicketRef } from '@repo/shared';
 import { api, type DashboardLiveQuery, type PageQuery } from '../api';
 import { FILTER_DEBOUNCE_MS, useCancellableLoad, useDebounced } from '../hooks';
 import { RepoFilter } from '../RepoFilter';
@@ -181,6 +181,13 @@ export function DashboardPage({
                           <a href={pr.url} target="_blank" rel="noreferrer">
                             #{pr.number} {pr.title}
                           </a>
+                          {pr.tickets.length > 0 && (
+                            <div className="pills ticket-refs">
+                              {pr.tickets.map((ref) => (
+                                <TicketPill key={`${ref.tracker}:${ref.key}`} ticket={ref} />
+                              ))}
+                            </div>
+                          )}
                         </td>
                         <td>{pr.author}</td>
                         <td className="num">{pr.ageHours}</td>
@@ -247,6 +254,22 @@ export function DashboardPage({
   );
 }
 
+
+/** A referenced ticket, linked when its rule defines a URL template. */
+function TicketPill({ ticket }: { ticket: TicketRef }) {
+  const label = (
+    <>
+      <b>{ticket.tracker.name}</b> {ticket.key}
+    </>
+  );
+  return ticket.url ? (
+    <a className="pill attr" href={ticket.url} target="_blank" rel="noreferrer">
+      {label}
+    </a>
+  ) : (
+    <span className="pill attr">{label}</span>
+  );
+}
 
 /** Attributes and meta-environments of an environment, or a hint when no rule matched. */
 function Classification({ env }: { env: DashboardEnvironment }) {

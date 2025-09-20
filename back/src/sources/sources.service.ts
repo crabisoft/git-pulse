@@ -1,11 +1,13 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
-import type {
-  AuthKind,
-  ScopeRules,
-  SourceKind,
-  SourcePublic,
-  ConnectionTestResult,
-  Page,
+import {
+  INCIDENT_TRACKER_KINDS,
+  type AuthKind,
+  type ScopeRules,
+  type SourceKind,
+  type SourcePublic,
+  type ConnectionTestResult,
+  type Page,
+  type TrackerKind,
 } from '@repo/shared';
 import { CodedException } from '../common/coded-exception';
 import { toPage, type PageWindow } from '../common/pagination';
@@ -25,9 +27,12 @@ export class SourcesService {
   ) {}
 
   async create(dto: CreateSourceDto): Promise<SourcePublic> {
+    await this.assertTrackers(dto.trackerIds, dto.incidentTrackerId);
     const enc = this.crypto.encrypt(credentialPlaintext(dto));
     const source = await this.prisma.source.create({
+      include: WITH_TRACKERS,
       data: {
+        trackers: { create: toBindings(dto.trackerIds, dto.incidentTrackerId) },
         name: dto.name,
         slug: await this.uniqueSlug(dto.name),
         kind: dto.kind,
@@ -53,6 +58,7 @@ export class SourcesService {
         orderBy: { createdAt: 'asc' },
         skip: window.offset,
         take: window.limit,
+        include: WITH_TRACKERS,
       }),
       this.prisma.source.count(),
     ]);
@@ -78,6 +84,35 @@ export class SourcesService {
     }
   }
 
+  /**
+   * The incident tracker has to be one of the attached ones, and of a kind a
+   * provider exists for — refused here rather than blowing up mid-collection,
+   * where the user would only see an empty metric.
+   */
+  private async assertTrackers(
+    trackerIds: string[] | undefined,
+    incidentTrackerId: string | null | undefined,
+  ): Promise<void> {
+    if (!incidentTrackerId) return;
+    if (trackerIds && !trackerIds.includes(incidentTrackerId)) {
+      throw new CodedException('errors.source.incidentTrackerNotAttached', HttpStatus.BAD_REQUEST);
+    }
+    const tracker = await this.prisma.tracker.findUnique({
+      where: { id: incidentTrackerId },
+      select: { kind: true },
+    });
+    if (!tracker) {
+      throw new CodedException('errors.tracker.notFound', HttpStatus.NOT_FOUND, {
+        id: incidentTrackerId,
+      });
+    }
+    if (!INCIDENT_TRACKER_KINDS.includes(tracker.kind as TrackerKind)) {
+      throw new CodedException('errors.source.incidentTrackerUnsupported', HttpStatus.BAD_REQUEST, {
+        kind: tracker.kind,
+      });
+    }
+  }
+
   /** Every source id, for internal fan-out — deliberately not paginated. */
   async listIds(): Promise<string[]> {
     const rows = await this.prisma.source.findMany({
@@ -88,7 +123,7 @@ export class SourcesService {
   }
 
   async findOne(id: string): Promise<SourcePublic> {
-    const source = await this.prisma.source.findUnique({ where: { id } });
+    const source = await this.prisma.source.findUnique({ where: { id }, include: WITH_TRACKERS });
     if (!source) throw new CodedException('errors.source.notFound', HttpStatus.NOT_FOUND, { id });
     return toPublic(source);
   }
@@ -112,10 +147,22 @@ export class SourcesService {
         ? this.crypto.encrypt(credentialPlaintext({ authKind, secret: dto.secret, app: dto.app }))
         : null;
 
+    await this.assertTrackers(dto.trackerIds, dto.incidentTrackerId);
     const renamed = dto.name !== undefined && dto.name !== current.name;
     const source = await this.prisma.source.update({
       where: { id },
+      include: WITH_TRACKERS,
       data: {
+        // Replaced wholesale: the form always posts the full set, and a diff
+        // would only add ways for the two to drift apart.
+        ...(dto.trackerIds
+          ? {
+              trackers: {
+                deleteMany: {},
+                create: toBindings(dto.trackerIds, dto.incidentTrackerId),
+              },
+            }
+          : {}),
         name: dto.name,
         // The slug mirrors the name, so a rename invalidates older links.
         slug: renamed ? await this.uniqueSlug(dto.name!, id) : undefined,
@@ -192,6 +239,19 @@ export class SourcesService {
   }
 }
 
+/** Bindings come along with every source read, so toPublic always has them. */
+const WITH_TRACKERS = {
+  trackers: { select: { trackerId: true, incidents: true } },
+} as const;
+
+/** At most one incident tracker: the single-select makes it unrepresentable. */
+function toBindings(trackerIds: string[] | undefined, incidentTrackerId: string | null | undefined) {
+  return (trackerIds ?? []).map((trackerId) => ({
+    trackerId,
+    incidents: trackerId === incidentTrackerId,
+  }));
+}
+
 /**
  * URL-safe form of a name: accents dropped, lowercased, every run of other
  * characters collapsed to a single dash. Falls back to `source` for a name made
@@ -250,6 +310,7 @@ function toPublic(s: {
   scope: unknown;
   createdAt: Date;
   updatedAt: Date;
+  trackers: Array<{ trackerId: string; incidents: boolean }>;
 }): SourcePublic {
   return {
     id: s.id,
@@ -259,6 +320,8 @@ function toPublic(s: {
     baseUrl: s.baseUrl,
     authKind: s.authKind as SourcePublic['authKind'],
     scope: s.scope as ScopeRules,
+    trackerIds: s.trackers.map((b) => b.trackerId),
+    incidentTrackerId: s.trackers.find((b) => b.incidents)?.trackerId ?? null,
     createdAt: s.createdAt.toISOString(),
     updatedAt: s.updatedAt.toISOString(),
   };

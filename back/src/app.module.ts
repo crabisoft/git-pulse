@@ -6,6 +6,8 @@ import { CryptoModule } from './crypto/crypto.module';
 import { SourcesModule } from './sources/sources.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { EnvRulesModule } from './env-rules/env-rules.module';
+import { TrackersModule } from './trackers/trackers.module';
+import { TicketRulesModule } from './ticket-rules/ticket-rules.module';
 import { DoraModule } from './dora/dora.module';
 import { CollectionModule } from './collection/collection.module';
 
@@ -18,6 +20,8 @@ import { CollectionModule } from './collection/collection.module';
     SourcesModule,
     DashboardModule,
     EnvRulesModule,
+    TrackersModule,
+    TicketRulesModule,
     DoraModule,
     CollectionModule,
   ],

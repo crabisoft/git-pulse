@@ -33,9 +33,11 @@ model Source {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
-  credential Credential?
-  envRules   EnvRule[]
-  snapshots  MetricSnapshot[]
+  credential  Credential?
+  envRules    EnvRule[]
+  trackers    SourceTracker[]
+  ticketRules TicketRule[]
+  snapshots   MetricSnapshot[]
 }
 
 /// Access secret for a source, encrypted at rest (AES-256-GCM envelope).
@@ -83,6 +85,72 @@ model EnvRule {
   updatedAt  DateTime    @updatedAt
 
   @@index([sourceId, target, priority])
+}
+
+enum TrackerKind {
+  jira
+  linear
+  github
+  gitlab
+}
+
+/// An issue tracker, declared once and attached to the sources it serves.
+/// Git-hosted kinds (github, gitlab) read issues with the Git source's own
+/// credentials; standalone ones (jira, linear) carry their own.
+model Tracker {
+  id        String      @id @default(uuid())
+  name      String
+  /// URL-safe form of the name, used by the frontend routes.
+  slug      String      @unique
+  kind      TrackerKind
+  baseUrl   String
+  /// Overrides the link shape derived from `kind`. `{key}` is always
+  /// substituted; `{owner}` and `{repo}` only make sense for git-hosted kinds,
+  /// which resolve them per pull request.
+  urlTemplate String?
+  /// Kind-specific settings: Jira project keys or JQL, Linear team, ...
+  config      Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  sources     SourceTracker[]
+  ticketRules TicketRule[]
+}
+
+/// Which trackers a source uses. Ticket rules already imply the link, but
+/// incidents need it stated: "where do this source's incidents come from" is
+/// not a question a ticket rule can answer.
+model SourceTracker {
+  source    Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId  String
+  tracker   Tracker  @relation(fields: [trackerId], references: [id], onDelete: Cascade)
+  trackerId String
+  /// This tracker is where the source's incidents are read from.
+  incidents Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@id([sourceId, trackerId])
+  @@index([trackerId])
+}
+
+/// RegEx extracting ticket references from a branch name or a PR title.
+/// Separate from EnvRule: it yields references, not attributes, and points at
+/// the tracker the reference belongs to.
+model TicketRule {
+  id        String   @id @default(uuid())
+  source    Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId  String
+  tracker   Tracker  @relation(fields: [trackerId], references: [id], onDelete: Cascade)
+  trackerId String
+  name      String
+  pattern   String
+  /// Client-defined priority (lower wins when two rules claim the same key).
+  priority  Int      @default(100)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sourceId, priority])
+  @@index([trackerId])
 }
 
 /// Application-wide setting, editable from the UI. A missing key falls back to

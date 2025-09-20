@@ -70,4 +70,15 @@ export class CreateSourceDto {
   @ValidateNested()
   @Type(() => ScopeDto)
   scope!: ScopeDto;
+
+  /** Trackers this source's pull requests may reference. Replaces the set. */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  trackerIds?: string[];
+
+  /** Must be one of `trackerIds`, and of a kind an incident provider exists for. */
+  @IsOptional()
+  @IsString()
+  incidentTrackerId?: string | null;
 }

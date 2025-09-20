@@ -17,6 +17,8 @@ import { SourcesService } from '../sources/sources.service';
 import { ConnectorFactory } from '../sources/connectors/connector.factory';
 import { EnvRulesService } from '../env-rules/env-rules.service';
 import { IncidentProviderFactory } from '../incidents/incident-provider.factory';
+import { TrackersService } from '../trackers/trackers.service';
+import { TicketRulesService } from '../ticket-rules/ticket-rules.service';
 import { SettingsService } from '../settings/settings.service';
 import {
   deploymentFrequency,
@@ -57,7 +59,9 @@ export class DoraService {
     private readonly sources: SourcesService,
     private readonly connectors: ConnectorFactory,
     private readonly incidents: IncidentProviderFactory,
+    private readonly trackers: TrackersService,
     private readonly envRules: EnvRulesService,
+    private readonly ticketRules: TicketRulesService,
     private readonly settings: SettingsService,
   ) {}
 
@@ -104,6 +108,16 @@ export class DoraService {
     const repos = filterRepos(allRepos, query.repos);
 
     const { failureSource, incidentLabels } = await this.settings.get();
+    // Which tracker the incidents come from is a property of the source, not of
+    // its Git platform: a GitHub org may well file its incidents elsewhere.
+    const incidentTracker =
+      failureSource === 'pipelines' ? null : await this.trackers.incidentTrackerFor(sourceId);
+    if (failureSource !== 'pipelines' && !incidentTracker) {
+      this.logger.warn(
+        `Aucun tracker d'incidents désigné pour ${sourceId} : le taux d'échec et le MTTR ` +
+          `ne compteront que les pipelines.`,
+      );
+    }
 
     // Best-effort: a missing permission on one endpoint yields partial metrics
     // rather than failing the whole computation — except for a cancellation,
@@ -121,10 +135,10 @@ export class DoraService {
       }),
       // Not fetched at all while failures come from pipelines only: the issues
       // endpoint costs one call per label and per repo.
-      failureSource === 'pipelines'
+      !incidentTracker
         ? Promise.resolve([] as Incident[])
         : this.incidents
-            .for(kind)
+            .for(incidentTracker.kind)
             .listIncidents({ access: ctx, repos, labels: incidentLabels }, period)
             .catch((e) => {
               throwIfAborted(signal);
@@ -135,7 +149,7 @@ export class DoraService {
 
     const [deploymentEvents, prEvents, incidentEvents] = await Promise.all([
       this.toDeploymentEvents(sourceId, deployments, period),
-      this.toMergedPrEvents(sourceId, mergedPrs, period),
+      this.toMergedPrEvents(sourceId, ctx.scope.owner, mergedPrs, period),
       this.toIncidentEvents(sourceId, incidents, period),
     ]);
 
@@ -236,18 +250,22 @@ export class DoraService {
    */
   private async toMergedPrEvents(
     sourceId: string,
+    owner: string,
     prs: MergedPullRequest[],
     period: ResolvedRange,
   ): Promise<MergedPrEvent[]> {
     // The connector already filtered on `from`; only the upper bound is left.
     const inWindow = prs.filter((p) => within(p.mergedAt, period));
-    const dimensionsByRepo = await this.dimensionsFor(
-      sourceId,
-      inWindow.map((p) => p.repo),
-      'repository',
-    );
+    const [dimensionsByRepo, tickets] = await Promise.all([
+      this.dimensionsFor(sourceId, inWindow.map((p) => p.repo), 'repository'),
+      this.ticketRules.extractMany(
+        sourceId,
+        inWindow.map((p) => ({ branch: p.headRef, title: p.title })),
+        inWindow.map((p) => ({ owner, repo: p.repo })),
+      ),
+    ]);
 
-    return inWindow.map((p) => ({
+    return inWindow.map((p, i) => ({
       repo: p.repo,
       number: p.number,
       url: p.url,
@@ -255,6 +273,7 @@ export class DoraService {
       openedAt: p.openedAt,
       firstReviewAt: p.firstReviewAt,
       mergedAt: p.mergedAt,
+      tickets: tickets[i],
       dimensions: dimensionsByRepo.get(p.repo) ?? {},
     }));
   }
