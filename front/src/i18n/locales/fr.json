@@ -48,7 +48,8 @@
       },
       "incidentLabels": "Labels d'incident",
       "incidentLabelsHint": "séparés par des virgules ; une issue portant l'un d'eux est un incident"
-    }
+    },
+    "scope": "Source"
   },
   "envRules": {
     "listTitle": "Règles d'environnement",

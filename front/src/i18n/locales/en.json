@@ -48,7 +48,8 @@
       },
       "incidentLabels": "Incident labels",
       "incidentLabelsHint": "comma separated; an issue carrying one of them is an incident"
-    }
+    },
+    "scope": "Source"
   },
   "envRules": {
     "listTitle": "Environment rules",

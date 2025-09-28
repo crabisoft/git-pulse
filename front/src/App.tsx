@@ -27,14 +27,14 @@ const SOURCE_SETTINGS: Array<{ section: SettingsSection; base: string }> = [
 ];
 
 /**
- * Routes whose path carries a source slug. Switching source in the picker keeps
- * you on the page you were reading, so the pattern is needed as well as the slug.
+ * Routes the topbar picker drives. Switching source keeps you on the page you
+ * were reading, so the pattern is needed as well as the slug.
+ *
+ * Settings routes are deliberately absent even though two of them carry a slug:
+ * settings is an application-wide module, and a section needing a source picks
+ * it itself. Two selectors for one value is one too many.
  */
-const SOURCE_ROUTES = [
-  '/dashboard/:slug',
-  '/dora/:slug',
-  ...SOURCE_SETTINGS.map(({ base }) => `${base}/:slug`),
-];
+const SOURCE_ROUTES = ['/dashboard/:slug', '/dora/:slug'];
 
 /** The source slug the current URL points at, or null on the source-less pages. */
 function useRouteSlug(): { pattern: string; slug: string } | null {
@@ -131,7 +131,8 @@ export function App() {
         </nav>
 
         <div className="topbar-right">
-          {sources.length > 0 && (
+          {/* Nothing under Settings reads it: each section owns its own scope. */}
+          {module !== 'settings' && sources.length > 0 && (
             <select
               className="source-picker"
               value={activeSource?.slug ?? ''}
@@ -194,7 +195,7 @@ export function App() {
                 <SettingsPage
                   section={section}
                   sources={sources}
-                  selectedSource={activeSource}
+                  selectedSource={null}
                   settings={settings}
                   onSourcesChange={refresh}
                   onSettingsChange={setSettings}

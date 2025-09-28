@@ -67,6 +67,15 @@ and by Vite in dev.
 the first source; `/settings` to `/settings/general`; everything else to the
 dashboard.
 
+**Settings is an application-wide module.** The topbar source picker drives the
+reading pages only, and is hidden under Settings. The two sections that need a
+source — classification rules and ticket rules — carry it in their own URL and
+pick it through their own selector, shown in the section head. Two controls over
+one value would be one too many, and it keeps the two scopes independent:
+changing source under Settings does not move the dashboard, and the reverse
+holds. Moving between the two source-bound sections carries the current source
+across, so the scope is never silently reset.
+
 The source segment is the **slug** (`Source.slug`), a URL-safe and unique form
 of the name: `SISMIC — Prod` gives `/dashboard/sismic-prod`. Two sources with
 the same name are disambiguated by a suffix (`prod`, `prod-2`). The API itself
