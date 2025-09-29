@@ -16,11 +16,10 @@ import type { UpdateTicketRuleDto } from './dto/update-ticket-rule.dto';
 export class TicketRulesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(sourceId: string, dto: CreateTicketRuleDto): Promise<TicketRulePublic> {
+  async create(dto: CreateTicketRuleDto): Promise<TicketRulePublic> {
     assertValidPattern(dto.pattern);
     const rule = await this.prisma.ticketRule.create({
       data: {
-        sourceId,
         trackerId: dto.trackerId,
         name: dto.name,
         pattern: dto.pattern,
@@ -30,15 +29,15 @@ export class TicketRulesService {
     return toPublic(rule);
   }
 
-  async findBySource(sourceId: string, window: PageWindow): Promise<Page<TicketRulePublic>> {
+  /** Every rule; each names the tracker it belongs to. */
+  async findAll(window: PageWindow): Promise<Page<TicketRulePublic>> {
     const [rules, total] = await this.prisma.$transaction([
       this.prisma.ticketRule.findMany({
-        where: { sourceId },
         orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
         skip: window.offset,
         take: window.limit,
       }),
-      this.prisma.ticketRule.count({ where: { sourceId } }),
+      this.prisma.ticketRule.count(),
     ]);
     return toPage(rules.map(toPublic), total, window);
   }
@@ -68,27 +67,25 @@ export class TicketRulesService {
   }
 
   /**
-   * Runs the saved rules over a sample, for the rule tester. The owner comes
-   * from the source's own scope, so a preview links exactly like the real thing.
+   * Runs every saved rule over a sample, for the rule tester. Owner and repo are
+   * supplied by the caller rather than read from a source: rules belong to no
+   * source, and a git-hosted link needs both to resolve.
    */
-  async preview(
-    sourceId: string,
-    sample: { branch?: string; title?: string; repo?: string },
-  ): Promise<TicketRef[]> {
-    const source = await this.prisma.source.findUnique({
-      where: { id: sourceId },
-      select: { scope: true },
+  async preview(sample: {
+    branch?: string;
+    title?: string;
+    owner?: string;
+    repo?: string;
+  }): Promise<TicketRef[]> {
+    const rules = await this.prisma.ticketRule.findMany({
+      orderBy: { priority: 'asc' },
+      include: { tracker: true },
     });
-    if (!source) {
-      throw new CodedException('errors.source.notFound', HttpStatus.NOT_FOUND, { id: sourceId });
-    }
-    const owner = (source.scope as { owner?: string } | null)?.owner ?? '';
-    const [refs] = await this.extractMany(
-      sourceId,
-      [{ branch: sample.branch ?? '', title: sample.title ?? '' }],
-      sample.repo ? [{ owner, repo: sample.repo }] : [],
+    return extractTickets(
+      { branch: sample.branch ?? '', title: sample.title ?? '' },
+      rules.map(toRuleLike),
+      sample.repo ? { owner: sample.owner ?? '', repo: sample.repo } : undefined,
     );
-    return refs ?? [];
   }
 
   /**
@@ -106,7 +103,9 @@ export class TicketRulesService {
   ): Promise<TicketRef[][]> {
     if (texts.length === 0) return [];
     const rules = await this.prisma.ticketRule.findMany({
-      where: { sourceId },
+      // A rule reaches a source through its tracker: attaching the tracker is
+      // what makes its patterns apply.
+      where: { tracker: { sources: { some: { sourceId } } } },
       orderBy: { priority: 'asc' },
       include: { tracker: true },
     });
@@ -148,7 +147,6 @@ export function toRuleLike(r: {
 
 function toPublic(r: {
   id: string;
-  sourceId: string;
   trackerId: string;
   name: string;
   pattern: string;
@@ -158,7 +156,6 @@ function toPublic(r: {
 }): TicketRulePublic {
   return {
     id: r.id,
-    sourceId: r.sourceId,
     trackerId: r.trackerId,
     name: r.name,
     pattern: r.pattern,

@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import {
   INCIDENT_TRACKER_KINDS,
   PAGE_LIMIT_MAX,
+  type EnvRulePublic,
+  type RuleTarget,
   type SourcePublic,
   type ConnectionTestResult,
   type PageInfo,
@@ -30,6 +32,8 @@ interface FormState {
   appId: string;
   privateKey: string;
   installationId: string;
+  /** Classification rules applied here, from the global catalogue. */
+  envRuleIds: string[];
   /** Trackers this source's pull requests may reference. */
   trackerIds: string[];
   /** One of `trackerIds`, or empty for "collect no incident". */
@@ -46,6 +50,7 @@ const EMPTY: FormState = {
   appId: '',
   privateKey: '',
   installationId: '',
+  envRuleIds: [],
   trackerIds: [],
   incidentTrackerId: '',
 };
@@ -57,6 +62,7 @@ function toInput(form: FormState): CreateSourceInput {
     baseUrl: form.baseUrl,
     authKind: form.authKind,
     scope: { owner: form.owner },
+    envRuleIds: form.envRuleIds,
     trackerIds: form.trackerIds,
     // Empty means none; the API spells that null.
     incidentTrackerId: form.incidentTrackerId || null,
@@ -90,6 +96,7 @@ function toForm(source: SourcePublic): FormState {
     baseUrl: source.baseUrl,
     authKind: source.authKind,
     owner: source.scope.owner,
+    envRuleIds: source.envRuleIds,
     trackerIds: source.trackerIds,
     incidentTrackerId: source.incidentTrackerId ?? '',
   };
@@ -250,11 +257,26 @@ function SourceDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [trackers, setTrackers] = useState<TrackerPublic[]>([]);
+  const [envRules, setEnvRules] = useState<EnvRulePublic[]>([]);
 
   useEffect(() => {
     // Few by nature, and all of them are selectable here: ask for the cap.
     api.listTrackers({ limit: PAGE_LIMIT_MAX }).then(({ items }) => setTrackers(items), () => {});
+    // One request per target: the catalogue is listed one target at a time.
+    Promise.all(
+      (['environment', 'repository', 'incident'] as RuleTarget[]).map((target) =>
+        api.listEnvRules(target, { limit: PAGE_LIMIT_MAX }).then(({ items }) => items),
+      ),
+    ).then((perTarget) => setEnvRules(perTarget.flat()), () => {});
   }, []);
+
+  const toggleEnvRule = (id: string) =>
+    setForm((f) => ({
+      ...f,
+      envRuleIds: f.envRuleIds.includes(id)
+        ? f.envRuleIds.filter((r) => r !== id)
+        : [...f.envRuleIds, id],
+    }));
 
   const attached = trackers.filter((tracker) => form.trackerIds.includes(tracker.id));
   // Only a kind an incident provider exists for may be designated; the API
@@ -405,6 +427,59 @@ function SourceDialog({
             </label>
           </>
         )}
+
+        <fieldset className="source-trackers">
+          <legend>
+            {t('sources.form.envRules')}{' '}
+            <span className="hint">{t('sources.form.envRulesHint')}</span>
+          </legend>
+          {envRules.length === 0 ? (
+            <p className="muted">{t('sources.form.noEnvRules')}</p>
+          ) : (
+            <>
+              {/* A catalogue of dozens is the normal case, hence the shortcuts. */}
+              <div className="bulk-actions">
+                <button
+                  type="button"
+                  onClick={() => set('envRuleIds', envRules.map((r) => r.id))}
+                  disabled={form.envRuleIds.length === envRules.length}
+                >
+                  {t('sources.form.selectAll')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => set('envRuleIds', [])}
+                  disabled={form.envRuleIds.length === 0}
+                >
+                  {t('sources.form.selectNone')}
+                </button>
+                <span className="muted">
+                  {t('sources.form.selectedCount', {
+                    count: form.envRuleIds.length,
+                    total: envRules.length,
+                  })}
+                </span>
+              </div>
+              <div className="rule-checklist">
+                {envRules.map((rule) => (
+                  <label key={rule.id}>
+                    <input
+                      type="checkbox"
+                      checked={form.envRuleIds.includes(rule.id)}
+                      onChange={() => toggleEnvRule(rule.id)}
+                    />
+                    <span>
+                      {rule.name}{' '}
+                      <span className="muted">
+                        ({t(`envRules.target.${rule.target}.tab`)} · {rule.kind})
+                      </span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </>
+          )}
+        </fieldset>
 
         <fieldset className="source-trackers">
           <legend>

@@ -13,14 +13,15 @@ export class TicketRulesController {
     private readonly settings: SettingsService,
   ) {}
 
-  @Get('sources/:sourceId/ticket-rules')
-  async list(@Param('sourceId') sourceId: string, @Query() query: PaginationQueryDto) {
-    return this.ticketRules.findBySource(sourceId, toWindow(query, await this.settings.pageSize()));
+  /** Every rule; each names the tracker it belongs to. */
+  @Get('ticket-rules')
+  async list(@Query() query: PaginationQueryDto) {
+    return this.ticketRules.findAll(toWindow(query, await this.settings.pageSize()));
   }
 
-  @Post('sources/:sourceId/ticket-rules')
-  create(@Param('sourceId') sourceId: string, @Body() dto: CreateTicketRuleDto) {
-    return this.ticketRules.create(sourceId, dto);
+  @Post('ticket-rules')
+  create(@Body() dto: CreateTicketRuleDto) {
+    return this.ticketRules.create(dto);
   }
 
   @Patch('ticket-rules/:id')
@@ -34,10 +35,10 @@ export class TicketRulesController {
     return this.ticketRules.remove(id);
   }
 
-  /** Runs the source's saved rules over a sample branch and title. */
-  @Post('sources/:sourceId/ticket-rules/preview')
+  /** Runs every saved rule over a sample branch and title. */
+  @Post('ticket-rules/preview')
   @HttpCode(200)
-  preview(@Param('sourceId') sourceId: string, @Body() dto: PreviewTicketRulesDto) {
-    return this.ticketRules.preview(sourceId, dto);
+  preview(@Body() dto: PreviewTicketRulesDto) {
+    return this.ticketRules.preview(dto);
   }
 }

@@ -59,6 +59,8 @@ export interface SourcePublic {
   baseUrl: string;
   authKind: AuthKind;
   scope: ScopeRules;
+  /** Classification rules that apply to this source, from the global set. */
+  envRuleIds: string[];
   /** Trackers this source's pull requests may reference. */
   trackerIds: string[];
   /**
@@ -144,12 +146,14 @@ export type TicketSource = 'branch' | 'title';
 
 /**
  * A RegEx extracting ticket references from a branch name or a PR title. Kept
- * apart from EnvRule: it yields references rather than attributes, and points
- * at the tracker the reference belongs to.
+ * apart from EnvRule: it yields references rather than attributes.
+ *
+ * It belongs to a tracker and to nothing else — a key format is a property of
+ * the tracker. Which sources it applies to follows from the sources attached to
+ * that tracker.
  */
 export interface TicketRulePublic {
   id: string;
-  sourceId: string;
   trackerId: string;
   name: string;
   pattern: string;
@@ -254,10 +258,13 @@ export type EnvRuleKind = 'simple' | 'meta';
  */
 export type RuleTarget = 'environment' | 'repository' | 'incident';
 
-/** A RegEx-based classification rule. */
+/**
+ * A RegEx-based classification rule. Defined once for the whole install: a
+ * pattern describes a naming convention, which rarely stops at one repository
+ * host. Sources opt into the ones that apply to them.
+ */
 export interface EnvRulePublic {
   id: string;
-  sourceId: string;
   name: string;
   pattern: string;
   kind: EnvRuleKind;

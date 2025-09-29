@@ -48,6 +48,12 @@ export class UpdateSourceDto {
   @Type(() => ScopeDto)
   scope?: ScopeDto;
 
+  /** Classification rules that apply here, from the global set. Replaces it. */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  envRuleIds?: string[];
+
   /** Supplied means "these are the trackers now" — the set is replaced. */
   @IsOptional()
   @IsArray()

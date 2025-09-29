@@ -15,7 +15,7 @@ const FIRST_PAGE: PageQuery = {};
 
 const TARGETS: RuleTarget[] = ['environment', 'repository', 'incident'];
 
-export function EnvRulesPage({ sourceId }: { sourceId: string }) {
+export function EnvRulesPage() {
   const { t } = useTranslation();
   // Rules are edited one target at a time: environment names on one side, repo
   // names on the other. They never mix, so the tab drives every request — and
@@ -38,24 +38,24 @@ export function EnvRulesPage({ sourceId }: { sourceId: string }) {
 
   const load = useCallback(async () => {
     try {
-      const result = await api.listEnvRules(sourceId, target, page);
+      const result = await api.listEnvRules(target, page);
       setRules(result.items);
       setPageInfo(result.page);
     } catch (err) {
       const { code, params } = apiErrorInfo(err);
       setMsg({ kind: 'err', text: t(code, params) });
     }
-  }, [sourceId, target, page, t]);
+  }, [target, page, t]);
 
   useEffect(() => {
     void load();
     setMsg(null);
   }, [load]);
 
-  // Back to the first page when switching source or target.
+  // Back to the first page when switching target.
   useEffect(() => {
     setPage(FIRST_PAGE);
-  }, [sourceId, target]);
+  }, [target]);
 
   async function remove(rule: EnvRulePublic) {
     setDeleting(null);
@@ -104,7 +104,9 @@ export function EnvRulesPage({ sourceId }: { sourceId: string }) {
             </button>
           ))}
         </div>
-        <p className="muted subtabs-hint">{t(`envRules.target.${target}.hint`)}</p>
+        <p className="muted subtabs-hint">
+          {t('envRules.catalogueHint')} {t(`envRules.target.${target}.hint`)}
+        </p>
 
         {msg && <div className={`banner ${msg.kind === 'ok' ? 'ok' : 'error'}`}>{msg.text}</div>}
         {rules.length === 0 && <p className="muted">{t('envRules.listEmpty')}</p>}
@@ -143,7 +145,6 @@ export function EnvRulesPage({ sourceId }: { sourceId: string }) {
 
       {editing && (
         <EnvRuleDialog
-          sourceId={sourceId}
           target={target}
           rule={editing.rule}
           onClose={() => setEditing(null)}
@@ -152,12 +153,7 @@ export function EnvRulesPage({ sourceId }: { sourceId: string }) {
       )}
 
       {testing && (
-        <EnvRuleTestDialog
-          sourceId={sourceId}
-          target={target}
-          rule={testing.rule}
-          onClose={() => setTesting(null)}
-        />
+        <EnvRuleTestDialog target={target} rule={testing.rule} rules={rules} onClose={() => setTesting(null)} />
       )}
 
       {deleting && (
@@ -180,13 +176,11 @@ function isTarget(value: string | null): value is RuleTarget {
 
 /** Create/edit form, in a modal. `rule` null means creation. */
 function EnvRuleDialog({
-  sourceId,
   target,
   rule,
   onClose,
   onSaved,
 }: {
-  sourceId: string;
   target: RuleTarget;
   rule: EnvRulePublic | null;
   onClose: () => void;
@@ -211,7 +205,7 @@ function EnvRuleDialog({
     setError(null);
     try {
       if (rule) await api.updateEnvRule(rule.id, form);
-      else await api.createEnvRule(sourceId, form);
+      else await api.createEnvRule(form);
       await onSaved(!rule);
     } catch (err) {
       const { code, params } = apiErrorInfo(err);
@@ -284,14 +278,15 @@ function EnvRuleDialog({
  * rule of the source.
  */
 function EnvRuleTestDialog({
-  sourceId,
   target,
   rule,
+  rules,
   onClose,
 }: {
-  sourceId: string;
   target: RuleTarget;
   rule: EnvRulePublic | null;
+  /** The listed catalogue, used when testing the whole set. */
+  rules: EnvRulePublic[];
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -303,12 +298,19 @@ function EnvRuleTestDialog({
     e.preventDefault();
     setError(null);
     try {
+      // Stateless in both cases now: the catalogue belongs to no source, so
+      // there is none to classify against.
+      const tested = rule ? [rule] : rules;
       setResult(
-        rule
-          ? await api.previewEnvRules(sample, [
-              { name: rule.name, pattern: rule.pattern, kind: rule.kind, priority: rule.priority },
-            ])
-          : await api.classifyEnv(sourceId, sample, target),
+        await api.previewEnvRules(
+          sample,
+          tested.map((r) => ({
+            name: r.name,
+            pattern: r.pattern,
+            kind: r.kind,
+            priority: r.priority,
+          })),
+        ),
       );
     } catch (err) {
       const { code, params } = apiErrorInfo(err);

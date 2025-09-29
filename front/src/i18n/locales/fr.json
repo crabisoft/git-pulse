@@ -23,9 +23,6 @@
       "tickets": "Rattachement PR → ticket",
       "trackers": "Jira, Linear, issues"
     },
-    "env": {
-      "noSource": "Ajoutez une source pour définir des règles d'environnement."
-    },
     "general": {
       "appTitle": "Application",
       "uiTitle": "Interface",
@@ -48,8 +45,7 @@
       },
       "incidentLabels": "Labels d'incident",
       "incidentLabelsHint": "séparés par des virgules ; une issue portant l'un d'eux est un incident"
-    },
-    "scope": "Source"
+    }
   },
   "envRules": {
     "listTitle": "Règles d'environnement",
@@ -104,7 +100,8 @@
       "attributes": "Attributs",
       "metaEnvironments": "Méta-environnements",
       "none": "aucun"
-    }
+    },
+    "catalogueHint": "Définies une fois pour toute l'installation, puis activées source par source depuis le formulaire de source. Un pattern décrit une convention de nommage, qui s'arrête rarement à un seul hébergeur."
   },
   "language": {
     "label": "Langue"
@@ -333,12 +330,18 @@
       "noTrackers": "Déclarez d'abord un tracker dans la section Trackers.",
       "incidentTracker": "Incidents lus depuis",
       "incidentTrackerHint": "parmi les trackers associés ; sans lui, aucun incident n'est collecté",
-      "noIncidentTracker": "Aucun"
+      "noIncidentTracker": "Aucun",
+      "envRules": "Règles applicables",
+      "envRulesHint": "parmi le catalogue global défini dans la section Environnements",
+      "noEnvRules": "Aucune règle définie pour l'instant.",
+      "selectAll": "Tout sélectionner",
+      "selectNone": "Aucune",
+      "selectedCount": "{{count}} sur {{total}}"
     }
   },
   "ticketRules": {
     "listTitle": "Règles de ticket",
-    "hint": "Extraites du nom de la branche puis du titre de la PR. La priorité la plus basse l'emporte quand deux règles revendiquent la même clé.",
+    "hint": "Extraites du nom de la branche puis du titre de la PR. Une règle appartient à son tracker : elle s'applique partout où ce tracker est rattaché.",
     "listEmpty": "Aucune règle pour l'instant.",
     "addTitle": "Ajouter une règle",
     "editTitle": "Modifier « {{name}} »",
@@ -360,7 +363,7 @@
       "priority": "Priorité",
       "priorityHint": "le plus petit gagne quand deux règles revendiquent la même clé",
       "submit": "Ajouter la règle",
-      "trackerHint": "seuls les trackers rattachés à cette source"
+      "trackerHint": "le tracker auquel appartient cette règle"
     },
     "preview": {
       "title": "Tester l'extraction",
@@ -372,9 +375,10 @@
       "none": "aucun",
       "repo": "Repo",
       "repoHint": "requis pour les liens GitHub et GitLab",
-      "noUrl": "pas de lien"
+      "noUrl": "pas de lien",
+      "owner": "Org / groupe"
     },
-    "noTracker": "Déclarez d'abord un tracker et rattachez-le à cette source."
+    "noTracker": "Déclarez d'abord un tracker dans la section Trackers."
   },
   "trackers": {
     "listTitle": "Trackers de tickets",

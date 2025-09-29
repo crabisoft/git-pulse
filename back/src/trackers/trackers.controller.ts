@@ -17,12 +17,6 @@ export class TrackersController {
     return this.trackers.findAll(toWindow(query, await this.settings.pageSize()));
   }
 
-  /** Trackers attached to a source — what its ticket rules may point at. */
-  @Get('sources/:sourceId/trackers')
-  listForSource(@Param('sourceId') sourceId: string) {
-    return this.trackers.findBySource(sourceId);
-  }
-
   @Post('trackers')
   create(@Body() dto: CreateTrackerDto) {
     return this.trackers.create(dto);

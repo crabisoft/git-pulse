@@ -59,22 +59,19 @@ and by Vite in dev.
 | `/dora/:slug` | DORA metrics for a source |
 | `/settings/general` | Application settings |
 | `/settings/sources` | GitHub / GitLab sources |
-| `/settings/environments/:slug` | Classification rules (`?target=repository` for the repos tab) |
+| `/settings/environments` | Classification rules, global catalogue (`?target=repository` for the repos tab) |
 | `/settings/trackers` | Ticket trackers (Jira, Linear, issues) |
-| `/settings/tickets/:slug` | Ticket rules (PR → ticket linking) |
+| `/settings/tickets` | Ticket rules (PR → ticket linking) |
 
 `/`, `/dashboard`, `/dora` and the source-bound settings sections redirect to
 the first source; `/settings` to `/settings/general`; everything else to the
 dashboard.
 
-**Settings is an application-wide module.** The topbar source picker drives the
-reading pages only, and is hidden under Settings. The two sections that need a
-source — classification rules and ticket rules — carry it in their own URL and
-pick it through their own selector, shown in the section head. Two controls over
-one value would be one too many, and it keeps the two scopes independent:
-changing source under Settings does not move the dashboard, and the reverse
-holds. Moving between the two source-bound sections carries the current source
-across, so the scope is never silently reset.
+**Settings is an application-wide module**, and every section in it is global:
+classification rules are a shared catalogue, ticket rules belong to their
+tracker. Nothing there reads the topbar source picker, which is why it is hidden
+under Settings — what a given source uses is declared on the source itself, in
+the Sources section.
 
 The source segment is the **slug** (`Source.slug`), a URL-safe and unique form
 of the name: `SISMIC — Prod` gives `/dashboard/sismic-prod`. Two sources with
@@ -108,7 +105,12 @@ window.
 
 ## Classification rules
 
-A rule is a RegEx bound to a source. Two independent axes:
+A rule is a RegEx **defined once for the whole install**, then enabled source
+by source from the source form. A pattern describes a naming convention, and a
+convention rarely stops at one repository host — binding rules to a single
+source meant retyping them for the next one.
+
+Two independent axes:
 
 - **`kind`** — `simple` extracts attributes through named groups (`(?<app>…)`
   yields `app=…`); `meta` only tests membership and adds the **rule name** as a
@@ -127,9 +129,15 @@ accumulates the attributes of every label it carries; on conflict the first
 label wins, labels being sorted so the outcome does not depend on the tracker's
 ordering.
 
-`GET /api/sources/:id/env-rules?target=repository` lists one target at a time
-(`environment` by default). Patterns are tested **unanchored** — remember `^`
-and `$` if you want a match on the whole name.
+`GET /api/env-rules?target=repository` lists the catalogue one target at a time
+(`environment` by default). `POST /api/sources/:id/env-rules/classify` classifies
+against the rules that source opted into, which is what the collectors use.
+Patterns are tested **unanchored** — remember `^` and `$` if you want a match on
+the whole name.
+
+> A rule applies to nothing until a source selects it. `SourceEnvRule` carries
+> the selection, written from the source form — with select-all and clear
+> shortcuts, since a catalogue of dozens is the normal case.
 
 ## Ticket references
 
@@ -185,12 +193,15 @@ resolved the reference is returned without a URL, rather than with a hole in it.
 ### Rules
 
 `TicketRule` is kept apart from `EnvRule`: it yields references rather than
-attributes, and points at the tracker the reference belongs to.
+attributes. It belongs to a **tracker** and to nothing else — a key format is a
+property of the tracker, not of a repository host — so which sources it applies
+to follows from the sources attached to that tracker, and needs stating nowhere
+else.
 
 | Field | Role |
 |---|---|
 | `pattern` | the `(?<key>…)` named group yields the key; otherwise the whole match |
-| `trackerId` | which tracker the reference belongs to |
+| `trackerId` | the tracker the rule belongs to, and through which it reaches sources |
 | `priority` | lowest wins when two rules claim the same key |
 
 Matching is global: a PR referencing two tickets yields both. The same key found
@@ -200,8 +211,8 @@ before title — so the PR's main ticket comes first.
 
 > A loose pattern is the failure mode here: `[A-Z]{2,5}-\d+` also matches
 > `UTF-8`, `SHA-256` and `RFC-2119`. The rule tester in **Settings › Tickets**
-> exists for that — it runs the saved rules over a sample branch, title and
-> repo, and shows the URL each reference resolves to, which a pattern check
+> exists for that — it runs every saved rule over a sample branch, title, org
+> and repo, and shows the URL each reference resolves to, which a pattern check
 > alone cannot validate.
 
 References surface on the dashboard PR table and in the DORA lead-time samples.
@@ -448,13 +459,20 @@ npm run db:migrate -- --name add_table_x
 Other commands: `npm run db:deploy` (apply), `npm run db:studio` (Prisma data
 browser).
 
-**Rewritten migrations** — a migration already applied on a dev database, then
-rewritten before being released, leaves that database ahead of the migrations
-directory: `migrate deploy` then refuses, both because the objects already exist
-and because `_prisma_migrations` holds a row no directory matches. One-off SQL
-to undo it lives in `back/prisma/manual/`, to run by hand (`make psql`, then
-`\i <file>`) before deploying again. Those scripts are catch-up tools for
-already-played migrations, not part of the migration chain.
+**Rewritten migrations** — nothing is released yet, so a migration is amended
+in place rather than superseded by a corrective one. A dev database that already
+applied the previous version is then ahead of the files in two ways: its schema
+differs, and `_prisma_migrations` holds the old checksum, which makes
+`migrate deploy` refuse before it looks at anything else.
+
+Catch-up SQL goes under `back/prisma/manual/`, **git-ignored**: such a script is
+written for one developer's database state and would be replayed as part of the
+chain by nobody. Run it by hand (`make psql`, then `\i <file>`).
+
+It only covers the schema — re-recording an amended migration is left to
+`prisma migrate resolve --applied <name>`, which records it with the checksum
+Prisma computes itself instead of one written down by hand. `make db-reset`
+remains the alternative whenever the database holds nothing worth keeping.
 
 ## Roadmap
 

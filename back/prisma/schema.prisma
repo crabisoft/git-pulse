@@ -34,9 +34,8 @@ model Source {
   updatedAt DateTime   @updatedAt
 
   credential  Credential?
-  envRules    EnvRule[]
+  envRules    SourceEnvRule[]
   trackers    SourceTracker[]
-  ticketRules TicketRule[]
   snapshots   MetricSnapshot[]
 }
 
@@ -68,13 +67,13 @@ enum RuleTarget {
   incident
 }
 
-/// RegEx-based classification rule.
+/// RegEx-based classification rule, defined once for the whole install and
+/// applied to the sources that opt into it. Patterns describe naming
+/// conventions, which rarely stop at one repository host.
 /// simple: extracts attributes via named groups (type, client, ...).
 /// meta:   groups every name matching the pattern.
 model EnvRule {
   id         String      @id @default(uuid())
-  source     Source      @relation(fields: [sourceId], references: [id], onDelete: Cascade)
-  sourceId   String
   name       String
   pattern    String
   kind       EnvRuleKind
@@ -84,7 +83,22 @@ model EnvRule {
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 
-  @@index([sourceId, target, priority])
+  sources    SourceEnvRule[]
+
+  @@index([target, priority])
+}
+
+/// Which classification rules apply to a source. Written from the source, like
+/// SourceTracker: what a source uses is the question one actually answers.
+model SourceEnvRule {
+  source    Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId  String
+  rule      EnvRule  @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  ruleId    String
+  createdAt DateTime @default(now())
+
+  @@id([sourceId, ruleId])
+  @@index([ruleId])
 }
 
 enum TrackerKind {
@@ -134,12 +148,13 @@ model SourceTracker {
 }
 
 /// RegEx extracting ticket references from a branch name or a PR title.
-/// Separate from EnvRule: it yields references, not attributes, and points at
-/// the tracker the reference belongs to.
+/// Separate from EnvRule: it yields references, not attributes.
+///
+/// It belongs to a tracker and to nothing else — a key format is a property of
+/// the tracker, not of a repository host. Which sources it applies to follows
+/// from the sources attached to that tracker.
 model TicketRule {
   id        String   @id @default(uuid())
-  source    Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
-  sourceId  String
   tracker   Tracker  @relation(fields: [trackerId], references: [id], onDelete: Cascade)
   trackerId String
   name      String
@@ -149,8 +164,7 @@ model TicketRule {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@index([sourceId, priority])
-  @@index([trackerId])
+  @@index([trackerId, priority])
 }
 
 /// Application-wide setting, editable from the UI. A missing key falls back to

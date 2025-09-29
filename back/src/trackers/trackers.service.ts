@@ -44,16 +44,6 @@ export class TrackersService {
     return toPage(trackers.map(toPublic), total, window);
   }
 
-  /** Trackers attached to a source — what a ticket rule may point at. */
-  async findBySource(sourceId: string): Promise<TrackerPublic[]> {
-    const trackers = await this.prisma.tracker.findMany({
-      where: { sources: { some: { sourceId } } },
-      orderBy: { createdAt: 'asc' },
-      include: WITH_SOURCES,
-    });
-    return trackers.map(toPublic);
-  }
-
   /**
    * The tracker a source's incidents are read from, if any. Null means none —
    * and then nothing is collected, whatever `failureSource` says.

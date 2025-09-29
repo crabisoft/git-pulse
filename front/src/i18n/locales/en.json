@@ -23,9 +23,6 @@
       "tickets": "PR → ticket linking",
       "trackers": "Jira, Linear, issues"
     },
-    "env": {
-      "noSource": "Add a source to define environment rules."
-    },
     "general": {
       "appTitle": "Application",
       "uiTitle": "Interface",
@@ -48,8 +45,7 @@
       },
       "incidentLabels": "Incident labels",
       "incidentLabelsHint": "comma separated; an issue carrying one of them is an incident"
-    },
-    "scope": "Source"
+    }
   },
   "envRules": {
     "listTitle": "Environment rules",
@@ -104,7 +100,8 @@
       "attributes": "Attributes",
       "metaEnvironments": "Meta-environments",
       "none": "none"
-    }
+    },
+    "catalogueHint": "Defined once for the whole install, then enabled source by source from the source form. A pattern describes a naming convention, which rarely stops at one repository host."
   },
   "language": {
     "label": "Language"
@@ -333,12 +330,18 @@
       "noTrackers": "Declare a tracker first, in the Trackers section.",
       "incidentTracker": "Incidents read from",
       "incidentTrackerHint": "among the attached trackers; without one, no incident is collected",
-      "noIncidentTracker": "None"
+      "noIncidentTracker": "None",
+      "envRules": "Applicable rules",
+      "envRulesHint": "from the global catalogue defined in the Environments section",
+      "noEnvRules": "No rule defined yet.",
+      "selectAll": "Select all",
+      "selectNone": "None",
+      "selectedCount": "{{count}} of {{total}}"
     }
   },
   "ticketRules": {
     "listTitle": "Ticket rules",
-    "hint": "Extracted from the branch name, then the PR title. The lowest priority wins when two rules claim the same key.",
+    "hint": "Extracted from the branch name, then the PR title. A rule belongs to its tracker: it applies wherever that tracker is attached.",
     "listEmpty": "No rule yet.",
     "addTitle": "Add a rule",
     "editTitle": "Edit \"{{name}}\"",
@@ -360,7 +363,7 @@
       "priority": "Priority",
       "priorityHint": "lower wins when two rules claim the same key",
       "submit": "Add rule",
-      "trackerHint": "only trackers attached to this source"
+      "trackerHint": "the tracker this rule belongs to"
     },
     "preview": {
       "title": "Test extraction",
@@ -372,9 +375,10 @@
       "none": "none",
       "repo": "Repo",
       "repoHint": "required for GitHub and GitLab links",
-      "noUrl": "no link"
+      "noUrl": "no link",
+      "owner": "Org / group"
     },
-    "noTracker": "Declare a tracker first and attach it to this source."
+    "noTracker": "Declare a tracker first, in the Trackers section."
   },
   "trackers": {
     "listTitle": "Ticket trackers",

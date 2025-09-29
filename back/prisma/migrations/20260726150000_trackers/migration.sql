@@ -35,7 +35,6 @@ CREATE INDEX "SourceTracker_trackerId_idx" ON "SourceTracker"("trackerId");
 -- CreateTable
 CREATE TABLE "TicketRule" (
     "id" TEXT NOT NULL,
-    "sourceId" TEXT NOT NULL,
     "trackerId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "pattern" TEXT NOT NULL,
@@ -47,15 +46,13 @@ CREATE TABLE "TicketRule" (
 );
 
 -- CreateIndex
-CREATE INDEX "TicketRule_sourceId_priority_idx" ON "TicketRule"("sourceId", "priority");
-CREATE INDEX "TicketRule_trackerId_idx" ON "TicketRule"("trackerId");
+CREATE INDEX "TicketRule_trackerId_priority_idx" ON "TicketRule"("trackerId", "priority");
 
 -- AddForeignKey
 ALTER TABLE "SourceTracker" ADD CONSTRAINT "SourceTracker_sourceId_fkey"
     FOREIGN KEY ("sourceId") REFERENCES "Source"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "SourceTracker" ADD CONSTRAINT "SourceTracker_trackerId_fkey"
     FOREIGN KEY ("trackerId") REFERENCES "Tracker"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "TicketRule" ADD CONSTRAINT "TicketRule_sourceId_fkey"
-    FOREIGN KEY ("sourceId") REFERENCES "Source"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "TicketRule" ADD CONSTRAINT "TicketRule_trackerId_fkey"
     FOREIGN KEY ("trackerId") REFERENCES "Tracker"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+

@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { PageInfo, TicketRef, TicketRulePublic, TrackerPublic } from '@repo/shared';
+import {
+  PAGE_LIMIT_MAX,
+  type PageInfo,
+  type TicketRef,
+  type TicketRulePublic,
+  type TrackerPublic,
+} from '@repo/shared';
 import { api, apiErrorInfo, type CreateTicketRuleInput, type PageQuery } from '../api';
 import { DeleteIcon, EditIcon, PlusIcon } from '../icons';
 import { IconButton } from '../IconButton';
@@ -12,7 +18,7 @@ const EMPTY: CreateTicketRuleInput = { trackerId: '', name: '', pattern: '', pri
 /** Module constant so resetting on source change never re-triggers a fetch. */
 const FIRST_PAGE: PageQuery = {};
 
-export function TicketRulesPage({ sourceId }: { sourceId: string }) {
+export function TicketRulesPage() {
   const { t } = useTranslation();
   const [rules, setRules] = useState<TicketRulePublic[]>([]);
   const [pageInfo, setPageInfo] = useState<PageInfo | null>(null);
@@ -26,14 +32,14 @@ export function TicketRulesPage({ sourceId }: { sourceId: string }) {
 
   const load = useCallback(async () => {
     try {
-      const result = await api.listTicketRules(sourceId, page);
+      const result = await api.listTicketRules(page);
       setRules(result.items);
       setPageInfo(result.page);
     } catch (err) {
       const { code, params } = apiErrorInfo(err);
       setMsg({ kind: 'err', text: t(code, params) });
     }
-  }, [sourceId, page, t]);
+  }, [page, t]);
 
   useEffect(() => {
     void load();
@@ -41,16 +47,16 @@ export function TicketRulesPage({ sourceId }: { sourceId: string }) {
   }, [load]);
 
   useEffect(() => {
-    api.listSourceTrackers(sourceId).then(setTrackers, (err) => {
-      const { code, params } = apiErrorInfo(err);
-      setMsg({ kind: 'err', text: t(code, params) });
-    });
-  }, [sourceId, t]);
+    // Every declared tracker: a rule belongs to one, not to a source.
+    api.listTrackers({ limit: PAGE_LIMIT_MAX }).then(
+      ({ items }) => setTrackers(items),
+      (err) => {
+        const { code, params } = apiErrorInfo(err);
+        setMsg({ kind: 'err', text: t(code, params) });
+      },
+    );
+  }, [t]);
 
-  // Back to the first page when switching source.
-  useEffect(() => {
-    setPage(FIRST_PAGE);
-  }, [sourceId]);
 
   async function remove(rule: TicketRulePublic) {
     setDeleting(null);
@@ -144,7 +150,6 @@ export function TicketRulesPage({ sourceId }: { sourceId: string }) {
 
       {editing && (
         <TicketRuleDialog
-          sourceId={sourceId}
           trackers={trackers}
           rule={editing.rule}
           onClose={() => setEditing(null)}
@@ -152,7 +157,7 @@ export function TicketRulesPage({ sourceId }: { sourceId: string }) {
         />
       )}
 
-      {testing && <TicketRuleTestDialog sourceId={sourceId} onClose={() => setTesting(false)} />}
+      {testing && <TicketRuleTestDialog onClose={() => setTesting(false)} />}
 
       {deleting && (
         <ConfirmDialog
@@ -169,13 +174,11 @@ export function TicketRulesPage({ sourceId }: { sourceId: string }) {
 
 /** Create/edit form, in a modal. `rule` null means creation. */
 function TicketRuleDialog({
-  sourceId,
   trackers,
   rule,
   onClose,
   onSaved,
 }: {
-  sourceId: string;
   trackers: TrackerPublic[];
   rule: TicketRulePublic | null;
   onClose: () => void;
@@ -204,7 +207,7 @@ function TicketRuleDialog({
     setError(null);
     try {
       if (rule) await api.updateTicketRule(rule.id, form);
-      else await api.createTicketRule(sourceId, form);
+      else await api.createTicketRule(form);
       await onSaved(!rule);
     } catch (err) {
       const { code, params } = apiErrorInfo(err);
@@ -283,10 +286,11 @@ function TicketRuleDialog({
  * a pattern that matches too much — `[A-Z]{2,5}-\\d+` also eats `UTF-8` — and
  * the only place the built URL can be checked before it reaches a PR.
  */
-function TicketRuleTestDialog({ sourceId, onClose }: { sourceId: string; onClose: () => void }) {
+function TicketRuleTestDialog({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
   const [branch, setBranch] = useState('');
   const [title, setTitle] = useState('');
+  const [owner, setOwner] = useState('');
   const [repo, setRepo] = useState('');
   const [result, setResult] = useState<TicketRef[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -295,7 +299,14 @@ function TicketRuleTestDialog({ sourceId, onClose }: { sourceId: string; onClose
     e.preventDefault();
     setError(null);
     try {
-      setResult(await api.previewTicketRules(sourceId, { branch, title, repo: repo || undefined }));
+      setResult(
+        await api.previewTicketRules({
+          branch,
+          title,
+          owner: owner || undefined,
+          repo: repo || undefined,
+        }),
+      );
     } catch (err) {
       const { code, params } = apiErrorInfo(err);
       setError(t(code, params));
@@ -343,8 +354,18 @@ function TicketRuleTestDialog({ sourceId, onClose }: { sourceId: string; onClose
           />
         </label>
         <label>
-          {t('ticketRules.preview.repo')}{' '}
+          {t('ticketRules.preview.owner')}{' '}
           <span className="hint">{t('ticketRules.preview.repoHint')}</span>
+          <input
+            className="mono-input"
+            value={owner}
+            onChange={(e) => setOwner(e.target.value)}
+            placeholder="acme"
+            spellCheck={false}
+          />
+        </label>
+        <label>
+          {t('ticketRules.preview.repo')}
           <input
             className="mono-input"
             value={repo}

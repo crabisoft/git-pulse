@@ -16,20 +16,21 @@ export class EnvRulesController {
     private readonly settings: SettingsService,
   ) {}
 
-  @Get('sources/:sourceId/env-rules')
-  async list(@Param('sourceId') sourceId: string, @Query() query: ListEnvRulesDto) {
-    return this.envRules.findBySource(
-      sourceId,
+  /** The whole catalogue: rules are global, sources opt into them. */
+  @Get('env-rules')
+  async list(@Query() query: ListEnvRulesDto) {
+    return this.envRules.findAll(
       query.target ?? 'environment',
       toWindow(query, await this.settings.pageSize()),
     );
   }
 
-  @Post('sources/:sourceId/env-rules')
-  create(@Param('sourceId') sourceId: string, @Body() dto: CreateEnvRuleDto) {
-    return this.envRules.create(sourceId, dto);
+  @Post('env-rules')
+  create(@Body() dto: CreateEnvRuleDto) {
+    return this.envRules.create(dto);
   }
 
+  /** Classifies against the rules a given source opted into. */
   @Post('sources/:sourceId/env-rules/classify')
   @HttpCode(200)
   classify(@Param('sourceId') sourceId: string, @Body() dto: ClassifyNameDto) {

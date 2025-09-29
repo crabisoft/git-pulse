@@ -5,7 +5,7 @@ CREATE TYPE "RuleTarget" AS ENUM ('environment', 'repository');
 ALTER TABLE "EnvRule" ADD COLUMN "target" "RuleTarget" NOT NULL DEFAULT 'environment';
 
 -- DropIndex
-DROP INDEX "EnvRule_sourceId_priority_idx";
+DROP INDEX "EnvRule_priority_idx";
 
 -- CreateIndex
-CREATE INDEX "EnvRule_sourceId_target_priority_idx" ON "EnvRule"("sourceId", "target", "priority");
+CREATE INDEX "EnvRule_target_priority_idx" ON "EnvRule"("target", "priority");

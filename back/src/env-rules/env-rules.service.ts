@@ -17,12 +17,10 @@ import type { UpdateEnvRuleDto } from './dto/update-env-rule.dto';
 export class EnvRulesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(sourceId: string, dto: CreateEnvRuleDto): Promise<EnvRulePublic> {
+  async create(dto: CreateEnvRuleDto): Promise<EnvRulePublic> {
     assertValidPattern(dto.pattern);
-    await this.assertSourceExists(sourceId);
     const rule = await this.prisma.envRule.create({
       data: {
-        sourceId,
         name: dto.name,
         pattern: dto.pattern,
         kind: dto.kind,
@@ -33,12 +31,9 @@ export class EnvRulesService {
     return toPublic(rule);
   }
 
-  async findBySource(
-    sourceId: string,
-    target: RuleTarget,
-    window: PageWindow,
-  ): Promise<Page<EnvRulePublic>> {
-    const where = { sourceId, target };
+  /** The whole catalogue for a target — rules belong to no source. */
+  async findAll(target: RuleTarget, window: PageWindow): Promise<Page<EnvRulePublic>> {
+    const where = { target };
     const [rules, total] = await this.prisma.$transaction([
       this.prisma.envRule.findMany({
         where,
@@ -94,21 +89,13 @@ export class EnvRulesService {
     target: RuleTarget = 'environment',
   ): Promise<ClassifiedEnvironment[]> {
     const rules = await this.prisma.envRule.findMany({
-      where: { sourceId, target },
+      // Only the rules this source opted into: the catalogue is shared, the
+      // selection is not.
+      where: { target, sources: { some: { sourceId } } },
       orderBy: { priority: 'asc' },
     });
     const ruleLikes = rules.map(toRuleLike);
     return names.map((name) => classifyEnvironment(name, ruleLikes));
-  }
-
-  private async assertSourceExists(sourceId: string): Promise<void> {
-    const source = await this.prisma.source.findUnique({
-      where: { id: sourceId },
-      select: { id: true },
-    });
-    if (!source) {
-      throw new CodedException('errors.source.notFound', HttpStatus.NOT_FOUND, { id: sourceId });
-    }
   }
 }
 
@@ -131,7 +118,6 @@ function toRuleLike(r: {
 
 function toPublic(r: {
   id: string;
-  sourceId: string;
   name: string;
   pattern: string;
   kind: string;
@@ -142,7 +128,6 @@ function toPublic(r: {
 }): EnvRulePublic {
   return {
     id: r.id,
-    sourceId: r.sourceId,
     name: r.name,
     pattern: r.pattern,
     kind: r.kind as EnvRuleKind,

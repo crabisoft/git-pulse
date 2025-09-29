@@ -16,6 +16,9 @@ data/
 # Prisma generated client
 back/src/generated/
 .prisma/
+# One-off catch-up SQL for migrations amended after being applied locally.
+# Written for one developer's database state, never part of the chain.
+back/prisma/manual/
 
 # Editors / OS
 .DS_Store

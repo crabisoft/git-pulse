@@ -13,26 +13,20 @@ import {
 } from 'react-router-dom';
 import { PAGE_LIMIT_MAX, type AppSettings, type SourcePublic } from '@repo/shared';
 import { api, apiErrorInfo } from './api';
-import { SettingsPage, type SettingsSection } from './pages/SettingsPage';
+import { SECTION_PATHS, SettingsPage, type SettingsSection } from './pages/SettingsPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { DoraPage } from './pages/DoraPage';
 
-/**
- * Settings sections scoped to one source. Each contributes the same pair of
- * routes, so adding one is a line here rather than another copy of the block.
- */
-const SOURCE_SETTINGS: Array<{ section: SettingsSection; base: string }> = [
-  { section: 'env', base: '/settings/environments' },
-  { section: 'tickets', base: '/settings/tickets' },
-];
+/** One route per settings section, at its own path. None takes a source. */
+const SETTINGS_SECTIONS: SettingsSection[] = ['general', 'sources', 'trackers', 'env', 'tickets'];
 
 /**
  * Routes the topbar picker drives. Switching source keeps you on the page you
  * were reading, so the pattern is needed as well as the slug.
  *
- * Settings routes are deliberately absent even though two of them carry a slug:
- * settings is an application-wide module, and a section needing a source picks
- * it itself. Two selectors for one value is one too many.
+ * No settings route appears here: settings is an application-wide module.
+ * Classification rules are a shared catalogue and ticket rules belong to their
+ * tracker, so nothing under Settings is scoped to a source at all.
  */
 const SOURCE_ROUTES = ['/dashboard/:slug', '/dora/:slug'];
 
@@ -187,15 +181,14 @@ export function App() {
           />
 
           <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
-          {(['general', 'sources', 'trackers'] as const).map((section) => (
+          {SETTINGS_SECTIONS.map((section) => (
             <Route
               key={section}
-              path={`/settings/${section}`}
+              path={SECTION_PATHS[section]}
               element={
                 <SettingsPage
                   section={section}
                   sources={sources}
-                  selectedSource={null}
                   settings={settings}
                   onSourcesChange={refresh}
                   onSettingsChange={setSettings}
@@ -203,45 +196,6 @@ export function App() {
               }
             />
           ))}
-          {SOURCE_SETTINGS.flatMap(({ section, base }) => [
-            <Route
-              key={base}
-              path={base}
-              element={
-                // No source yet: stay in the settings shell, which explains why.
-                loaded && sources.length > 0 ? (
-                  <Navigate to={`${base}/${sources[0].slug}`} replace />
-                ) : (
-                  <SettingsPage
-                    section={section}
-                    sources={sources}
-                    selectedSource={null}
-                    settings={settings}
-                    onSourcesChange={refresh}
-                    onSettingsChange={setSettings}
-                  />
-                )
-              }
-            />,
-            <Route
-              key={`${base}/:slug`}
-              path={`${base}/:slug`}
-              element={
-                <SourcePage sources={sources} loaded={loaded} base={base}>
-                  {(source) => (
-                    <SettingsPage
-                      section={section}
-                      sources={sources}
-                      selectedSource={source}
-                      settings={settings}
-                      onSourcesChange={refresh}
-                      onSettingsChange={setSettings}
-                    />
-                  )}
-                </SourcePage>
-              }
-            />,
-          ])}
 
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
