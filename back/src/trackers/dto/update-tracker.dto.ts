@@ -1,7 +1,6 @@
 import { IsEnum, IsOptional, IsString, IsUrl, MinLength } from 'class-validator';
 import type { TrackerKind } from '@repo/shared';
-
-const KINDS = ['jira', 'linear', 'github', 'gitlab'] as const;
+import { TRACKER_KINDS } from './tracker-kind';
 
 /** Partial update — only the supplied keys are persisted. */
 export class UpdateTrackerDto {
@@ -11,7 +10,7 @@ export class UpdateTrackerDto {
   name?: string;
 
   @IsOptional()
-  @IsEnum(KINDS)
+  @IsEnum(TRACKER_KINDS)
   kind?: TrackerKind;
 
   @IsOptional()

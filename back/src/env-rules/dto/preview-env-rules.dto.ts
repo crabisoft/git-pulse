@@ -10,6 +10,7 @@ import {
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import type { EnvRuleKind, RuleTarget } from '@repo/shared';
+import { RULE_TARGETS } from './rule-target';
 
 class RuleInputDto {
   @IsString()
@@ -26,7 +27,7 @@ class RuleInputDto {
   /** Ignored — the rules are supplied inline — but accepted so a client can
    * post a saved rule verbatim without stripping the field. */
   @IsOptional()
-  @IsEnum(['environment', 'repository'] as const)
+  @IsEnum(RULE_TARGETS)
   target?: RuleTarget;
 
   @IsOptional()

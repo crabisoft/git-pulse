@@ -1,5 +1,6 @@
 import { IsEnum, IsOptional, IsString, MinLength } from 'class-validator';
 import type { RuleTarget } from '@repo/shared';
+import { RULE_TARGETS } from './rule-target';
 
 /** Classifies one name against a source's saved rules for a given target. */
 export class ClassifyNameDto {
@@ -8,6 +9,6 @@ export class ClassifyNameDto {
   name!: string;
 
   @IsOptional()
-  @IsEnum(['environment', 'repository'] as const)
+  @IsEnum(RULE_TARGETS)
   target?: RuleTarget;
 }

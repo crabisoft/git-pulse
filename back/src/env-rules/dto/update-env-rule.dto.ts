@@ -1,5 +1,6 @@
 import { IsEnum, IsInt, IsOptional, IsString, Min, MinLength } from 'class-validator';
 import type { EnvRuleKind, RuleTarget } from '@repo/shared';
+import { RULE_TARGETS } from './rule-target';
 
 /** Partial update of a classification rule — only the supplied keys are persisted. */
 export class UpdateEnvRuleDto {
@@ -18,7 +19,7 @@ export class UpdateEnvRuleDto {
   kind?: EnvRuleKind;
 
   @IsOptional()
-  @IsEnum(['environment', 'repository'] as const)
+  @IsEnum(RULE_TARGETS)
   target?: RuleTarget;
 
   @IsOptional()

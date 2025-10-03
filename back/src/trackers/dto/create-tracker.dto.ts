@@ -1,7 +1,6 @@
 import { IsEnum, IsOptional, IsString, IsUrl, MinLength } from 'class-validator';
 import type { TrackerKind } from '@repo/shared';
-
-const KINDS = ['jira', 'linear', 'github', 'gitlab'] as const;
+import { TRACKER_KINDS } from './tracker-kind';
 
 /**
  * A tracker carries no binding: which sources use it is written from the
@@ -12,7 +11,7 @@ export class CreateTrackerDto {
   @MinLength(1)
   name!: string;
 
-  @IsEnum(KINDS)
+  @IsEnum(TRACKER_KINDS)
   kind!: TrackerKind;
 
   @IsUrl({ require_tld: false })
