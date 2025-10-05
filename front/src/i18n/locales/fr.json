@@ -119,7 +119,10 @@
     "save": "Enregistrer",
     "saving": "Enregistrement…",
     "close": "Fermer",
-    "help": "Aide"
+    "help": "Aide",
+    "selectAll": "Tout sélectionner",
+    "clear": "Effacer",
+    "selectedCount": "{{count}} sur {{total}}"
   },
   "pagination": {
     "range": "{{first}}–{{last}} sur {{total}}",
@@ -171,10 +174,7 @@
     "title": "Vue live",
     "filter": {
       "repos": "Dépôts",
-      "all": "Tous les dépôts",
-      "selected": "{{count}} sélectionné(s)",
-      "selectAll": "Tout sélectionner",
-      "clear": "Effacer"
+      "all": "Tous les dépôts"
     },
     "tiles": {
       "openPrs": "PR / MR ouvertes",
@@ -326,17 +326,18 @@
       "submit": "Ajouter la source",
       "submitting": "Enregistrement…",
       "trackers": "Trackers associés",
-      "trackersHint": "les PR de cette source pourront référencer leurs tickets",
+      "trackersHint": "les PR de cette source pourront référencer leurs tickets, selon les règles du tracker",
       "noTrackers": "Déclarez d'abord un tracker dans la section Trackers.",
       "incidentTracker": "Incidents lus depuis",
-      "incidentTrackerHint": "parmi les trackers associés ; sans lui, aucun incident n'est collecté",
+      "incidentTrackerHint": "parmi les trackers rattachés de type GitHub ou GitLab ; sans lui, aucun incident n'est collecté",
       "noIncidentTracker": "Aucun",
-      "envRules": "Règles applicables",
-      "envRulesHint": "parmi le catalogue global défini dans la section Environnements",
+      "envRules": "Règles de classification",
+      "envRulesHint": "catalogue global de la section Environnements ; les règles de ticket, elles, suivent leur tracker",
       "noEnvRules": "Aucune règle définie pour l'instant.",
-      "selectAll": "Tout sélectionner",
-      "selectNone": "Aucune",
-      "selectedCount": "{{count}} sur {{total}}"
+      "noneSelected": "Aucune sélection",
+      "noTrackerDeclared": "Aucun tracker déclaré : commencez par la section Trackers.",
+      "noTrackerAttached": "Rattachez d'abord un tracker à cette source, ci-dessus.",
+      "noEligibleTracker": "Aucun tracker rattaché ne peut fournir d'incidents : seuls GitHub et GitLab le peuvent pour l'instant."
     }
   },
   "ticketRules": {

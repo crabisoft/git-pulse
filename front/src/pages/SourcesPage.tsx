@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   INCIDENT_TRACKER_KINDS,
@@ -20,6 +20,7 @@ import {
 import { DeleteIcon, EditIcon, PlusIcon, TestIcon } from '../icons';
 import { IconButton } from '../IconButton';
 import { ConfirmDialog, Modal } from '../Modal';
+import { MultiSelect } from '../MultiSelect';
 import { Pagination } from '../Pagination';
 
 interface FormState {
@@ -261,21 +262,35 @@ function SourceDialog({
 
   useEffect(() => {
     // Few by nature, and all of them are selectable here: ask for the cap.
-    api.listTrackers({ limit: PAGE_LIMIT_MAX }).then(({ items }) => setTrackers(items), () => {});
-    // One request per target: the catalogue is listed one target at a time.
-    Promise.all(
-      (['environment', 'repository', 'incident'] as RuleTarget[]).map((target) =>
+    // Errors surface: a swallowed one leaves an empty checklist that reads as
+    // "nothing declared yet" and sends you looking in the wrong place.
+    Promise.all([
+      api.listTrackers({ limit: PAGE_LIMIT_MAX }).then(({ items }) => items),
+      // One request per target: the catalogue is listed one target at a time.
+      ...(['environment', 'repository', 'incident'] as RuleTarget[]).map((target) =>
         api.listEnvRules(target, { limit: PAGE_LIMIT_MAX }).then(({ items }) => items),
       ),
-    ).then((perTarget) => setEnvRules(perTarget.flat()), () => {});
-  }, []);
+    ]).then(
+      ([loadedTrackers, ...perTarget]) => {
+        setTrackers(loadedTrackers as TrackerPublic[]);
+        setEnvRules((perTarget as EnvRulePublic[][]).flat());
+      },
+      (err) => {
+        const { code, params } = apiErrorInfo(err);
+        setError(t(code, params));
+      },
+    );
+  }, [t]);
 
-  const toggleEnvRule = (id: string) =>
+  const selectedEnvRules = useMemo(() => new Set(form.envRuleIds), [form.envRuleIds]);
+  const selectedTrackers = useMemo(() => new Set(form.trackerIds), [form.trackerIds]);
+
+  /** Detaching the tracker that supplied incidents clears the designation too. */
+  const changeTrackers = (trackerIds: string[]) =>
     setForm((f) => ({
       ...f,
-      envRuleIds: f.envRuleIds.includes(id)
-        ? f.envRuleIds.filter((r) => r !== id)
-        : [...f.envRuleIds, id],
+      trackerIds,
+      incidentTrackerId: trackerIds.includes(f.incidentTrackerId) ? f.incidentTrackerId : '',
     }));
 
   const attached = trackers.filter((tracker) => form.trackerIds.includes(tracker.id));
@@ -285,18 +300,18 @@ function SourceDialog({
     INCIDENT_TRACKER_KINDS.includes(tracker.kind),
   );
 
-  const toggleTracker = (id: string) =>
-    setForm((f) => {
-      const trackerIds = f.trackerIds.includes(id)
-        ? f.trackerIds.filter((t) => t !== id)
-        : [...f.trackerIds, id];
-      return {
-        ...f,
-        trackerIds,
-        // Detaching the incident tracker clears the designation with it.
-        incidentTrackerId: trackerIds.includes(f.incidentTrackerId) ? f.incidentTrackerId : '',
-      };
-    });
+  /**
+   * Why the list above is empty, when it is. A disabled control with no reason
+   * given reads as a bug — and three quite different situations lead here.
+   */
+  const noIncidentTrackerReason =
+    incidentCandidates.length > 0
+      ? null
+      : trackers.length === 0
+        ? 'noTrackerDeclared'
+        : attached.length === 0
+          ? 'noTrackerAttached'
+          : 'noEligibleTracker';
 
   // Stored credentials can be kept as-is, unless the auth scheme itself changes.
   const secretRequired = !source || source.authKind !== form.authKind;
@@ -428,81 +443,50 @@ function SourceDialog({
           </>
         )}
 
-        <fieldset className="source-trackers">
-          <legend>
-            {t('sources.form.envRules')}{' '}
-            <span className="hint">{t('sources.form.envRulesHint')}</span>
-          </legend>
-          {envRules.length === 0 ? (
-            <p className="muted">{t('sources.form.noEnvRules')}</p>
-          ) : (
-            <>
-              {/* A catalogue of dozens is the normal case, hence the shortcuts. */}
-              <div className="bulk-actions">
-                <button
-                  type="button"
-                  onClick={() => set('envRuleIds', envRules.map((r) => r.id))}
-                  disabled={form.envRuleIds.length === envRules.length}
-                >
-                  {t('sources.form.selectAll')}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => set('envRuleIds', [])}
-                  disabled={form.envRuleIds.length === 0}
-                >
-                  {t('sources.form.selectNone')}
-                </button>
-                <span className="muted">
-                  {t('sources.form.selectedCount', {
-                    count: form.envRuleIds.length,
-                    total: envRules.length,
-                  })}
-                </span>
-              </div>
-              <div className="rule-checklist">
-                {envRules.map((rule) => (
-                  <label key={rule.id}>
-                    <input
-                      type="checkbox"
-                      checked={form.envRuleIds.includes(rule.id)}
-                      onChange={() => toggleEnvRule(rule.id)}
-                    />
-                    <span>
-                      {rule.name}{' '}
-                      <span className="muted">
-                        ({t(`envRules.target.${rule.target}.tab`)} · {rule.kind})
-                      </span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </>
-          )}
-        </fieldset>
+        <label>
+          {t('sources.form.envRules')}{' '}
+          <span className="hint">{t('sources.form.envRulesHint')}</span>
+          <MultiSelect
+            block
+            options={envRules.map((rule) => ({
+              value: rule.id,
+              label: (
+                <>
+                  {rule.name}{' '}
+                  <span className="muted">
+                    ({t(`envRules.target.${rule.target}.tab`)} · {rule.kind})
+                  </span>
+                </>
+              ),
+            }))}
+            selected={selectedEnvRules}
+            onChange={(next) => set('envRuleIds', [...next])}
+            emptyLabel={
+              envRules.length === 0 ? t('sources.form.noEnvRules') : t('sources.form.noneSelected')
+            }
+          />
+        </label>
 
-        <fieldset className="source-trackers">
-          <legend>
-            {t('sources.form.trackers')}{' '}
-            <span className="hint">{t('sources.form.trackersHint')}</span>
-          </legend>
-          {trackers.length === 0 ? (
-            <p className="muted">{t('sources.form.noTrackers')}</p>
-          ) : (
-            trackers.map((tracker) => (
-              <label key={tracker.id}>
-                <input
-                  type="checkbox"
-                  checked={form.trackerIds.includes(tracker.id)}
-                  onChange={() => toggleTracker(tracker.id)}
-                />
-                <span>
+        <label>
+          {t('sources.form.trackers')}{' '}
+          <span className="hint">{t('sources.form.trackersHint')}</span>
+          <MultiSelect
+            block
+            options={trackers.map((tracker) => ({
+              value: tracker.id,
+              label: (
+                <>
                   {tracker.name} <span className="muted">({tracker.kind})</span>
-                </span>
-              </label>
-            ))
-          )}
-        </fieldset>
+                </>
+              ),
+            }))}
+            selected={selectedTrackers}
+            onChange={(next) => changeTrackers([...next])}
+            emptyLabel={
+              trackers.length === 0 ? t('sources.form.noTrackers') : t('sources.form.noneSelected')
+            }
+          />
+        </label>
 
         <label>
           {t('sources.form.incidentTracker')}{' '}
@@ -519,6 +503,11 @@ function SourceDialog({
               </option>
             ))}
           </select>
+          {noIncidentTrackerReason && (
+            <span className="field-note">
+              {t(`sources.form.${noIncidentTrackerReason}`)}
+            </span>
+          )}
         </label>
 
         {error && <div className="banner error">{error}</div>}
