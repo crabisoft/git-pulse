@@ -1,8 +1,9 @@
-# Git Dashboard — GitHub / GitLab
+# Git Dashboard
 
-**Self-hosted** monitoring dashboard for GitHub and GitLab: a live PR/MR &
-pipeline view, on a foundation ready for DORA historization, AI-assisted
-release notes and extended metrics.
+**Self-hosted** monitoring dashboard for Git platforms: a live PR/MR & pipeline
+view, on a foundation ready for DORA historization, AI-assisted release notes
+and extended metrics. Adding a platform means adding a connector — nothing in
+the model, the UI or the metrics names one.
 
 > Full specification: see the scoping document shared with the team.
 
@@ -31,16 +32,17 @@ Targets delegate to the npm scripts and the Docker wrapper described below.
 | Backend | NestJS (TypeScript) |
 | Database | PostgreSQL (Prisma) |
 | Jobs / cache | Redis (BullMQ) |
-| Sources | Octokit (GitHub) · @gitbeaker (GitLab) |
+| Sources | one client per connector — Octokit, @gitbeaker |
 
 **npm workspaces** monorepo: `back`, `front`, `packages/shared`.
 
 ## Architecture
 
-- **`SourceConnector`** — common interface; the `GitHubConnector` and
-  `GitLabConnector` implementations normalize PRs/MRs, pipelines and
-  deployments. Base URLs are configurable (self-hosted GitLab / GitHub
-  Enterprise).
+- **`SourceConnector`** — common interface: an implementation per platform
+  normalizes PRs/MRs, pipelines and deployments into the shared types. Two ship
+  today, `GitHubConnector` and `GitLabConnector`, and adding a third changes
+  nothing else. Base URLs are configurable, so self-hosted and enterprise
+  instances are the same case as the public ones.
 - **`CryptoModule`** — secrets (tokens, keys) encrypted at rest with
   AES-256-GCM. The master key is generated on first boot into a `0600` file, or
   supplied through `MASTER_KEY` (base64) for Kubernetes / a secret manager.
@@ -58,7 +60,7 @@ and by Vite in dev.
 | `/dashboard/:slug` | Live view of a source |
 | `/dora/:slug` | DORA metrics for a source |
 | `/settings/general` | Application settings |
-| `/settings/sources` | GitHub / GitLab sources |
+| `/settings/sources` | Connected Git platforms |
 | `/settings/environments` | Classification rules, global catalogue (`?target=repository` for the repos tab) |
 | `/settings/trackers` | Ticket trackers (Jira, Linear, issues) |
 | `/settings/tickets` | Ticket rules (PR → ticket linking) |
@@ -187,8 +189,9 @@ a URL together with the repo it was filed against, which is why a git-hosted
 tracker cannot be linked from a static template. When a placeholder cannot be
 resolved the reference is returned without a URL, rather than with a hole in it.
 
-> `{key}` is URL-encoded, `{owner}` and `{repo}` are not: a GitLab repo is
-> `group/sub/project` and its slashes are path separators, not content.
+> `{key}` is URL-encoded, `{owner}` and `{repo}` are not: on platforms with
+> nested groups a repo reads `group/sub/project`, and its slashes are path
+> separators rather than content to escape.
 
 ### Rules
 
@@ -231,11 +234,11 @@ failure rate** and **MTTR**:
 | `both` | either | median over the union of both |
 
 Incidents come from an `IncidentProvider`, an abstraction kept **separate** from
-`SourceConnector`: Jira or Linear have neither repos nor pipelines and could not
-honour the latter. Two implementations today, GitHub and GitLab, reading issues
-**with the Git source's own credentials** — nothing to configure beyond the
-labels. The label filter is an OR, which neither API can express (their `labels`
-parameter is an AND), hence one call per label and per repo, then dedup.
+`SourceConnector`: a standalone tracker has neither repos nor pipelines and
+could not honour the latter. The implementations that ship are the Git-hosted
+ones, reading issues **with the Git source's own credentials** — nothing to
+configure beyond the labels. Both of their APIs read a multi-label filter as an
+AND where an OR is wanted, hence one call per label and per repo, then dedup.
 
 `incidentLabels` is required as soon as `failureSource` leaves `pipelines`,
 otherwise **every** issue in scope would become a production failure.
@@ -349,7 +352,8 @@ A connector honours it in two ways:
 - **Between two repos**, through `ctx.signal?.throwIfAborted()` in each loop —
   and in the inner loops that trigger one call per PR/MR. That is the safeguard
   that matters: the cost is the fan-out, not an isolated call. It depends on no
-  library, and is therefore what covers GitLab.
+  library, so it covers every connector, including those whose client refuses
+  the signal.
 
 Two consequences worth keeping in mind:
 

@@ -1,6 +1,6 @@
 {
   "brand": {
-    "subtitle": "GitHub · GitLab"
+    "subtitle": "Monitoring & DORA metrics"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -18,7 +18,7 @@
     },
     "desc": {
       "general": "Collection and thresholds",
-      "sources": "GitHub and GitLab",
+      "sources": "Connected Git platforms",
       "env": "Classification rules",
       "tickets": "PR → ticket linking",
       "trackers": "Jira, Linear, issues"
@@ -141,7 +141,7 @@
       "unsupportedKind": "Unsupported source type: {{kind}}",
       "missingToken": "A token is required.",
       "missingAppCredentials": "GitHub App credentials are required.",
-      "appUnsupported": "GitHub App authentication is not supported by GitLab.",
+      "appUnsupported": "App authentication is not supported by this platform.",
       "incidentTrackerNotAttached": "The incident tracker must be one of the trackers attached to the source.",
       "incidentTrackerUnsupported": "Incidents cannot be read from a {{kind}} tracker yet."
     },
@@ -167,7 +167,7 @@
   },
   "empty": {
     "title": "No source configured",
-    "text": "Add a GitHub or GitLab source to see the live dashboard.",
+    "text": "Add a source to see the live dashboard.",
     "cta": "Configure a source"
   },
   "dashboard": {
@@ -278,8 +278,8 @@
       "change_failure_rate": "Share of failed deployments among those with a known status. Deployments with an undetermined status are excluded.",
       "mttr": "Median time between a failed deployment and the next successful one on the same environment.",
       "coding_time": "Median time from the first commit to the PR/MR being opened.",
-      "pickup_time": "Median time from the PR/MR being opened to its first review. Not computed on GitLab, which exposes no reviews.",
-      "review_time": "Median time from the first review to the merge. Not computed on GitLab, which exposes no reviews."
+      "pickup_time": "Median time from the PR/MR being opened to its first review. Not computed when the platform exposes no reviews.",
+      "review_time": "Median time from the first review to the merge. Not computed when the platform exposes no reviews."
     }
   },
   "status": {
@@ -329,7 +329,7 @@
       "trackersHint": "this source's PRs will be able to reference their tickets, per the tracker's own rules",
       "noTrackers": "Declare a tracker first, in the Trackers section.",
       "incidentTracker": "Incidents read from",
-      "incidentTrackerHint": "among the attached GitHub or GitLab trackers; without one, no incident is collected",
+      "incidentTrackerHint": "among the attached trackers able to supply incidents; without one, none is collected",
       "noIncidentTracker": "None",
       "envRules": "Classification rules",
       "envRulesHint": "global catalogue from the Environments section; ticket rules follow their tracker instead",
@@ -337,7 +337,7 @@
       "noneSelected": "None selected",
       "noTrackerDeclared": "No tracker declared yet — start with the Trackers section.",
       "noTrackerAttached": "Attach a tracker to this source first, above.",
-      "noEligibleTracker": "None of the attached trackers can supply incidents: only GitHub and GitLab can, for now."
+      "noEligibleTracker": "None of the attached trackers can supply incidents: not every kind is able to."
     }
   },
   "ticketRules": {
@@ -375,7 +375,7 @@
       "found": "Tickets found",
       "none": "none",
       "repo": "Repo",
-      "repoHint": "required for GitHub and GitLab links",
+      "repoHint": "required for trackers whose link depends on the repository",
       "noUrl": "no link",
       "owner": "Org / group"
     },
@@ -398,7 +398,7 @@
       "kind": "Kind",
       "baseUrl": "Base URL",
       "urlTemplate": "Link template (optional)",
-      "urlTemplateHint": "empty = derived from the kind; {key}, plus {owner}/{repo} for GitHub and GitLab",
+      "urlTemplateHint": "empty = derived from the kind; {key} always, {owner} and {repo} when the tracker lives with the code",
       "submit": "Add tracker",
       "sources": "Sources"
     },

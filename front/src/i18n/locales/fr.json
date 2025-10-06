@@ -1,6 +1,6 @@
 {
   "brand": {
-    "subtitle": "GitHub · GitLab"
+    "subtitle": "Monitoring & métriques DORA"
   },
   "nav": {
     "dashboard": "Tableau de bord",
@@ -18,7 +18,7 @@
     },
     "desc": {
       "general": "Collecte et seuils",
-      "sources": "GitHub et GitLab",
+      "sources": "Plateformes Git connectées",
       "env": "Règles de classification",
       "tickets": "Rattachement PR → ticket",
       "trackers": "Jira, Linear, issues"
@@ -141,7 +141,7 @@
       "unsupportedKind": "Type de source non supporté : {{kind}}",
       "missingToken": "Un token est requis.",
       "missingAppCredentials": "Les identifiants de la GitHub App sont requis.",
-      "appUnsupported": "L'authentification GitHub App n'est pas supportée par GitLab.",
+      "appUnsupported": "L'authentification par App n'est pas supportée par cette plateforme.",
       "incidentTrackerNotAttached": "Le tracker d'incidents doit faire partie des trackers associés à la source.",
       "incidentTrackerUnsupported": "Les incidents ne peuvent pas encore être lus depuis un tracker {{kind}}."
     },
@@ -167,7 +167,7 @@
   },
   "empty": {
     "title": "Aucune source configurée",
-    "text": "Ajoutez une source GitHub ou GitLab pour afficher le tableau de bord live.",
+    "text": "Ajoutez une source pour afficher le tableau de bord live.",
     "cta": "Configurer une source"
   },
   "dashboard": {
@@ -278,8 +278,8 @@
       "change_failure_rate": "Part des déploiements en échec parmi ceux dont le statut est connu. Les déploiements au statut indéterminé sont exclus du calcul.",
       "mttr": "Durée médiane entre un déploiement en échec et le déploiement réussi suivant sur le même environnement.",
       "coding_time": "Durée médiane entre le premier commit et l'ouverture de la PR/MR.",
-      "pickup_time": "Durée médiane entre l'ouverture de la PR/MR et la première review. Non calculé sur GitLab, qui n'expose pas de reviews.",
-      "review_time": "Durée médiane entre la première review et la fusion. Non calculé sur GitLab, qui n'expose pas de reviews."
+      "pickup_time": "Durée médiane entre l'ouverture de la PR/MR et la première review. Non calculé quand la plateforme n'expose pas de reviews.",
+      "review_time": "Durée médiane entre la première review et la fusion. Non calculé quand la plateforme n'expose pas de reviews."
     }
   },
   "status": {
@@ -329,7 +329,7 @@
       "trackersHint": "les PR de cette source pourront référencer leurs tickets, selon les règles du tracker",
       "noTrackers": "Déclarez d'abord un tracker dans la section Trackers.",
       "incidentTracker": "Incidents lus depuis",
-      "incidentTrackerHint": "parmi les trackers rattachés de type GitHub ou GitLab ; sans lui, aucun incident n'est collecté",
+      "incidentTrackerHint": "parmi les trackers rattachés capables de fournir des incidents ; sans lui, aucun n'est collecté",
       "noIncidentTracker": "Aucun",
       "envRules": "Règles de classification",
       "envRulesHint": "catalogue global de la section Environnements ; les règles de ticket, elles, suivent leur tracker",
@@ -337,7 +337,7 @@
       "noneSelected": "Aucune sélection",
       "noTrackerDeclared": "Aucun tracker déclaré : commencez par la section Trackers.",
       "noTrackerAttached": "Rattachez d'abord un tracker à cette source, ci-dessus.",
-      "noEligibleTracker": "Aucun tracker rattaché ne peut fournir d'incidents : seuls GitHub et GitLab le peuvent pour l'instant."
+      "noEligibleTracker": "Aucun tracker rattaché ne sait fournir d'incidents : tous les types n'en sont pas capables."
     }
   },
   "ticketRules": {
@@ -375,7 +375,7 @@
       "found": "Tickets trouvés",
       "none": "aucun",
       "repo": "Repo",
-      "repoHint": "requis pour les liens GitHub et GitLab",
+      "repoHint": "requis pour les trackers dont le lien dépend du dépôt",
       "noUrl": "pas de lien",
       "owner": "Org / groupe"
     },
@@ -398,7 +398,7 @@
       "kind": "Type",
       "baseUrl": "URL de base",
       "urlTemplate": "Modèle de lien (optionnel)",
-      "urlTemplateHint": "vide = déduit du type ; {key}, et {owner}/{repo} pour GitHub et GitLab",
+      "urlTemplateHint": "vide = déduit du type ; {key} toujours, {owner} et {repo} quand le tracker vit avec le dépôt",
       "submit": "Ajouter le tracker",
       "sources": "Sources"
     },
