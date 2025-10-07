@@ -2,7 +2,7 @@
 .DEFAULT_GOAL := help
 COMPOSE := sh .docker/compose.sh
 
-.PHONY: help install build typecheck \
+.PHONY: help install build typecheck test \
         dev dev-down logs restart restart-back ps \
         prod prod-down \
         migrate deploy studio db-reset psql sh-back \
@@ -23,6 +23,9 @@ build: ## Full build (shared → back → front)
 
 typecheck: ## Type-check the whole monorepo
 	npm run typecheck
+
+test: ## Run the unit tests (pure engines: classification, DORA, tickets)
+	npm test
 
 # ─── Docker: development (watch / HMR) ───────────────────────────────
 dev: ## Start the dev stack (db + redis + back watch + front HMR)

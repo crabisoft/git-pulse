@@ -2,7 +2,7 @@
   "name": "git-dashboard",
   "version": "0.1.0",
   "private": true,
-  "description": "Dashboard self-hosted de monitoring GitHub/GitLab (DORA, release notes IA, connecteurs paramétrables)",
+  "description": "Dashboard self-hosted de monitoring GitHub/GitLab (DORA, release notes IA, connecteurs param\u00e9trables)",
   "workspaces": [
     "packages/*",
     "back",
@@ -23,7 +23,8 @@
     "db:deploy": "cd back && prisma migrate deploy",
     "db:studio": "cd back && prisma studio",
     "lint": "echo \"(lint placeholder)\"",
-    "typecheck": "npm run typecheck -w @repo/shared && npm run typecheck -w @repo/back && npm run typecheck -w @repo/front"
+    "typecheck": "npm run typecheck -w @repo/shared && npm run typecheck -w @repo/back && npm run typecheck -w @repo/front",
+    "test": "npm run test -w @repo/back"
   },
   "engines": {
     "node": ">=20"

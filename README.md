@@ -19,6 +19,7 @@ full self-documented list:
 | `make migrate name=x` | Create a migration |
 | `make deploy` | Apply pending migrations |
 | `make prod` | Prod stack (build + nginx) |
+| `make test` | Unit tests of the pure engines |
 | `make build` | Full monorepo build |
 | `make clean` | Clean build artifacts |
 
@@ -88,6 +89,32 @@ back to the first source, or to the empty state if none remain.
 > The slug follows the name: **renaming a source invalidates its older links**.
 > The fallback avoids a dead page, but the link no longer points at the same
 > source.
+
+## Tests
+
+`make test` (or `npm test`) runs **vitest** over the pure engines — the
+classification matcher, the DORA maths and the ticket extractor. They take plain
+values and return plain values, so the suite boots no Nest container, no
+database and no DOM, and finishes in under a second.
+
+That is deliberate rather than a first step: those three files are what every
+metric on screen is derived from, and they are the only place where a silent
+change of behaviour would go unnoticed. A regression there reads as plausible
+numbers, not as a crash.
+
+What the suite pins down is the reasoning, not the implementation — that the
+median is a median and not a mean, that a negative duration is clamped instead
+of pulling a value down, that an unresolved incident stays out of MTTR rather
+than counting as zero, that a rule whose pattern is broken is skipped instead of
+throwing, and that a link with an unresolvable placeholder comes back absent
+rather than malformed.
+
+Half of it asserts **rejection** rather than results, because that is where the
+bugs have actually been: request DTOs validated against the same
+`forbidNonWhitelisted` rules as the global pipe (a target the DTO had never
+heard of once made the whole rule catalogue answer 400), a page size beyond the
+cap, a dimension carrying no value, a cancelled request answering 499 rather
+than a logged 500.
 
 ## Pagination on list routes
 

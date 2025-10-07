@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "// note": "What ships. tsconfig.json still sees the specs, so `typecheck` covers them; they just have no business in dist/ or in the prod image.",
+  "exclude": ["node_modules", "dist", "**/*.spec.ts"]
+}
