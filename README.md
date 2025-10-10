@@ -92,15 +92,21 @@ back to the first source, or to the empty state if none remain.
 
 ## Tests
 
-`make test` (or `npm test`) runs **vitest** over the pure engines — the
-classification matcher, the DORA maths and the ticket extractor. They take plain
-values and return plain values, so the suite boots no Nest container, no
-database and no DOM, and finishes in under a second.
+`make test` (or `npm test`) runs **vitest** over both workspaces.
 
-That is deliberate rather than a first step: those three files are what every
-metric on screen is derived from, and they are the only place where a silent
-change of behaviour would go unnoticed. A regression there reads as plausible
-numbers, not as a crash.
+On the **back**, the pure engines — the classification matcher, the DORA maths
+and the ticket extractor. They take plain values and return plain values, so
+that half boots no Nest container and no database.
+
+On the **front**, what sits between a click and a request: the API client's
+query building and error mapping, the debounce and cancellation hooks, the
+shared multiselect, and the window presets. Components render under jsdom with
+translations stubbed to echo their key — what a screen *says* is the
+translators' business, what it *does* is what is asserted.
+
+The pure engines came first on purpose: they are what every metric on screen is
+derived from, and the only place where a silent change of behaviour goes
+unnoticed. A regression there reads as plausible numbers, not as a crash.
 
 What the suite pins down is the reasoning, not the implementation — that the
 median is a median and not a mean, that a negative duration is clamped instead
@@ -109,12 +115,18 @@ than counting as zero, that a rule whose pattern is broken is skipped instead of
 throwing, and that a link with an unresolvable placeholder comes back absent
 rather than malformed.
 
-Half of it asserts **rejection** rather than results, because that is where the
-bugs have actually been: request DTOs validated against the same
+A large part of it asserts **rejection** rather than results, because that is
+where the bugs have actually been: request DTOs validated against the same
 `forbidNonWhitelisted` rules as the global pipe (a target the DTO had never
 heard of once made the whole rule catalogue answer 400), a page size beyond the
 cap, a dimension carrying no value, a cancelled request answering 499 rather
-than a logged 500.
+than a logged 500, an abort reaching the UI as silence rather than a red banner.
+
+> Both halves are checked by mutation rather than by their green tick: turning
+> the median into a mean, dropping the negative-duration clamp, removing the
+> guard that stops a superseded run from clearing the loading flag, or joining a
+> repeated query parameter with commas each fails the suite. A suite that stays
+> green under those proves nothing.
 
 ## Pagination on list routes
 

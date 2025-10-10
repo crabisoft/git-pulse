@@ -24,7 +24,7 @@
     "db:studio": "cd back && prisma studio",
     "lint": "echo \"(lint placeholder)\"",
     "typecheck": "npm run typecheck -w @repo/shared && npm run typecheck -w @repo/back && npm run typecheck -w @repo/front",
-    "test": "npm run test -w @repo/back"
+    "test": "npm run test -w @repo/back && npm run test -w @repo/front"
   },
   "engines": {
     "node": ">=20"
