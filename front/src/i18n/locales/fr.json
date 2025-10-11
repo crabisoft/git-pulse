@@ -122,7 +122,8 @@
     "help": "Aide",
     "selectAll": "Tout sélectionner",
     "clear": "Effacer",
-    "selectedCount": "{{count}} sur {{total}}"
+    "selectedCount": "{{count}} sur {{total}}",
+    "noMatch": "Aucun résultat"
   },
   "pagination": {
     "range": "{{first}}–{{last}} sur {{total}}",

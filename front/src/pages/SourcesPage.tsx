@@ -450,14 +450,9 @@ function SourceDialog({
             block
             options={envRules.map((rule) => ({
               value: rule.id,
-              label: (
-                <>
-                  {rule.name}{' '}
-                  <span className="muted">
-                    ({t(`envRules.target.${rule.target}.tab`)} · {rule.kind})
-                  </span>
-                </>
-              ),
+              label: rule.name,
+              // Plain text so the built-in search reaches it too.
+              hint: `${t(`envRules.target.${rule.target}.tab`)} · ${rule.kind}`,
             }))}
             selected={selectedEnvRules}
             onChange={(next) => set('envRuleIds', [...next])}
@@ -474,11 +469,8 @@ function SourceDialog({
             block
             options={trackers.map((tracker) => ({
               value: tracker.id,
-              label: (
-                <>
-                  {tracker.name} <span className="muted">({tracker.kind})</span>
-                </>
-              ),
+              label: tracker.name,
+              hint: tracker.kind,
             }))}
             selected={selectedTrackers}
             onChange={(next) => changeTrackers([...next])}

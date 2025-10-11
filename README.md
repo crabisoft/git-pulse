@@ -100,7 +100,15 @@ that half boots no Nest container and no database.
 
 On the **front**, what sits between a click and a request: the API client's
 query building and error mapping, the debounce and cancellation hooks, the
-shared multiselect, and the window presets. Components render under jsdom with
+shared multiselect, and the window presets.
+
+The multiselect wraps **react-select** in `unstyled` mode — the behaviour it
+brings (keyboard, ARIA, type-to-filter, a menu that escapes its container) with
+the app's own CSS on top, so no second visual language enters the forms. The
+menu is portalled to the body: as an absolutely positioned child of
+`.modal-body`, which scrolls, it was clipped whenever it opened near the bottom
+of the source form. The library costs about 30 kB gzipped, which is the price of
+that list. Components render under jsdom with
 translations stubbed to echo their key — what a screen *says* is the
 translators' business, what it *does* is what is asserted.
 

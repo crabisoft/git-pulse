@@ -122,7 +122,8 @@
     "help": "Help",
     "selectAll": "Select all",
     "clear": "Clear",
-    "selectedCount": "{{count}} of {{total}}"
+    "selectedCount": "{{count}} of {{total}}",
+    "noMatch": "No match"
   },
   "pagination": {
     "range": "{{first}}–{{last}} of {{total}}",
