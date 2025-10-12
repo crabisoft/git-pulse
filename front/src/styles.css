@@ -113,8 +113,10 @@ a:hover { text-decoration: underline; }
 .ms__clear, .ms__caret { display: flex; cursor: pointer; }
 .ms__clear:hover, .ms__caret:hover { color: var(--ink); }
 
+/* The stacking order lives on the portal, set from the component: emotion would
+   otherwise override anything set here. */
 .ms__menu {
-  z-index: 60; margin-top: 4px; overflow: hidden;
+  margin-top: 4px; overflow: hidden;
   background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
   box-shadow: 0 8px 28px rgba(0, 0, 0, .18);
 }

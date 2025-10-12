@@ -120,6 +120,17 @@ describe('MultiSelect', () => {
     expect(onChange).toHaveBeenCalledWith(new Set(['b']));
   });
 
+  it('stacks the menu above the modal it may be opened from', async () => {
+    const { user } = setup();
+    await open(user);
+
+    // react-select portals the menu to the body at z-index 1, under the
+    // `.modal-backdrop` at 20 — which is how it ended up hidden behind it.
+    const portal = document.querySelector('.ms__menu-portal') as HTMLElement;
+    expect(portal).not.toBeNull();
+    expect(Number(getComputedStyle(portal).zIndex)).toBeGreaterThan(20);
+  });
+
   it('cannot be opened when there is nothing to choose from', () => {
     setup({ options: [], emptyLabel: 'declare.one.first' });
 

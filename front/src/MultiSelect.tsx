@@ -2,6 +2,12 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import Select, { components, type MenuListProps, type MultiValue } from 'react-select';
 
+/**
+ * Above `.modal-backdrop` (20), the highest layer the app defines: a menu opened
+ * from a form inside a modal has to cover it.
+ */
+const MENU_Z_INDEX = 30;
+
 export interface MultiSelectOption {
   value: string;
   /** Plain text: this is what the built-in search filters on. */
@@ -63,6 +69,12 @@ export function MultiSelect({
       // scrolling modal is not clipped by it.
       menuPortalTarget={typeof document === 'undefined' ? undefined : document.body}
       menuPosition="fixed"
+      // The portal keeps its computed position — `base` carries it even when
+      // unstyled — and only the stacking order is raised. react-select puts it
+      // at 1, which is under the modal backdrop it has to appear over. Styling
+      // `.ms__menu-portal` from the stylesheet would not do: emotion injects
+      // its class at runtime, after ours, and wins on equal specificity.
+      styles={{ menuPortal: (base) => ({ ...base, zIndex: MENU_Z_INDEX }) }}
       formatOptionLabel={(option: MultiSelectOption, meta) =>
         meta.context === 'menu' && option.hint ? (
           <>
