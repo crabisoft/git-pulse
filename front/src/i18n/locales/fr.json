@@ -271,7 +271,8 @@
       "mttr": "Temps de rétablissement (MTTR)",
       "coding_time": "Temps de codage",
       "pickup_time": "Temps de prise en charge",
-      "review_time": "Temps de review"
+      "review_time": "Temps de review",
+      "deploy_time": "Temps de déploiement"
     },
     "help": {
       "deployment_frequency": "Nombre de déploiements sur la fenêtre d'analyse. Une fréquence élevée traduit des lots de changements plus petits, donc moins risqués.",
@@ -280,7 +281,8 @@
       "mttr": "Durée médiane entre un déploiement en échec et le déploiement réussi suivant sur le même environnement.",
       "coding_time": "Durée médiane entre le premier commit et l'ouverture de la PR/MR.",
       "pickup_time": "Durée médiane entre l'ouverture de la PR/MR et la première review. Non calculé quand la plateforme n'expose pas de reviews.",
-      "review_time": "Durée médiane entre la première review et la fusion. Non calculé quand la plateforme n'expose pas de reviews."
+      "review_time": "Durée médiane entre la première review et la fusion. Non calculé quand la plateforme n'expose pas de reviews.",
+      "deploy_time": "Durée médiane entre la fusion de la PR/MR et le déploiement qui l'a embarquée. Groupé par environnement d'arrivée : filtrer sur type=Prod donne le délai jusqu'à la production. Corrélation par repo et par date — un connecteur n'expose pas les commits d'un déploiement — donc à lire comme une borne haute."
     }
   },
   "status": {

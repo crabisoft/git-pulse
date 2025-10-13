@@ -269,6 +269,24 @@ References surface on the dashboard PR table and in the DORA lead-time samples.
 Linking them to incidents — which would let the failure rate rest on a causal
 link rather than on dimension alignment — is the natural next step, not done.
 
+## Lead time, up to the deployment
+
+The breakdown has four segments: `coding_time` (first commit → opened),
+`pickup_time` (opened → first review), `review_time` (first review → merged)
+and `deploy_time` (merged → the deployment that carried it).
+
+That last one needs a **pull request tied to a deployment**, which no connector
+gives directly: they expose a deployment's ref, never the commits it contains.
+The correlation is therefore by repository and time — the earliest *successful*
+deployment of that repo after the merge. A change merged just before a
+deployment that did not include it is attributed to it anyway, so read
+`deploy_time` as an upper bound rather than a per-commit truth.
+
+`deploy_time` is grouped by the **deployment's** dimensions where the other
+three use the pull request's: how long a change takes to arrive is a property of
+where it lands, so filtering on `type=Prod` answers "time to production" with no
+extra setting.
+
 ## Incidents and failure rate
 
 The `failureSource` setting decides what counts as a failure for **change
@@ -290,13 +308,28 @@ AND where an OR is wanted, hence one call per label and per repo, then dedup.
 `incidentLabels` is required as soon as `failureSource` leaves `pipelines`,
 otherwise **every** issue in scope would become a production failure.
 
+### Tying a failure to the change that caused it
+
+An incident that mentions a ticket, a merged pull request that mentions the same
+one, and the deployment that carried that request: the trail says which
+deployment broke what. The incident is then counted against **that deployment's
+slice**, whatever dimensions it carries itself.
+
+This is what DORA asks of a change failure rate — deployments that broke
+something — where matching on dimensions alone only asks whether a failure
+happened in the same slice. Incidents sharing no ticket fall back to that slice,
+so nothing is lost while the ticket rules are still thin, and the link improves
+the numbers as the rules fill in. Ticket references are read from an incident's
+title and labels, by the very same rules that read branch names and PR titles.
+
 > The rate's denominator is **always** the number of deployments. A dimension
 > combination carrying incidents but no deployment therefore yields no rate at
 > all — it would be a division by nothing. Those orphan combinations are
 > **logged as warnings**: they are the symptom of a mismatch between attributes
-> extracted from incident labels and those extracted from environment names.
-> MTTR has no such problem — it divides nothing, so it also reports slices known
-> only through their incidents.
+> extracted from incident labels and those extracted from environment names, and
+> the causal link above is what makes them disappear. MTTR has no such problem —
+> it divides nothing, so it also reports slices known only through their
+> incidents.
 
 An incident still open stays out of MTTR: with no resolution date it has no
 restore time, and counting it as zero would drag the median down instead of up.

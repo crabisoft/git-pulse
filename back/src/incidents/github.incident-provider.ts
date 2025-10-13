@@ -64,6 +64,8 @@ export class GitHubIncidentProvider implements IncidentProvider {
             openedAt: issue.created_at,
             resolvedAt: issue.closed_at,
             labels: issue.labels.map(labelName).filter(Boolean),
+            // Filled by the service, which owns the ticket rules.
+            tickets: [],
             repo,
           });
         }

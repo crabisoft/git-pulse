@@ -52,6 +52,8 @@ export class GitLabIncidentProvider implements IncidentProvider {
             openedAt: issue.created_at as string,
             resolvedAt: (issue.closed_at as string | null) ?? null,
             labels: (issue.labels as string[] | undefined) ?? [],
+            // Filled by the service, which owns the ticket rules.
+            tickets: [],
             repo,
           });
         }

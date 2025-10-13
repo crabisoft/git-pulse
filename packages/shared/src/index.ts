@@ -296,6 +296,12 @@ export interface Incident {
   labels: string[];
   /** Repo the incident was filed against, when the tracker ties it to one. */
   repo?: string;
+  /**
+   * Tickets the incident mentions, extracted from its title and labels by the
+   * same rules that read pull requests. A ticket shared with a merged PR is
+   * what ties a failure to the change that caused it.
+   */
+  tickets: TicketRef[];
 }
 
 /**
@@ -317,7 +323,8 @@ export type DoraMetric =
   | 'mttr'
   | 'coding_time'
   | 'pickup_time'
-  | 'review_time';
+  | 'review_time'
+  | 'deploy_time';
 
 /** One event contributing to a metric value, shown in the detail view. */
 export interface DoraSample {

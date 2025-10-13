@@ -271,7 +271,8 @@
       "mttr": "Time to restore (MTTR)",
       "coding_time": "Coding time",
       "pickup_time": "Pickup time",
-      "review_time": "Review time"
+      "review_time": "Review time",
+      "deploy_time": "Deploy time"
     },
     "help": {
       "deployment_frequency": "Number of deployments over the lookback window. A high frequency means smaller, less risky batches of change.",
@@ -280,7 +281,8 @@
       "mttr": "Median time between a failed deployment and the next successful one on the same environment.",
       "coding_time": "Median time from the first commit to the PR/MR being opened.",
       "pickup_time": "Median time from the PR/MR being opened to its first review. Not computed when the platform exposes no reviews.",
-      "review_time": "Median time from the first review to the merge. Not computed when the platform exposes no reviews."
+      "review_time": "Median time from the first review to the merge. Not computed when the platform exposes no reviews.",
+      "deploy_time": "Median time from the PR/MR being merged to the deployment that carried it. Grouped by where it landed: filtering on type=Prod gives the delay to production. Correlated by repo and date — a connector never exposes the commits a deployment contains — so read it as an upper bound."
     }
   },
   "status": {

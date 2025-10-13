@@ -20,6 +20,8 @@ export interface IncidentEvent {
   openedAt: string;
   resolvedAt: string | null;
   repo?: string;
+  /** Tickets it mentions — the handle onto the change that caused it. */
+  tickets: TicketRef[];
   dimensions: Record<string, string>;
 }
 
@@ -50,25 +52,77 @@ export function deploymentFrequency(deployments: DeploymentEvent[]): DoraResult[
 }
 
 /**
+ * Ties each incident to the deployment that caused it, when the trail exists:
+ * the incident mentions a ticket, a merged pull request mentions the same one,
+ * and that request was carried by a deployment opened before the incident.
+ *
+ * This is what DORA actually asks of a change failure rate — deployments that
+ * broke something — where matching on dimensions alone only asks whether a
+ * failure happened in the same slice. Incidents with no ticket in common fall
+ * back to that slice, so nothing is lost while the rules are still thin.
+ */
+export function incidentsByDeployment(
+  incidents: IncidentEvent[],
+  prs: MergedPrEvent[],
+  deployments: DeploymentEvent[],
+): Map<DeploymentEvent, IncidentEvent[]> {
+  const carrier = new Map<string, DeploymentEvent>();
+  for (const pr of prs) {
+    const deployment = deploymentCarrying(pr, deployments);
+    if (!deployment) continue;
+    for (const ticket of pr.tickets) carrier.set(ticketKey(ticket), deployment);
+  }
+
+  const linked = new Map<DeploymentEvent, IncidentEvent[]>();
+  for (const incident of incidents) {
+    for (const ticket of incident.tickets) {
+      const deployment = carrier.get(ticketKey(ticket));
+      // A deployment that happened *after* the incident cannot have caused it.
+      if (!deployment || msOf(deployment.createdAt) > msOf(incident.openedAt)) continue;
+      const bucket = linked.get(deployment);
+      if (bucket) {
+        if (!bucket.includes(incident)) bucket.push(incident);
+      } else {
+        linked.set(deployment, [incident]);
+      }
+      break;
+    }
+  }
+  return linked;
+}
+
+/**
  * Failures / deployments, per dimension combination. Deployments are always the
  * denominator — the rate answers "how many of our deployments went wrong" — but
  * what counts as a failure depends on `source`.
  *
- * Only slices that actually deployed produce a result: a ratio over an empty
- * denominator would be meaningless. Incidents landing in a slice with no
- * deployment are reported by the caller instead of being silently averaged in.
+ * An incident traced to a deployment is counted against that deployment's
+ * slice, whichever dimensions it carries itself; the rest fall back to their
+ * own slice. Only slices that actually deployed produce a result: a ratio over
+ * an empty denominator would be meaningless, and incidents landing in one are
+ * reported by the caller instead of being silently averaged in.
  */
 export function changeFailureRate(
   deployments: DeploymentEvent[],
   incidents: IncidentEvent[],
   source: FailureSource,
+  /** Omitted, every incident falls back to matching on dimensions. */
+  linked: Map<DeploymentEvent, IncidentEvent[]> = new Map(),
 ): DoraResult[] {
   const known = deployments.filter((d) => d.status !== 'other');
-  const incidentsByDimensions = groupByDimensions(incidents);
+  const attributed = new Set([...linked.values()].flat());
+  const unattributed = incidents.filter((i) => !attributed.has(i));
+  const incidentsByDimensions = groupByDimensions(unattributed);
 
   return [...groupByDimensions(known)].map(([key, items]) => {
     const failedDeploys = source === 'incidents' ? [] : items.filter((d) => d.status === 'failed');
-    const related = source === 'pipelines' ? [] : (incidentsByDimensions.get(key) ?? []);
+    const related =
+      source === 'pipelines'
+        ? []
+        : [
+            ...items.flatMap((d) => linked.get(d) ?? []),
+            ...(incidentsByDimensions.get(key) ?? []),
+          ];
     const failures = failedDeploys.length + related.length;
     return {
       metric: 'change_failure_rate',
@@ -90,9 +144,12 @@ export function changeFailureRate(
 export function orphanIncidentDimensions(
   deployments: DeploymentEvent[],
   incidents: IncidentEvent[],
+  /** Incidents already tied to a deployment need no slice of their own. */
+  linked: Map<DeploymentEvent, IncidentEvent[]> = new Map(),
 ): Record<string, string>[] {
+  const attributed = new Set([...linked.values()].flat());
   const deployed = new Set(groupByDimensions(deployments.filter((d) => d.status !== 'other')).keys());
-  return [...groupByDimensions(incidents)]
+  return [...groupByDimensions(incidents.filter((i) => !attributed.has(i)))]
     .filter(([key]) => !deployed.has(key))
     .map(([, items]) => items[0].dimensions);
 }
@@ -110,14 +167,23 @@ export function mttr(
   deployments: DeploymentEvent[],
   incidents: IncidentEvent[],
   source: FailureSource,
+  /** Same attribution as the failure rate, so both read the same incidents. */
+  linked: Map<DeploymentEvent, IncidentEvent[]> = new Map(),
 ): DoraResult[] {
+  const attributed = new Set([...linked.values()].flat());
   const deploysByDimensions = source === 'incidents' ? new Map() : groupByDimensions(deployments);
-  const incidentsByDimensions = source === 'pipelines' ? new Map() : groupByDimensions(incidents);
+  const incidentsByDimensions =
+    source === 'pipelines'
+      ? new Map()
+      : groupByDimensions(incidents.filter((i) => !attributed.has(i)));
 
   const keys = new Set([...deploysByDimensions.keys(), ...incidentsByDimensions.keys()]);
   return [...keys].map((key) => {
     const deploys: DeploymentEvent[] = deploysByDimensions.get(key) ?? [];
-    const related: IncidentEvent[] = incidentsByDimensions.get(key) ?? [];
+    const related: IncidentEvent[] =
+      source === 'pipelines'
+        ? []
+        : [...deploys.flatMap((d) => linked.get(d) ?? []), ...(incidentsByDimensions.get(key) ?? [])];
     const restores: number[] = [];
     const samples: DoraSample[] = [];
 
@@ -157,6 +223,30 @@ export function mttr(
       samples: takeRecent(samples),
     };
   });
+}
+
+/**
+ * The deployment that first carried a merged pull request.
+ *
+ * Correlation is by repository and time — the earliest successful deployment of
+ * that repo after the merge. The connectors expose a deployment's ref, never
+ * the commits it contains, so time is the only signal available: a PR merged
+ * just before a deployment that did not include it is attributed to it anyway.
+ * Read `deploy_time` as an upper bound on how quickly changes reach an
+ * environment, not as a per-commit truth.
+ */
+export function deploymentCarrying(
+  pr: MergedPrEvent,
+  deployments: DeploymentEvent[],
+): DeploymentEvent | null {
+  const mergedAt = msOf(pr.mergedAt);
+  let earliest: DeploymentEvent | null = null;
+  for (const d of deployments) {
+    if (d.repo !== pr.repo || d.status !== 'success') continue;
+    if (msOf(d.createdAt) < mergedAt) continue;
+    if (!earliest || msOf(d.createdAt) < msOf(earliest.createdAt)) earliest = d;
+  }
+  return earliest;
 }
 
 /**
@@ -201,7 +291,48 @@ export function leadTimeBreakdown(prs: MergedPrEvent[]): DoraResult[] {
   });
 }
 
+/**
+ * Merge → the deployment that carried it, the fourth segment of the lead time.
+ *
+ * Grouped by the **deployment's** dimensions rather than the pull request's:
+ * how long a change takes to reach somewhere is a property of where it lands,
+ * so slicing on `type=Prod` answers "time to production" with no extra setting.
+ */
+export function deployTime(prs: MergedPrEvent[], deployments: DeploymentEvent[]): DoraResult[] {
+  const samplesByKey = new Map<string, { dimensions: Record<string, string>; samples: DoraSample[] }>();
+
+  for (const pr of prs) {
+    const deployment = deploymentCarrying(pr, deployments);
+    if (!deployment) continue;
+    const key = dimensionKey(deployment.dimensions);
+    const bucket = samplesByKey.get(key) ?? { dimensions: deployment.dimensions, samples: [] };
+    bucket.samples.push({
+      ...prSample(pr, clamp(seconds(pr.mergedAt, deployment.createdAt))),
+      details: {
+        openedAt: pr.openedAt,
+        environment: deployment.environment,
+        deployedAt: deployment.createdAt,
+      },
+    });
+    samplesByKey.set(key, bucket);
+  }
+
+  return [...samplesByKey.values()].map(({ dimensions, samples }) => ({
+    metric: 'deploy_time' as DoraMetric,
+    value: median(samples.map((s) => s.value ?? 0)),
+    unit: 'seconds' as const,
+    dimensions,
+    sampleSize: samples.length,
+    samples: takeRecent(samples),
+  }));
+}
+
 // ─── helpers ─────────────────────────────────────────────────────────
+
+/** Two references mean the same ticket when tracker and key agree. */
+function ticketKey(ticket: TicketRef): string {
+  return `${ticket.tracker.id}:${ticket.key}`;
+}
 
 function deploymentSample(d: DeploymentEvent): DoraSample {
   return {

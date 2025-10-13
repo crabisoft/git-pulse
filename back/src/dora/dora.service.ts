@@ -23,6 +23,8 @@ import { SettingsService } from '../settings/settings.service';
 import {
   deploymentFrequency,
   changeFailureRate,
+  deployTime,
+  incidentsByDeployment,
   mttr,
   leadTimeBreakdown,
   orphanIncidentDimensions,
@@ -150,12 +152,16 @@ export class DoraService {
     const [deploymentEvents, prEvents, incidentEvents] = await Promise.all([
       this.toDeploymentEvents(sourceId, deployments, period),
       this.toMergedPrEvents(sourceId, ctx.scope.owner, mergedPrs, period),
-      this.toIncidentEvents(sourceId, incidents, period),
+      this.toIncidentEvents(sourceId, ctx.scope.owner, incidents, period),
     ]);
 
-    // Incidents divide by deployments, so a slice with no deployment produces
-    // no rate at all. Saying so beats letting the numbers quietly go missing.
-    const orphans = orphanIncidentDimensions(deploymentEvents, incidentEvents);
+    // A shared ticket between an incident and a merged pull request says which
+    // deployment broke what — the question the failure rate actually asks.
+    const linked = incidentsByDeployment(incidentEvents, prEvents, deploymentEvents);
+
+    // What is left divides by deployments, so a slice with no deployment
+    // produces no rate at all. Saying so beats letting numbers go missing.
+    const orphans = orphanIncidentDimensions(deploymentEvents, incidentEvents, linked);
     if (orphans.length > 0) {
       this.logger.warn(
         `${orphans.length} combinaison(s) de dimensions ont des incidents sans déploiement ` +
@@ -166,9 +172,10 @@ export class DoraService {
     return {
       results: [
         ...deploymentFrequency(deploymentEvents),
-        ...changeFailureRate(deploymentEvents, incidentEvents, failureSource),
-        ...mttr(deploymentEvents, incidentEvents, failureSource),
+        ...changeFailureRate(deploymentEvents, incidentEvents, failureSource, linked),
+        ...mttr(deploymentEvents, incidentEvents, failureSource, linked),
         ...leadTimeBreakdown(prEvents),
+        ...deployTime(prEvents, deploymentEvents),
       ],
       // The full list stays the filter vocabulary, exactly like the dashboard.
       repos: allRepos,
@@ -290,17 +297,24 @@ export class DoraService {
    */
   private async toIncidentEvents(
     sourceId: string,
+    owner: string,
     incidents: Incident[],
     period: ResolvedRange,
   ): Promise<IncidentEvent[]> {
     const inWindow = incidents.filter((i) => within(i.openedAt, period));
-    const dimensionsByLabel = await this.dimensionsFor(
-      sourceId,
-      inWindow.flatMap((i) => i.labels),
-      'incident',
-    );
+    const [dimensionsByLabel, tickets] = await Promise.all([
+      this.dimensionsFor(sourceId, inWindow.flatMap((i) => i.labels), 'incident'),
+      // Read from the title and the labels, the two places a tracker lets one
+      // write a reference. The same rules as pull requests, so a key spelled
+      // once is recognised on both sides.
+      this.ticketRules.extractMany(
+        sourceId,
+        inWindow.map((i) => ({ branch: i.labels.join(' '), title: i.title })),
+        inWindow.map((i) => ({ owner, repo: i.repo ?? '' })),
+      ),
+    ]);
 
-    return inWindow.map((i) => {
+    return inWindow.map((i, index) => {
       const dimensions: Record<string, string> = {};
       for (const label of [...i.labels].sort()) {
         for (const [key, value] of Object.entries(dimensionsByLabel.get(label) ?? {})) {
@@ -314,6 +328,7 @@ export class DoraService {
         openedAt: i.openedAt,
         resolvedAt: i.resolvedAt,
         repo: i.repo,
+        tickets: tickets[index],
         dimensions,
       };
     });

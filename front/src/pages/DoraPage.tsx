@@ -26,6 +26,7 @@ const METRIC_ORDER: DoraMetric[] = [
   'coding_time',
   'pickup_time',
   'review_time',
+  'deploy_time',
 ];
 
 /**
