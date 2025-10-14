@@ -157,6 +157,11 @@ export class GitLabConnector implements SourceConnector {
         if (!mergedAt || new Date(mergedAt).getTime() < sinceMs) continue;
         // One extra call per MR: worth checking inside this loop too.
         ctx.signal?.throwIfAborted();
+        const author = (mr.author as { id?: number } | undefined)?.id ?? null;
+        const [firstCommitAt, firstReviewAt] = await Promise.all([
+          this.firstCommitAt(gl, repo, mr.iid as number),
+          this.firstReviewAt(gl, repo, mr.iid as number, author),
+        ]);
         out.push({
           id: `gl:${repo}:${mr.iid}`,
           repo,
@@ -165,14 +170,41 @@ export class GitLabConnector implements SourceConnector {
           url: mr.web_url as string,
           headRef: (mr.source_branch as string | undefined) ?? '',
           openedAt: mr.created_at as string,
-          firstCommitAt: await this.firstCommitAt(gl, repo, mr.iid as number),
-          // GitLab has no GitHub-style reviews; pickup/review are not derived.
-          firstReviewAt: null,
+          firstCommitAt,
+          firstReviewAt,
           mergedAt,
         });
       }
     }
     return out;
+  }
+
+  /**
+   * GitLab has no review object, so the closest honest signal is the first
+   * comment left by someone other than the author. System notes are skipped:
+   * a label change or an assignment is the platform talking, not a reviewer.
+   *
+   * An approximation, and stated as one — but a merge request nobody ever
+   * commented on used to make pickup and review times permanently empty, which
+   * read as "instant" rather than "not measurable here".
+   */
+  private async firstReviewAt(
+    gl: GitlabClient,
+    repo: string,
+    iid: number,
+    authorId: number | null,
+  ): Promise<string | null> {
+    try {
+      const notes = await gl.MergeRequestNotes.all(repo, iid);
+      const reviews = notes
+        .filter((note) => !(note.system as boolean))
+        .filter((note) => (note.author as { id?: number } | undefined)?.id !== authorId)
+        .map((note) => new Date(note.created_at as string).getTime())
+        .filter((at) => Number.isFinite(at));
+      return reviews.length > 0 ? new Date(Math.min(...reviews)).toISOString() : null;
+    } catch {
+      return null;
+    }
   }
 
   private async firstCommitAt(gl: GitlabClient, repo: string, iid: number): Promise<string | null> {

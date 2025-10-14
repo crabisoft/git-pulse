@@ -275,6 +275,14 @@ The breakdown has four segments: `coding_time` (first commit → opened),
 `pickup_time` (opened → first review), `review_time` (first review → merged)
 and `deploy_time` (merged → the deployment that carried it).
 
+**Not every platform has a review object.** Where one does not, the first
+comment left by somebody other than the author stands in for it, system notes
+excluded — a label change is the platform talking, not a reviewer. It is an
+approximation and the metric help says so, but the alternative was two segments
+permanently empty, which reads as "instant" rather than "not measurable here".
+It costs one call per merged request, the same as the platforms that do expose
+reviews.
+
 That last one needs a **pull request tied to a deployment**, which no connector
 gives directly: they expose a deployment's ref, never the commits it contains.
 The correlation is therefore by repository and time — the earliest *successful*

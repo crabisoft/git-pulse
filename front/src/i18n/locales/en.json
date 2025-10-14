@@ -280,8 +280,8 @@
       "change_failure_rate": "Share of failed deployments among those with a known status. Deployments with an undetermined status are excluded.",
       "mttr": "Median time between a failed deployment and the next successful one on the same environment.",
       "coding_time": "Median time from the first commit to the PR/MR being opened.",
-      "pickup_time": "Median time from the PR/MR being opened to its first review. Not computed when the platform exposes no reviews.",
-      "review_time": "Median time from the first review to the merge. Not computed when the platform exposes no reviews.",
+      "pickup_time": "Median time from the PR/MR being opened to its first review. Where the platform exposes no review, the first comment by someone else stands in for it — an approximation, not an equivalence.",
+      "review_time": "Median time from the first review to the merge. Same approximation as pickup time on platforms with no native review.",
       "deploy_time": "Median time from the PR/MR being merged to the deployment that carried it. Grouped by where it landed: filtering on type=Prod gives the delay to production. Correlated by repo and date — a connector never exposes the commits a deployment contains — so read it as an upper bound."
     }
   },

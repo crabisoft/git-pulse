@@ -280,8 +280,8 @@
       "change_failure_rate": "Part des déploiements en échec parmi ceux dont le statut est connu. Les déploiements au statut indéterminé sont exclus du calcul.",
       "mttr": "Durée médiane entre un déploiement en échec et le déploiement réussi suivant sur le même environnement.",
       "coding_time": "Durée médiane entre le premier commit et l'ouverture de la PR/MR.",
-      "pickup_time": "Durée médiane entre l'ouverture de la PR/MR et la première review. Non calculé quand la plateforme n'expose pas de reviews.",
-      "review_time": "Durée médiane entre la première review et la fusion. Non calculé quand la plateforme n'expose pas de reviews.",
+      "pickup_time": "Durée médiane entre l'ouverture de la PR/MR et la première review. Là où la plateforme n'expose pas de review, c'est le premier commentaire d'un tiers qui en tient lieu — une approximation, pas une équivalence.",
+      "review_time": "Durée médiane entre la première review et la fusion. Même approximation que le temps de prise en charge sur les plateformes sans review native.",
       "deploy_time": "Durée médiane entre la fusion de la PR/MR et le déploiement qui l'a embarquée. Groupé par environnement d'arrivée : filtrer sur type=Prod donne le délai jusqu'à la production. Corrélation par repo et par date — un connecteur n'expose pas les commits d'un déploiement — donc à lire comme une borne haute."
     }
   },
