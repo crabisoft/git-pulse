@@ -232,6 +232,59 @@ export interface MergedPullRequest {
   mergedAt: string;
 }
 
+// ─── Release notes ───────────────────────────────────────────────────
+
+/** A tag, as the platform reports it. */
+export interface Tag {
+  name: string;
+  sha: string;
+  /** Absent on lightweight tags, which carry no date of their own. */
+  taggedAt: string | null;
+}
+
+/** A commit in a range, before anything is made of it. */
+export interface Commit {
+  sha: string;
+  /** Subject and body, as written. */
+  message: string;
+  author: string;
+  authoredAt: string;
+  url: string;
+}
+
+/** One line of a release note, parsed out of a commit. */
+export interface ReleaseNoteEntry {
+  /** The description, with the Conventional Commits prefix removed. */
+  summary: string;
+  /** The `feat(scope):` part, when there is one. */
+  scope: string | null;
+  breaking: boolean;
+  sha: string;
+  author: string;
+  url: string;
+  /** Tickets the message mentions, read by the ticket rules. */
+  tickets: TicketRef[];
+}
+
+/** Entries sharing a Conventional Commits type. */
+export interface ReleaseNoteSection {
+  /** `feat`, `fix`, … or `other` for what followed no convention. */
+  type: string;
+  entries: ReleaseNoteEntry[];
+}
+
+/** What a range of commits amounts to, structured and rendered. */
+export interface ReleaseNotes {
+  repo: string;
+  /** The tag the range starts after; null when it starts at the beginning. */
+  from: string | null;
+  to: string;
+  sections: ReleaseNoteSection[];
+  /** Breaking changes, repeated out of their sections to lead the notes. */
+  breaking: ReleaseNoteEntry[];
+  markdown: string;
+}
+
 // ─── Localizable messages ────────────────────────────────────────────
 
 /** A message identified by an i18n code, translated on the frontend. */

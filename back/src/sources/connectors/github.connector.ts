@@ -2,12 +2,14 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Octokit } from '@octokit/rest';
 import { createAppAuth } from '@octokit/auth-app';
 import type {
+  Commit,
   PullRequest,
   Pipeline,
   Deployment,
   MergedPullRequest,
   PipelineStatus,
   ConnectionTestResult,
+  Tag,
 } from '@repo/shared';
 import type { ConnectorContext, SourceConnector } from './source-connector.interface';
 import { applyScope, ageHours } from './scope.util';
@@ -190,6 +192,52 @@ export class GitHubConnector implements SourceConnector {
     return out;
   }
 
+  async listTags(ctx: ConnectorContext, repo: string): Promise<Tag[]> {
+    const gh = this.client(ctx);
+    const tags = await gh.rest.repos.listTags({ owner: ctx.scope.owner, repo, per_page: 100 });
+    return tags.data.map((tag) => ({
+      name: tag.name,
+      sha: tag.commit.sha,
+      // Lightweight tags carry no date; the commit's stands in when needed.
+      taggedAt: null,
+    }));
+  }
+
+  async listCommitsBetween(
+    ctx: ConnectorContext,
+    repo: string,
+    from: string | null,
+    to: string,
+  ): Promise<Commit[]> {
+    const gh = this.client(ctx);
+    const owner = ctx.scope.owner;
+
+    // With both bounds the compare endpoint answers in one call and knows what
+    // "reachable from one but not the other" means; without a lower bound there
+    // is nothing to compare against, so the log is walked instead.
+    if (from) {
+      const diff = await gh.rest.repos.compareCommitsWithBasehead({
+        owner,
+        repo,
+        basehead: `${from}...${to}`,
+      });
+      return diff.data.commits.map((c) => toCommit(c, repo));
+    }
+    const log = await gh.paginate(gh.rest.repos.listCommits, {
+      owner,
+      repo,
+      sha: to,
+      per_page: 100,
+    });
+    return log.map((c) => toCommit(c, repo));
+  }
+
+  async defaultBranch(ctx: ConnectorContext, repo: string): Promise<string> {
+    const gh = this.client(ctx);
+    const info = await gh.rest.repos.get({ owner: ctx.scope.owner, repo });
+    return info.data.default_branch;
+  }
+
   private async deploymentStatus(
     gh: Octokit,
     owner: string,
@@ -288,6 +336,24 @@ export function octokitFor(ctx: ConnectorContext): Octokit {
     });
   }
   return new Octokit({ auth: ctx.auth.token, baseUrl, request });
+}
+
+function toCommit(
+  c: {
+    sha: string;
+    html_url: string;
+    commit: { message: string; author?: { name?: string | null; date?: string | null } | null };
+    author?: { login?: string } | null;
+  },
+  _repo: string,
+): Commit {
+  return {
+    sha: c.sha,
+    message: c.commit.message,
+    author: c.author?.login ?? c.commit.author?.name ?? 'unknown',
+    authoredAt: c.commit.author?.date ?? new Date(0).toISOString(),
+    url: c.html_url,
+  };
 }
 
 function mapGitHubStatus(status: string | null, conclusion: string | null): PipelineStatus {

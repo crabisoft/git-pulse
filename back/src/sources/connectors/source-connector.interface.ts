@@ -1,10 +1,12 @@
 import type {
+  Commit,
   PullRequest,
   Pipeline,
   Deployment,
   MergedPullRequest,
   ScopeRules,
   ConnectionTestResult,
+  Tag,
 } from '@repo/shared';
 
 /** Decrypted source credentials, discriminated by auth kind. */
@@ -55,4 +57,21 @@ export interface SourceConnector {
     repos: string[],
     since: string,
   ): Promise<MergedPullRequest[]>;
+
+  /** Tags of a repo, most recent first — what a release range is picked from. */
+  listTags(ctx: ConnectorContext, repo: string): Promise<Tag[]>;
+
+  /**
+   * Commits reachable from `to` but not from `from`. An omitted `from` means
+   * the whole history up to `to`, which is what a first release needs.
+   */
+  listCommitsBetween(
+    ctx: ConnectorContext,
+    repo: string,
+    from: string | null,
+    to: string,
+  ): Promise<Commit[]>;
+
+  /** The branch a repo defaults to, when no range bound is given. */
+  defaultBranch(ctx: ConnectorContext, repo: string): Promise<string>;
 }

@@ -1,12 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Gitlab } from '@gitbeaker/rest';
 import type {
+  Commit,
   PullRequest,
   Pipeline,
   Deployment,
   MergedPullRequest,
   PipelineStatus,
   ConnectionTestResult,
+  Tag,
 } from '@repo/shared';
 import type { ConnectorContext, SourceConnector } from './source-connector.interface';
 import { applyScope, ageHours } from './scope.util';
@@ -179,6 +181,43 @@ export class GitLabConnector implements SourceConnector {
     return out;
   }
 
+  async listTags(ctx: ConnectorContext, repo: string): Promise<Tag[]> {
+    const gl = this.client(ctx);
+    const tags = await gl.Tags.all(repo, { perPage: 100 });
+    return tags.map((tag) => ({
+      name: tag.name as string,
+      sha: (tag.commit as { id?: string } | undefined)?.id ?? '',
+      // Annotated tags date themselves; lightweight ones do not.
+      taggedAt: ((tag.commit as { created_at?: string } | undefined)?.created_at as string) ?? null,
+    }));
+  }
+
+  async listCommitsBetween(
+    ctx: ConnectorContext,
+    repo: string,
+    from: string | null,
+    to: string,
+  ): Promise<Commit[]> {
+    const gl = this.client(ctx);
+    const baseUrl = ctx.baseUrl.replace(/\/$/, '');
+
+    // Same split as the other connector: a compare when both bounds exist,
+    // otherwise the log, since there is nothing to compare a first release to.
+    if (from) {
+      const diff = await gl.Repositories.compare(repo, from, to);
+      const commits = (diff.commits ?? []) as Array<Record<string, unknown>>;
+      return commits.map((c) => toCommit(c, baseUrl, repo));
+    }
+    const log = await gl.Commits.all(repo, { refName: to, perPage: 100 });
+    return (log as Array<Record<string, unknown>>).map((c) => toCommit(c, baseUrl, repo));
+  }
+
+  async defaultBranch(ctx: ConnectorContext, repo: string): Promise<string> {
+    const gl = this.client(ctx);
+    const project = await gl.Projects.show(repo);
+    return (project.default_branch as string) ?? 'main';
+  }
+
   /**
    * GitLab has no review object, so the closest honest signal is the first
    * comment left by someone other than the author. System notes are skipped:
@@ -231,6 +270,17 @@ export function gitlabFor(ctx: ConnectorContext): GitlabClient {
     host: ctx.baseUrl.replace(/\/$/, ''),
     token: ctx.auth.token,
   });
+}
+
+function toCommit(c: Record<string, unknown>, baseUrl: string, repo: string): Commit {
+  const sha = (c.id as string) ?? '';
+  return {
+    sha,
+    message: (c.message as string) ?? (c.title as string) ?? '',
+    author: (c.author_name as string) ?? 'unknown',
+    authoredAt: (c.authored_date as string) ?? (c.created_at as string) ?? new Date(0).toISOString(),
+    url: (c.web_url as string) ?? `${baseUrl}/${repo}/-/commit/${sha}`,
+  };
 }
 
 function mapGitLabStatus(status: string): PipelineStatus {

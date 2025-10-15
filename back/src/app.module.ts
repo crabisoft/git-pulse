@@ -8,6 +8,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
 import { EnvRulesModule } from './env-rules/env-rules.module';
 import { TrackersModule } from './trackers/trackers.module';
 import { TicketRulesModule } from './ticket-rules/ticket-rules.module';
+import { ReleaseNotesModule } from './release-notes/release-notes.module';
 import { DoraModule } from './dora/dora.module';
 import { CollectionModule } from './collection/collection.module';
 
@@ -22,6 +23,7 @@ import { CollectionModule } from './collection/collection.module';
     EnvRulesModule,
     TrackersModule,
     TicketRulesModule,
+    ReleaseNotesModule,
     DoraModule,
     CollectionModule,
   ],

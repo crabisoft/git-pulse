@@ -453,6 +453,32 @@ Two consequences worth keeping in mind:
   bucket: the filter does not log it as a server error. Scheduled collection
   has no signal — nobody is waiting on it, nothing cancels it.
 
+## Release notes
+
+`GET /api/sources/:id/release-notes?repo=&from=&to=` summarises a range of
+commits; `GET /api/sources/:id/tags?repo=` lists what a range can be picked
+from.
+
+Bounds fill themselves in: `to` defaults to the most recent tag — a release is
+summarised as it was cut, not as the branch has drifted since — and `from` to
+the tag below it. With no tag at all the range runs from the beginning of
+history to the default branch, which is what a first release needs.
+
+Each commit is read as a **Conventional Commit** and filed under its type, with
+breaking changes repeated at the top: they are what a reader upgrading needs
+first. A message following no convention is filed under `other` rather than
+dropped, since most histories are mixed. The parser is deliberately strict —
+`Reverting this: fix login` yields nothing rather than a type named `reverting`.
+
+Ticket references are read from commit messages by the **same rules** as branch
+names and PR titles, so a release note links its tickets without any further
+configuration.
+
+> Only the Markdown is produced for now. AI rewriting through an `LLMProvider`
+> and publishing the notes back as a platform release are the remaining steps of
+> this phase; the first needs `Credential` generalised to a polymorphic owner,
+> which has been deferred until it had a consumer.
+
 ## Getting started — Docker (recommended)
 
 All the Docker configuration lives in `.docker/`:
