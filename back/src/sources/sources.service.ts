@@ -13,6 +13,7 @@ import { CodedException } from '../common/coded-exception';
 import { toPage, type PageWindow } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../crypto/crypto.service';
+import { ApiQuotaService } from '../api-quota/api-quota.service';
 import type { ConnectorContext, SourceAuth } from './connectors/source-connector.interface';
 import { ConnectorFactory } from './connectors/connector.factory';
 import type { CreateSourceDto } from './dto/create-source.dto';
@@ -24,6 +25,7 @@ export class SourcesService {
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
     private readonly connectors: ConnectorFactory,
+    private readonly quotas: ApiQuotaService,
   ) {}
 
   async create(dto: CreateSourceDto): Promise<SourcePublic> {
@@ -206,12 +208,20 @@ export class SourcesService {
     await this.prisma.source.delete({ where: { id } }).catch(() => {
       throw new CodedException('errors.source.notFound', HttpStatus.NOT_FOUND, { id });
     });
+    // Quotas are keyed by subject rather than by relation, so no cascade
+    // reaches them.
+    await this.quotas.forget({ kind: 'source', id });
   }
 
   /** Tests the connection, decrypting the secret on the fly. */
   async testConnection(id: string): Promise<ConnectionTestResult> {
     const { ctx, kind } = await this.resolveContext(id);
-    return this.connectors.for(kind).testConnection(ctx);
+    const result = await this.connectors.for(kind).testConnection(ctx);
+    // The one call this made carries the rate-limit counters, and a user
+    // watching the result expects the gauge to follow — quota writes are
+    // batched, so this is the one place worth forcing them out.
+    await this.quotas.flush();
+    return result;
   }
 
   /**
@@ -243,6 +253,9 @@ export class SourcesService {
         auth: buildAuth(source.authKind as AuthKind, secret),
         scope: source.scope as unknown as ScopeRules,
         signal,
+        // Git-hosted trackers borrow this context, so their calls are billed
+        // here too — which is right: they spend this source's token.
+        onQuota: this.quotas.sinkFor({ kind: 'source', id }),
       },
     };
   }

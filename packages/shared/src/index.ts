@@ -465,6 +465,42 @@ export interface ClassifiedEnvironment {
   metaEnvironments: string[];
 }
 
+// ─── API quotas ──────────────────────────────────────────────────────
+
+/** Whose credentials a series of API calls is billed to. */
+export type QuotaSubject = 'source' | 'tracker';
+
+/**
+ * Where the ceiling comes from. `observed` was read from the provider's
+ * rate-limit headers; `declared` was entered by hand, for the instances that
+ * send none. The distinction is shown, so a supposition never reads as a
+ * measurement.
+ */
+export type QuotaOrigin = 'observed' | 'declared';
+
+/**
+ * Consumption of one provider rate-limit bucket. A subject has as many as the
+ * provider meters separately: GitHub counts REST, GraphQL and search apart, on
+ * windows of different lengths, which is why the window travels with the row.
+ */
+export interface ApiQuotaPublic {
+  subjectKind: QuotaSubject;
+  subjectId: string;
+  /** Provider bucket name — "core", "graphql", "search", "rest" for GitLab. */
+  bucket: string;
+  limit: number;
+  used: number;
+  /** `limit - used`, floored at 0 — providers occasionally report an overshoot. */
+  remaining: number;
+  /** ISO date at which the counter goes back to zero. */
+  resetAt: string;
+  /** Window length in seconds, when the provider states one we know of. */
+  windowSec: number | null;
+  origin: QuotaOrigin;
+  /** ISO date of the last call that fed this row. */
+  observedAt: string;
+}
+
 // ─── Application settings ────────────────────────────────────────────
 
 /**

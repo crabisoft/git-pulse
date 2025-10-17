@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import {
   INCIDENT_TRACKER_KINDS,
   PAGE_LIMIT_MAX,
+  type ApiQuotaPublic,
   type EnvRulePublic,
   type RuleTarget,
   type SourcePublic,
@@ -22,6 +23,7 @@ import { IconButton } from '../IconButton';
 import { ConfirmDialog, Modal } from '../Modal';
 import { MultiSelect } from '../MultiSelect';
 import { Pagination } from '../Pagination';
+import { QuotaGauge } from '../QuotaGauge';
 
 interface FormState {
   name: string;
@@ -114,6 +116,7 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
   const [page, setPage] = useState<PageQuery>({});
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [tested, setTested] = useState<Record<string, ConnectionTestResult | 'pending'>>({});
+  const [quotas, setQuotas] = useState<ApiQuotaPublic[]>([]);
   /** Open editor: `null` source means creation. */
   const [editing, setEditing] = useState<{ source: SourcePublic | null } | null>(null);
   const [deleting, setDeleting] = useState<SourcePublic | null>(null);
@@ -129,9 +132,36 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
     }
   }, [page, t]);
 
+  /**
+   * Quotas are loaded on their own: they are metering, so a provider that sends
+   * no rate-limit header — a self-hosted GitLab, typically — must cost the list
+   * nothing more than an empty gauge.
+   */
+  const loadQuotas = useCallback(async () => {
+    try {
+      setQuotas(await api.listQuotas());
+    } catch {
+      setQuotas([]);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadQuotas();
+  }, [loadQuotas]);
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  /** Quotas of a source, by bucket — a provider meters several of them. */
+  const quotasBySource = useMemo(() => {
+    const map = new Map<string, ApiQuotaPublic[]>();
+    for (const quota of quotas) {
+      if (quota.subjectKind !== 'source') continue;
+      map.set(quota.subjectId, [...(map.get(quota.subjectId) ?? []), quota]);
+    }
+    return map;
+  }, [quotas]);
 
   /** Refreshes both this list and the sources App holds (picker, badge). */
   async function refresh() {
@@ -146,6 +176,9 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
     } catch (err) {
       setTested((cur) => ({ ...cur, [id]: { ok: false, message: apiErrorInfo(err) } }));
     }
+    // The test spent a call: it is also the cheapest way to get a first reading
+    // out of a source that has never been collected.
+    await loadQuotas();
   }
 
   async function remove(source: SourcePublic) {
@@ -191,6 +224,9 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
                   <div className="source-meta">
                     {s.baseUrl} · {s.scope.owner} · {t('sources.auth')}: {s.authKind}
                   </div>
+                  {(quotasBySource.get(s.id) ?? []).map((quota) => (
+                    <QuotaGauge key={quota.bucket} quota={quota} />
+                  ))}
                   {ts && (
                     <div className={`source-test ${ts === 'pending' ? '' : ts.ok ? 'ok' : 'err'}`}>
                       {ts === 'pending'

@@ -309,6 +309,14 @@
       "ok": "Connected to \"{{owner}}\".",
       "failed": "Connection failed: {{error}}"
     },
+    "quota": {
+      "label": "API calls, {{bucket}} bucket",
+      "resetsIn": "resets in {{delay}}",
+      "elapsed": "window elapsed",
+      "observedAt": "Last reading: {{at}}",
+      "declared": "declared",
+      "declaredHint": "Ceiling entered by hand: this instance sends no rate-limit header."
+    },
     "form": {
       "name": "Name",
       "platform": "Platform",

@@ -8,6 +8,7 @@ import type {
   ConnectionTestResult,
   Tag,
 } from '@repo/shared';
+import type { QuotaSink } from '../../api-quota/rate-limit-headers';
 
 /** Decrypted source credentials, discriminated by auth kind. */
 export type SourceAuth =
@@ -30,6 +31,16 @@ export interface ConnectorContext {
    * collection, which nobody is waiting on.
    */
   signal?: AbortSignal;
+  /**
+   * Where the rate-limit headers of each response are reported. It travels in
+   * the context for the same reason as the signal, and it is bound to the
+   * subject being billed — so a connector reports what it read without having
+   * to know whose budget it charges.
+   *
+   * Absent when nobody is metering, which keeps the connectors usable outside
+   * a Nest context.
+   */
+  onQuota?: QuotaSink;
 }
 
 /**

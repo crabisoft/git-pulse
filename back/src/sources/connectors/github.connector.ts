@@ -12,6 +12,7 @@ import type {
   Tag,
 } from '@repo/shared';
 import type { ConnectorContext, SourceConnector } from './source-connector.interface';
+import { githubQuota, type HeaderBag, type QuotaSink } from '../../api-quota/rate-limit-headers';
 import { applyScope, ageHours } from './scope.util';
 
 /** GitHub connector — github.com or GitHub Enterprise via baseUrl. */
@@ -325,17 +326,45 @@ export function octokitFor(ctx: ConnectorContext): Octokit {
   // instance makes, `paginate` included.
   const request = { signal: ctx.signal };
 
-  if (ctx.auth.kind === 'app') {
-    // GitHub App: Octokit mints and caches installation tokens on demand.
-    const { appId, privateKey, installationId } = ctx.auth;
-    return new Octokit({
-      authStrategy: createAppAuth,
-      auth: { appId, privateKey, installationId },
-      baseUrl,
-      request,
-    });
-  }
-  return new Octokit({ auth: ctx.auth.token, baseUrl, request });
+  const octokit =
+    ctx.auth.kind === 'app'
+      ? // GitHub App: Octokit mints and caches installation tokens on demand.
+        new Octokit({
+          authStrategy: createAppAuth,
+          auth: {
+            appId: ctx.auth.appId,
+            privateKey: ctx.auth.privateKey,
+            installationId: ctx.auth.installationId,
+          },
+          baseUrl,
+          request,
+        })
+      : new Octokit({ auth: ctx.auth.token, baseUrl, request });
+
+  if (ctx.onQuota) meterOctokit(octokit, ctx.onQuota);
+  return octokit;
+}
+
+/**
+ * Reports the rate-limit headers of every call the client makes, `paginate`
+ * included — the hooks sit under the request layer, which is the only place
+ * every call passes through.
+ */
+function meterOctokit(octokit: Octokit, onQuota: QuotaSink): void {
+  const report = (headers: HeaderBag | undefined) => {
+    if (!headers) return;
+    const sample = githubQuota(headers);
+    if (sample) onQuota(sample);
+  };
+
+  octokit.hook.after('request', (response) => report(response.headers));
+  // Failures carry the counters too, and a 403 for a spent budget is precisely
+  // the reading worth keeping — dropping it would leave the gauge showing the
+  // last success, just short of the limit that was actually hit.
+  octokit.hook.error('request', (error) => {
+    report((error as { response?: { headers?: HeaderBag } }).response?.headers);
+    throw error;
+  });
 }
 
 function toCommit(

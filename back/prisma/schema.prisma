@@ -167,6 +167,42 @@ model TicketRule {
   @@index([trackerId, priority])
 }
 
+/// Whose credentials the API calls are billed to. Git-hosted trackers reuse
+/// their source's token, so they never appear here; standalone ones (Jira,
+/// Linear) carry their own and do.
+enum QuotaSubject {
+  source
+  tracker
+}
+
+/// Where the ceiling comes from. Kept explicit so the UI never presents a
+/// hand-entered figure as a measured one.
+enum QuotaOrigin {
+  observed
+  declared
+}
+
+/// Consumption of one provider rate-limit bucket. One row per bucket: GitHub
+/// meters REST, GraphQL and search separately, on windows of different lengths.
+model ApiQuota {
+  id          String       @id @default(uuid())
+  subjectKind QuotaSubject
+  subjectId   String
+  /// Provider bucket name — "core", "graphql", "search", "rest" for GitLab.
+  bucket      String
+  limit       Int
+  used        Int
+  /// End of the current window, as the provider reports it.
+  resetAt     DateTime
+  /// Window length. Null when the provider states neither it nor a default we
+  /// know of — the reset date stays usable on its own.
+  windowSec   Int?
+  origin      QuotaOrigin
+  observedAt  DateTime     @updatedAt
+
+  @@unique([subjectKind, subjectId, bucket])
+}
+
 /// Application-wide setting, editable from the UI. A missing key falls back to
 /// the matching environment variable, then to the built-in default.
 model AppSetting {

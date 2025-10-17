@@ -309,6 +309,14 @@
       "ok": "Connexion OK pour « {{owner}} ».",
       "failed": "Échec de connexion : {{error}}"
     },
+    "quota": {
+      "label": "Appels API, compteur {{bucket}}",
+      "resetsIn": "remis à zéro dans {{delay}}",
+      "elapsed": "fenêtre écoulée",
+      "observedAt": "Dernière mesure : {{at}}",
+      "declared": "déclaré",
+      "declaredHint": "Plafond saisi à la main : cette instance n'envoie aucun en-tête de quota."
+    },
     "form": {
       "name": "Nom",
       "platform": "Plateforme",

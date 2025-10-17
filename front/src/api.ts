@@ -1,4 +1,5 @@
 import type {
+  ApiQuotaPublic,
   AppSettings,
   SourcePublic,
   DashboardLive,
@@ -234,6 +235,9 @@ export const api = {
     owner?: string;
     repo?: string;
   }) => request<TicketRef[]>('/ticket-rules/preview', { method: 'POST', body: JSON.stringify(sample) }),
+
+  /** Every metered bucket, all subjects at once — see the quotas controller. */
+  listQuotas: () => request<ApiQuotaPublic[]>('/quotas'),
 
   listTrackers: (page?: PageQuery) =>
     request<Page<TrackerPublic>>(`/trackers${qs({ ...page })}`),

@@ -49,6 +49,8 @@ Targets delegate to the npm scripts and the Docker wrapper described below.
   supplied through `MASTER_KEY` (base64) for Kubernetes / a secret manager.
 - **`SourcesModule`** — source CRUD plus connection testing.
 - **`DashboardModule`** — live aggregation per source.
+- **`ApiQuotaModule`** — what each source has spent of its platform's rate
+  limit, read from the responses themselves.
 
 ## Navigation (front)
 
@@ -111,6 +113,13 @@ of the source form. The library costs about 30 kB gzipped, which is the price of
 that list. Components render under jsdom with
 translations stubbed to echo their key — what a screen *says* is the
 translators' business, what it *does* is what is asserted.
+
+Two suites step outside that rule and boot a **real client**: the quota metering
+seams hook Octokit's request hooks and gitbeaker's built requesters, which no
+type check covers and no upgrade announces. They run the actual clients against
+a stubbed transport, so a library moving its seam fails there rather than in
+production — where the only symptom would be a gauge that quietly stopped
+moving.
 
 The pure engines came first on purpose: they are what every metric on screen is
 derived from, and the only place where a silent change of behaviour goes
@@ -453,6 +462,65 @@ Two consequences worth keeping in mind:
   bucket: the filter does not log it as a server error. Scheduled collection
   has no signal — nobody is waiting on it, nothing cancels it.
 
+## API quotas
+
+Every platform meters what it is asked, and the collection's cost is its
+fan-out: one call per repo, plus one per merged pull request for the lead-time
+segments and one per deployment for its status. Knowing where a source stands
+has to come before deciding what to do about it — this is the measuring half,
+and it changes no behaviour: nothing here throttles, delays or refuses a call.
+
+**The ceiling is read, not configured.** Both platforms send their counters on
+every response, and a figure typed into a form goes stale the day the plan, the
+token or the instance's settings change. `ApiQuota` therefore records where each
+reading came from, and a declared one is marked as such in the UI — a
+supposition must never read as a measurement.
+
+| Provider | Headers | Buckets | Window |
+|---|---|---|---|
+| GitHub | `x-ratelimit-*`, bucket named by `x-ratelimit-resource` | `core`, `graphql`, `search`… metered apart | hour, `search` by the minute |
+| GitLab | `ratelimit-*` | one | minute |
+
+A self-hosted GitLab with rate limiting switched off sends none of them. That
+yields **no** row rather than a zeroed one: 0/0 would show a full budget where
+nothing was measured. Same reasoning on the gauge, where a reading whose window
+has elapsed is drawn as expired rather than reset — the new window's counter is
+unknown until a call is made in it.
+
+Readings are taken on the response path of every call, held in memory and
+written in batches: a run makes hundreds of calls that each carry the counters,
+and writing on each would turn metering into a write amplifier. Failures are
+read too — a 403 for a spent budget is precisely the reading worth keeping, and
+dropping it would leave the gauge just short of the limit actually hit. Since
+responses come back out of order and these headers are counters rather than
+increments, the highest count of a window wins; a later reset date means the
+window rolled over, where a drop is expected.
+
+Two clients, two seams, neither of them a documented contract:
+
+- **Octokit** exposes request hooks, which sit under `paginate()` and therefore
+  cover every call an instance makes.
+- **gitbeaker** exposes no response hook, and its default requester is private.
+  Supplying our own `requesterFn` would mean re-implementing its retry and
+  parsing rules and keeping them in step, so the requesters it has already built
+  are wrapped instead: `Gitlab` assigns every resource as an own property, and
+  each carries the requester its calls go through.
+
+Gauges show up per source in **Settings › Sources**. Testing a connection is
+also the cheapest way to get a first reading out of a source never collected —
+it spends one call and flushes it straight away.
+
+> Quotas are keyed by subject (`source` or `tracker`) rather than by relation:
+> standalone trackers will carry their own credentials, and their budgets are
+> counted in request cost or complexity points rather than in calls. Git-hosted
+> trackers never appear — they spend their source's token, so their calls are
+> billed to it. The polymorphic key rules out a foreign key, hence the explicit
+> purge when a source is deleted.
+
+Declaring a ceiling for the instances that meter nothing, then degrading the
+optional work before the limit is reached rather than being refused at it, is
+the next step — not done.
+
 ## Release notes
 
 `GET /api/sources/:id/release-notes?repo=&from=&to=` summarises a range of
@@ -599,9 +667,12 @@ Shipped:
 - Foundation, connectors, encryption, live dashboard.
 - Historization + DORA (4 metrics + lead time breakdown), RegEx environment
   engine (meta-env, priority + accumulation), BullMQ jobs.
+- API quota metering, read from the platforms' own rate-limit headers.
 
 Planned:
 
+- Declared API budgets for the instances that meter nothing, then degrading
+  collection ahead of the limit instead of being refused at it.
 - Release notes tag→tag with AI rewriting (multi-provider `LLMProvider`),
   Release publishing.
 - Review/CI/throughput metrics, alerts and thresholds.

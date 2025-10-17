@@ -11,6 +11,7 @@ import type {
   Tag,
 } from '@repo/shared';
 import type { ConnectorContext, SourceConnector } from './source-connector.interface';
+import { gitlabQuota, type HeaderBag, type QuotaSink } from '../../api-quota/rate-limit-headers';
 import { applyScope, ageHours } from './scope.util';
 
 export type GitlabClient = InstanceType<typeof Gitlab>;
@@ -266,10 +267,73 @@ export function gitlabFor(ctx: ConnectorContext): GitlabClient {
   if (ctx.auth.kind !== 'token') {
     throw new Error('GitLab supports token authentication only.');
   }
-  return new Gitlab({
+  const client = new Gitlab({
     host: ctx.baseUrl.replace(/\/$/, ''),
     token: ctx.auth.token,
   });
+  if (ctx.onQuota) meterGitlab(client, ctx.onQuota);
+  return client;
+}
+
+/**
+ * Reports the rate-limit headers of every call the client makes.
+ *
+ * Same obstacle as the abort signal above: gitbeaker exposes no response hook.
+ * Its constructor does take a `requesterFn`, but its default one is private, so
+ * supplying ours would mean re-implementing its retry and parsing rules and
+ * keeping them in step with the library. Wrapping the requesters it has already
+ * built leaves that logic untouched — `Gitlab` assigns every resource as an own
+ * property, and each holds the requester its calls go through, pagination
+ * included.
+ */
+function meterGitlab(client: GitlabClient, onQuota: QuotaSink): void {
+  const report = (headers: HeaderBag | undefined) => {
+    if (!headers) return;
+    const sample = gitlabQuota(headers);
+    if (sample) onQuota(sample);
+  };
+
+  for (const resource of Object.values(client as unknown as Record<string, unknown>)) {
+    const holder = resource as { requester?: Requester };
+    if (!holder?.requester) continue;
+    holder.requester = meterRequester(holder.requester, report);
+  }
+}
+
+const REQUESTER_METHODS = ['get', 'post', 'put', 'patch', 'delete'] as const;
+
+/**
+ * The slice of gitbeaker's requester that matters here — its five verbs, and
+ * the headers their responses carry. Described locally rather than imported:
+ * `@gitbeaker/requester-utils` is a transitive dependency, and this shape is
+ * small enough that declaring it beats pinning a second package.
+ */
+type Requester = Record<
+  (typeof REQUESTER_METHODS)[number],
+  (endpoint: string, options?: unknown) => Promise<{ headers?: HeaderBag }>
+>;
+
+/** The same requester, reporting what each response says about the budget. */
+function meterRequester(
+  requester: Requester,
+  report: (headers: HeaderBag | undefined) => void,
+): Requester {
+  const metered = {} as Requester;
+  for (const method of REQUESTER_METHODS) {
+    metered[method] = async (endpoint, options) => {
+      try {
+        const response = await requester[method](endpoint, options);
+        report(response.headers);
+        return response;
+      } catch (e) {
+        // A 429 is the one reading that must not be lost: it is the moment the
+        // budget ran out, and gitbeaker only surfaces it through the error.
+        report((e as { cause?: { response?: { headers?: HeaderBag } } }).cause?.response?.headers);
+        throw e;
+      }
+    };
+  }
+  return metered;
 }
 
 function toCommit(c: Record<string, unknown>, baseUrl: string, repo: string): Commit {

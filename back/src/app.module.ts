@@ -11,6 +11,7 @@ import { TicketRulesModule } from './ticket-rules/ticket-rules.module';
 import { ReleaseNotesModule } from './release-notes/release-notes.module';
 import { DoraModule } from './dora/dora.module';
 import { CollectionModule } from './collection/collection.module';
+import { ApiQuotaModule } from './api-quota/api-quota.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { CollectionModule } from './collection/collection.module';
     ReleaseNotesModule,
     DoraModule,
     CollectionModule,
+    ApiQuotaModule,
   ],
 })
 export class AppModule {}

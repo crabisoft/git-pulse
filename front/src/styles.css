@@ -357,6 +357,24 @@ tr.stale td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
 .source-test.err { color: var(--crit); }
 .row-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
+/* API quota gauge */
+.quota { margin-top: 8px; max-width: 340px; }
+.quota-head { display: flex; align-items: baseline; gap: 8px; font-size: .76rem; color: var(--muted); }
+.quota-bucket { font-family: var(--mono); }
+.quota-count { font-variant-numeric: tabular-nums; color: var(--ink); }
+.quota-window { margin-left: auto; }
+.quota-origin {
+  font-size: .68rem; padding: 1px 6px; border-radius: 5px;
+  border: 1px solid var(--line); color: var(--muted);
+}
+.quota-bar { height: 5px; margin-top: 4px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.quota-bar > span { display: block; height: 100%; border-radius: 3px; background: var(--good); }
+.quota-bar.warning > span { background: var(--warn); }
+.quota-bar.critical > span { background: var(--crit); }
+/* Elapsed window: the figures describe a period that is over, so the bar stops
+   claiming a level. */
+.quota-bar.idle > span { background: var(--muted); opacity: .45; }
+
 /* Sub-tabs (rule targets) */
 .subtabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
 .subtab { padding: 7px 14px; border: none; border-bottom: 2px solid transparent; background: none; color: var(--muted); cursor: pointer; font-size: .86rem; font-family: var(--sans); }
