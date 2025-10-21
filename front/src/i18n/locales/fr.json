@@ -262,7 +262,10 @@
         "repo": "dépôt",
         "restoredAt": "rétabli le",
         "openedAt": "ouverte le"
-      }
+      },
+      "title": "Événements contributeurs",
+      "noSample": "Aucun événement à détailler.",
+      "gone": "Cette métrique n'existe plus pour cette combinaison sur la période demandée."
     },
     "metric": {
       "deployment_frequency": "Fréquence de déploiement",
@@ -283,6 +286,16 @@
       "pickup_time": "Durée médiane entre l'ouverture de la PR/MR et la première review. Là où la plateforme n'expose pas de review, c'est le premier commentaire d'un tiers qui en tient lieu — une approximation, pas une équivalence.",
       "review_time": "Durée médiane entre la première review et la fusion. Même approximation que le temps de prise en charge sur les plateformes sans review native.",
       "deploy_time": "Durée médiane entre la fusion de la PR/MR et le déploiement qui l'a embarquée. Groupé par environnement d'arrivée : filtrer sur type=Prod donne le délai jusqu'à la production. Corrélation par repo et par date — un connecteur n'expose pas les commits d'un déploiement — donc à lire comme une borne haute."
+    },
+    "trend": {
+      "noHistory": "Aucun historique : la collecte planifiée n'a pas encore tourné pour cette métrique.",
+      "tooShort": "Un seul point relevé — il en faut au moins deux pour dessiner une tendance.",
+      "bucket": {
+        "hour": "Un point par heure, dernier relevé de chaque heure.",
+        "day": "Un point par jour, dernier relevé de chaque journée.",
+        "week": "Un point par semaine, dernier relevé de chaque semaine."
+      },
+      "summary": "Du {{from}} au {{to}} : {{firstValue}} → {{lastValue}}."
     }
   },
   "status": {

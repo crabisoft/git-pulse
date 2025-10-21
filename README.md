@@ -62,6 +62,7 @@ and by Vite in dev.
 |---|---|
 | `/dashboard/:slug` | Live view of a source |
 | `/dora/:slug` | DORA metrics for a source |
+| `/dora/:slug/:metric` | One metric: its trend, then the events behind it |
 | `/settings/general` | Application settings |
 | `/settings/sources` | Connected Git platforms |
 | `/settings/environments` | Classification rules, global catalogue (`?target=repository` for the repos tab) |
@@ -303,6 +304,35 @@ deployment that did not include it is attributed to it anyway, so read
 three use the pull request's: how long a change takes to arrive is a property of
 where it lands, so filtering on `type=Prod` answers "time to production" with no
 extra setting.
+
+## Metric trends
+
+Clicking a metric opens `/dora/:slug/:metric`, which shows how it moved and then
+what it is made of. The filters travel in the link, spelled as the API takes
+them: a value computed over another period is a different number, so the page
+reads exactly the report the list was showing rather than re-picking a period on
+arrival.
+
+The trend comes from the historised snapshots through
+`GET /api/sources/:id/metrics/series`, **bucketed server-side**. The collection
+runs every few minutes, so a year of raw snapshots is tens of thousands of rows
+— more than a page window carries and more than a plot can say anything with.
+Each bucket keeps its **last** reading rather than an average: a DORA value is
+already an aggregate over a rolling window, and averaging aggregates would blur
+two different things together.
+
+An omitted dimension filter means the combination with **no** dimension, not
+"every combination": summing unrelated slices into one line would be
+meaningless.
+
+> The chart is one series, so it carries no legend — the heading names it — and
+> it states its own endpoints in text, below the plot and as its accessible
+> name. Its colour is a token of its own rather than `--accent`: the dark accent
+> sits outside the lightness band a mark needs to read against the dark surface.
+>
+> The charting library is a third of the bundle, so the page is loaded on
+> demand: the main bundle grew by 2 kB gzipped, and only opening a metric pays
+> the rest.
 
 ## Incidents and failure rate
 

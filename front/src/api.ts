@@ -8,6 +8,8 @@ import type {
   EnvRulePublic,
   ClassifiedEnvironment,
   DoraReport,
+  MetricBucket,
+  MetricSeries,
   MetricSnapshotPublic,
   Page,
   RuleTarget,
@@ -264,6 +266,29 @@ export const api = {
           repos: query.repos?.length ? query.repos : undefined,
           // The API takes `key:value` pairs, repeatable.
           dimension: Object.entries(query.dimensions ?? {}).map(([k, v]) => `${k}:${v}`),
+        }),
+      { signal },
+    ),
+  /** One metric, one dimension combination, bucketed for a chart. */
+  metricSeries: (
+    sourceId: string,
+    query: {
+      metric: string;
+      dimensions?: Record<string, string>;
+      from?: string;
+      to?: string;
+      bucket?: MetricBucket;
+    },
+    signal?: AbortSignal,
+  ) =>
+    request<MetricSeries>(
+      `/sources/${sourceId}/metrics/series` +
+        qs({
+          metric: query.metric,
+          dimension: Object.entries(query.dimensions ?? {}).map(([k, v]) => `${k}:${v}`),
+          from: query.from,
+          to: query.to,
+          bucket: query.bucket,
         }),
       { signal },
     ),

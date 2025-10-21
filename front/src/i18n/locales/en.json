@@ -262,7 +262,10 @@
         "repo": "repo",
         "restoredAt": "restored at",
         "openedAt": "opened at"
-      }
+      },
+      "title": "Contributing events",
+      "noSample": "No event to detail.",
+      "gone": "This metric no longer exists for that combination over the requested period."
     },
     "metric": {
       "deployment_frequency": "Deployment frequency",
@@ -283,6 +286,16 @@
       "pickup_time": "Median time from the PR/MR being opened to its first review. Where the platform exposes no review, the first comment by someone else stands in for it — an approximation, not an equivalence.",
       "review_time": "Median time from the first review to the merge. Same approximation as pickup time on platforms with no native review.",
       "deploy_time": "Median time from the PR/MR being merged to the deployment that carried it. Grouped by where it landed: filtering on type=Prod gives the delay to production. Correlated by repo and date — a connector never exposes the commits a deployment contains — so read it as an upper bound."
+    },
+    "trend": {
+      "noHistory": "No history yet: the scheduled collection has not run for this metric.",
+      "tooShort": "Only one reading — a trend needs at least two.",
+      "bucket": {
+        "hour": "One point per hour, the last reading of each.",
+        "day": "One point per day, the last reading of each.",
+        "week": "One point per week, the last reading of each."
+      },
+      "summary": "From {{from}} to {{to}}: {{firstValue}} → {{lastValue}}."
     }
   },
   "status": {

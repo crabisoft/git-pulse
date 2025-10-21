@@ -7,6 +7,11 @@
   --line: #e0e5ec;
   --accent: #1f6feb;
   --accent-deep: #0b4fc4;
+  /* Chart series, kept apart from --accent: the dark accent sits outside the
+     lightness band a mark needs to read against the dark surface. Both values
+     pass the palette checks for their own surface. */
+  --chart-series: #1f6feb;
+  --chart-grid: #e0e5ec;
   --good: #1a7f4b;
   --warn: #a5680a;
   --crit: #c0392b;
@@ -26,6 +31,8 @@
     --line: #262f3c;
     --accent: #4d9bff;
     --accent-deep: #7db4ff;
+    --chart-series: #4a90e2;
+    --chart-grid: #262f3c;
     --good: #4cc98a;
     --warn: #e0a23a;
     --crit: #f0857a;
@@ -192,6 +199,21 @@ a.pill.attr:hover { border-color: var(--accent); }
 .dora-value { font-size: 1.1rem; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 58px; text-align: right; white-space: nowrap; }
 .dora-sample { color: var(--muted); font-size: .74rem; }
 .spark { color: var(--accent); display: block; }
+
+/* Metric sub-page: the trend, then what it is made of. */
+.metric-head { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.metric-head h2 { margin: 0; }
+.back-link { font-size: .8rem; color: var(--muted); text-decoration: none; width: max-content; }
+.back-link:hover { color: var(--accent); text-decoration: underline; }
+.metric-head-dims { display: flex; align-items: center; gap: 8px; }
+.metric-current { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
+.metric-current .dora-value { font-size: 1.6rem; }
+/* Recharts fills the width; the height is fixed so the table below does not
+   jump as points arrive. */
+.chart { width: 100%; }
+.chart-note { font-size: .74rem; margin: 4px 0 0; }
+.chart-empty { padding: 28px 0; text-align: center; }
+.recharts-cartesian-grid line { stroke-dasharray: 3 3; }
 .spark-empty { color: var(--muted); font-size: .8rem; width: 84px; text-align: center; display: inline-block; }
 
 /* Settings */

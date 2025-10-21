@@ -456,6 +456,30 @@ export interface MetricSnapshotPublic {
   capturedAt: string;
 }
 
+/** One point of a historised metric, after bucketing. */
+export interface MetricPoint {
+  /** Start of the bucket, ISO. */
+  at: string;
+  value: number;
+}
+
+/**
+ * A metric's history for one dimension combination, ready to plot. Bucketed
+ * server-side: the collection runs every few minutes, so a year of raw
+ * snapshots is tens of thousands of rows that no chart can use and no page
+ * window can carry.
+ */
+export interface MetricSeries {
+  metric: string;
+  dimensions: Record<string, string>;
+  bucket: MetricBucket;
+  points: MetricPoint[];
+  /** Snapshots the points were derived from — what "no data yet" looks like. */
+  snapshotCount: number;
+}
+
+export type MetricBucket = 'hour' | 'day' | 'week';
+
 /** A name (environment or repository) resolved against a set of rules. */
 export interface ClassifiedEnvironment {
   name: string;

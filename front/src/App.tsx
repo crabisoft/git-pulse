@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, type ReactNode } from 'react';
+import { useEffect, useState, useCallback, lazy, Suspense, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Link,
@@ -16,6 +16,14 @@ import { api, apiErrorInfo } from './api';
 import { SECTION_PATHS, SettingsPage, type SettingsSection } from './pages/SettingsPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { DoraPage } from './pages/DoraPage';
+/**
+ * Loaded on demand: it is the only page that charts, and the charting library
+ * is a third of the bundle. Most sessions never open a metric's detail, and
+ * those that do can afford one round trip.
+ */
+const DoraMetricPage = lazy(() =>
+  import('./pages/DoraMetricPage').then((m) => ({ default: m.DoraMetricPage })),
+);
 
 /** One route per settings section, at its own path. None takes a source. */
 const SETTINGS_SECTIONS: SettingsSection[] = ['general', 'sources', 'trackers', 'env', 'tickets'];
@@ -28,7 +36,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = ['general', 'sources', 'trackers', 
  * Classification rules are a shared catalogue and ticket rules belong to their
  * tracker, so nothing under Settings is scoped to a source at all.
  */
-const SOURCE_ROUTES = ['/dashboard/:slug', '/dora/:slug'];
+const SOURCE_ROUTES = ['/dashboard/:slug', '/dora/:slug/:metric', '/dora/:slug'];
 
 /** The source slug the current URL points at, or null on the source-less pages. */
 function useRouteSlug(): { pattern: string; slug: string } | null {
@@ -175,7 +183,21 @@ export function App() {
             path="/dora/:slug"
             element={
               <SourcePage sources={sources} loaded={loaded} base="/dora">
-                {(source) => <DoraPage key={source.id} sourceId={source.id} />}
+                {(source) => (
+                  <DoraPage key={source.id} sourceId={source.id} slug={source.slug} />
+                )}
+              </SourcePage>
+            }
+          />
+          <Route
+            path="/dora/:slug/:metric"
+            element={
+              <SourcePage sources={sources} loaded={loaded} base="/dora">
+                {(source) => (
+                  <Suspense fallback={null}>
+                    <DoraMetricPage key={source.id} sourceId={source.id} slug={source.slug} />
+                  </Suspense>
+                )}
               </SourcePage>
             }
           />

@@ -1,16 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 import {
   PAGE_LIMIT_MAX,
   type DoraPeriod,
   type DoraReport,
-  type DoraResult,
   type DoraMetric,
-  type DoraSample,
   type MetricSnapshotPublic,
 } from '@repo/shared';
 import { api, type DoraQuery, type PageQuery } from '../api';
+import { dimKey, formatValue } from '../doraFormat';
+import { toSearchParams } from '../doraQuery';
 import { windowLabel, windowOptions } from '../doraWindow';
 import { FILTER_DEBOUNCE_MS, useCancellableLoad, useDebounced } from '../hooks';
 import { HelpTip } from '../HelpTip';
@@ -56,12 +57,12 @@ async function loadRecentHistory(
   return tail.items;
 }
 
-export function DoraPage({ sourceId }: { sourceId: string }) {
+export function DoraPage({ sourceId, slug }: { sourceId: string; slug: string }) {
   const { t } = useTranslation();
   const [report, setReport] = useState<DoraReport | null>(null);
   const [query, setQuery] = useState<DoraQuery>(EMPTY_QUERY);
   const [history, setHistory] = useState<MetricSnapshotPublic[]>([]);
-  const [detail, setDetail] = useState<DoraResult | null>(null);
+
 
   // Every filter goes through the debounce: a burst of clicks — repos ticked one
   // at a time, pages stepped through — settles into a single request.
@@ -153,13 +154,14 @@ export function DoraPage({ sourceId }: { sourceId: string }) {
                 </h3>
                 <div className="dora-rows">
                   {rows.map((r, i) => (
-                    <button
+                    <Link
                       key={i}
-                      type="button"
                       className="dora-row"
-                      onClick={() => setDetail(r)}
+                      to={`/dora/${slug}/${r.metric}?${toSearchParams({
+                        ...query,
+                        dimensions: r.dimensions,
+                      })}`}
                       title={t('dora.detail.open')}
-                      disabled={r.samples.length === 0}
                     >
                       {/* The sample count sits with the dimensions: the right
                           column has to stay narrow enough to leave the pills
@@ -185,7 +187,7 @@ export function DoraPage({ sourceId }: { sourceId: string }) {
                           ›
                         </span>
                       </div>
-                    </button>
+                    </Link>
                   ))}
                 </div>
               </section>
@@ -203,7 +205,6 @@ export function DoraPage({ sourceId }: { sourceId: string }) {
         />
       )}
 
-      {detail && <DetailDialog result={detail} onClose={() => setDetail(null)} />}
     </div>
   );
 }
@@ -452,113 +453,6 @@ function day(iso: string): string {
   return iso.slice(0, 10);
 }
 
-/** Contributing events behind one metric value. */
-function DetailDialog({ result, onClose }: { result: DoraResult; onClose: () => void }) {
-  const { t } = useTranslation();
-  const dimensions = Object.entries(result.dimensions);
-  const isDuration = result.unit === 'seconds';
-
-  return (
-    <Modal
-      label={t(`dora.metric.${result.metric}`)}
-      onClose={onClose}
-      title={
-        <span className="with-help">
-          {t(`dora.metric.${result.metric}`)}
-          <HelpTip text={t(`dora.help.${result.metric}`)} />
-        </span>
-      }
-      subtitle={
-        <>
-          <div className="modal-sub">
-            <span className="dora-value">{formatValue(result)}</span>
-            {dimensions.length === 0 ? (
-              <span className="muted">{t('dora.global')}</span>
-            ) : (
-              <div className="pills">
-                {dimensions.map(([k, v]) => (
-                  <span key={k} className="pill attr">
-                    <b>{k}</b>={v}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-          <p className="muted modal-count">
-            {t('dora.detail.shown', { shown: result.samples.length, total: result.sampleSize })}
-          </p>
-        </>
-      }
-    >
-      <table className="data">
-        <thead>
-          <tr>
-            <th>{t('dora.detail.cols.item')}</th>
-            <th>{t('dora.detail.cols.date')}</th>
-            {isDuration ? (
-              <th className="num">{t('dora.detail.cols.duration')}</th>
-            ) : (
-              <th>{t('dashboard.cols.status')}</th>
-            )}
-          </tr>
-        </thead>
-        <tbody>
-          {result.samples.map((s, i) => (
-            <tr key={i}>
-              <td className="mono">
-                {s.url ? (
-                  <a href={s.url} target="_blank" rel="noreferrer">
-                    {s.label}
-                  </a>
-                ) : (
-                  s.label
-                )}
-                {s.details && <SampleDetails details={s.details} />}
-              </td>
-              <td>{formatDate(s.at)}</td>
-              {isDuration ? (
-                <td className="num">{s.value === null ? '—' : humanizeDuration(s.value)}</td>
-              ) : (
-                <td>
-                  <SampleStatus status={s.status} />
-                </td>
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </Modal>
-  );
-}
-
-function SampleDetails({ details }: { details: Record<string, string> }) {
-  const { t } = useTranslation();
-  return (
-    <div className="sample-details">
-      {Object.entries(details).map(([k, v]) => (
-        <span key={k}>
-          {t(`dora.detail.field.${k}`, { defaultValue: k })}: {isIsoDate(v) ? formatDate(v) : v}
-        </span>
-      ))}
-    </div>
-  );
-}
-
-function SampleStatus({ status }: { status: DoraSample['status'] }) {
-  const { t } = useTranslation();
-  if (!status) return <span className="muted">—</span>;
-  const key = status === 'other' ? 'unknown' : status;
-  return <span className={`pill status-${key}`}>{t(`status.${key}`)}</span>;
-}
-
-function isIsoDate(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2}T/.test(value);
-}
-
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
-}
-
 function Sparkline({ values }: { values: number[] }) {
   if (values.length < 2) return <span className="spark-empty">—</span>;
   const w = 84;
@@ -576,25 +470,3 @@ function Sparkline({ values }: { values: number[] }) {
   );
 }
 
-function formatValue(r: DoraResult): string {
-  if (r.unit === 'count') return String(r.value);
-  if (r.unit === 'ratio') return `${(r.value * 100).toFixed(1)}%`;
-  return humanizeDuration(r.value);
-}
-
-function humanizeDuration(sec: number): string {
-  if (sec <= 0) return '—';
-  const d = Math.floor(sec / 86_400);
-  const h = Math.floor((sec % 86_400) / 3600);
-  const m = Math.floor((sec % 3600) / 60);
-  if (d > 0) return `${d}d ${h}h`;
-  if (h > 0) return `${h}h ${m}m`;
-  if (m > 0) return `${m}m`;
-  return `${Math.round(sec)}s`;
-}
-
-function dimKey(dimensions: Record<string, string>): string {
-  const sorted: Record<string, string> = {};
-  for (const k of Object.keys(dimensions).sort()) sorted[k] = dimensions[k];
-  return JSON.stringify(sorted);
-}
