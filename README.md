@@ -63,7 +63,9 @@ and by Vite in dev.
 | `/dashboard/:slug` | Live view of a source |
 | `/dora/:slug` | DORA metrics for a source |
 | `/dora/:slug/:metric` | One metric: its trend, then the events behind it |
+| `/login` | Sign in — or create the first admin on a fresh install |
 | `/settings/general` | Application settings |
+| `/settings/users` | Accounts allowed to sign in |
 | `/settings/sources` | Connected Git platforms |
 | `/settings/environments` | Classification rules, global catalogue (`?target=repository` for the repos tab) |
 | `/settings/trackers` | Ticket trackers (Jira, Linear, issues) |
@@ -92,6 +94,44 @@ back to the first source, or to the empty state if none remain.
 > The slug follows the name: **renaming a source invalidates its older links**.
 > The fallback avoids a dead page, but the link no longer points at the same
 > source.
+
+## Accounts and access
+
+Three levels, and every route carries one:
+
+| Level | Who passes |
+|---|---|
+| `anonymous` | anyone — signing in, signing out, reading the session state |
+| `viewer` | any account, plus anonymous visitors while the dashboard is public |
+| `admin` | admins only |
+
+`AuthGuard` is registered globally and **defaults to `admin`**: a route that
+says nothing is closed, so a new endpoint is protected by existing rather than
+by someone remembering to guard it. Dashboard, DORA, metrics, release notes and
+the two reads the front needs to draw them — `GET /sources`, `GET /settings` —
+are marked `@Viewer()`. Everything else, the whole configuration surface
+included, stays with the admins.
+
+**Public dashboard** (`Settings → General`) is what `viewer` reads. On, the
+dashboard and DORA are readable without an account, which is the default and
+what an upgraded install keeps. Off, the whole application asks for one. The
+settings never depended on it: they are `admin` either way.
+
+Roles are coarse on purpose — `admin` configures the install, `user` only reads
+what the public setting would otherwise open to everyone. Accounts are handed
+out from `Settings → Accounts`; there is no self-registration.
+
+**First run.** An install with no account at all offers to create the first
+admin, and only then: the bootstrap closes for good as soon as one exists. The
+same screen becomes the sign-in form afterwards.
+
+**Sessions** live in the database rather than in a signed token, so signing out,
+deleting an account or taking away its role takes effect at once instead of
+whenever a token happens to expire. The cookie is `httpOnly` and `sameSite=lax`,
+holds a random 32-byte value, and only its SHA-256 is stored — a leaked table
+hands out nothing. Passwords are scrypt-hashed with a per-account salt.
+`secure` follows `WEB_ORIGIN` being HTTPS, which `SESSION_COOKIE_SECURE`
+overrides for a proxy that terminates TLS elsewhere.
 
 ## Tests
 

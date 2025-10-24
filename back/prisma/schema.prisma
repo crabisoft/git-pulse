@@ -203,6 +203,43 @@ model ApiQuota {
   @@unique([subjectKind, subjectId, bucket])
 }
 
+enum UserRole {
+  admin
+  user
+}
+
+/// Someone who can sign in. Roles are coarse on purpose: `admin` configures the
+/// install, `user` only reads what the public setting would otherwise open to
+/// everyone.
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  name         String
+  /// scrypt, stored as `salt:derivedKey` in hex. Never the password itself.
+  passwordHash String
+  role         UserRole @default(user)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  sessions Session[]
+}
+
+/// A signed-in browser. Sessions live in the database rather than in a signed
+/// token so that signing out, or removing a user, takes effect at once instead
+/// of when a token happens to expire.
+model Session {
+  id        String   @id @default(uuid())
+  /// SHA-256 of the cookie value: a leaked table must not hand out live sessions.
+  tokenHash String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
 /// Application-wide setting, editable from the UI. A missing key falls back to
 /// the matching environment variable, then to the built-in default.
 model AppSetting {

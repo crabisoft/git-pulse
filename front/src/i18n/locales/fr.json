@@ -7,6 +7,23 @@
     "dora": "DORA",
     "settings": "Paramètres"
   },
+  "auth": {
+    "signInTitle": "Connexion",
+    "signInLead": "Ce dashboard est réservé à ses comptes.",
+    "setupTitle": "Créer le premier administrateur",
+    "setupLead": "Aucun compte n'existe encore. Celui créé ici administre l'installation ; les autres s'ajoutent depuis les réglages.",
+    "name": "Nom",
+    "email": "Email",
+    "password": "Mot de passe",
+    "confirmPassword": "Confirmer le mot de passe",
+    "passwordHint": "au moins {{min}} caractères",
+    "passwordMismatch": "Les deux mots de passe diffèrent.",
+    "signIn": "Se connecter",
+    "signOut": "Se déconnecter",
+    "createAdmin": "Créer le compte",
+    "adminOnlyTitle": "Réglages réservés aux administrateurs",
+    "adminOnlyText": "Votre compte ne peut pas configurer cette installation."
+  },
   "settings": {
     "title": "Paramètres",
     "section": {
@@ -14,14 +31,16 @@
       "sources": "Sources",
       "env": "Environnements",
       "tickets": "Tickets",
-      "trackers": "Trackers"
+      "trackers": "Trackers",
+      "users": "Comptes"
     },
     "desc": {
       "general": "Collecte et seuils",
       "sources": "Plateformes Git connectées",
       "env": "Règles de classification",
       "tickets": "Rattachement PR → ticket",
-      "trackers": "Jira, Linear, issues"
+      "trackers": "Jira, Linear, issues",
+      "users": "Qui peut se connecter"
     },
     "general": {
       "appTitle": "Application",
@@ -44,7 +63,34 @@
         "both": "Les deux"
       },
       "incidentLabels": "Labels d'incident",
-      "incidentLabelsHint": "séparés par des virgules ; une issue portant l'un d'eux est un incident"
+      "incidentLabelsHint": "séparés par des virgules ; une issue portant l'un d'eux est un incident",
+      "publicDashboard": "Dashboard public",
+      "publicDashboardHint": "Dashboard et DORA consultables sans connexion. Décoché, toute l'application demande un compte — les réglages le demandent de toute façon."
+    }
+  },
+  "users": {
+    "listTitle": "Comptes",
+    "hint": "Les comptes se distribuent ici, jamais depuis l'écran de connexion. Un administrateur configure l'installation ; un utilisateur ne fait que lire le dashboard et DORA, ce qui compte dès qu'ils ne sont plus publics.",
+    "addTitle": "Ajouter un compte",
+    "editTitle": "Modifier {{name}}",
+    "deleteTitle": "Supprimer le compte",
+    "confirmDelete": "Supprimer « {{name}} » ? Ses sessions ouvertes disparaissent avec lui.",
+    "added": "Compte ajouté.",
+    "updated": "Compte mis à jour.",
+    "deleted": "Compte supprimé.",
+    "you": "vous",
+    "role": {
+      "admin": "Administrateur",
+      "user": "Utilisateur"
+    },
+    "form": {
+      "name": "Nom",
+      "email": "Email",
+      "password": "Mot de passe",
+      "passwordKeepHint": "laisser vide pour conserver le mot de passe actuel",
+      "role": "Rôle",
+      "roleHint": "un administrateur configure l'installation ; un utilisateur ne fait que lire",
+      "submit": "Ajouter"
     }
   },
   "envRules": {
@@ -59,7 +105,10 @@
     "confirmDelete": "Supprimer la règle « {{name}} » ? Les environnements qu'elle classait perdront ses attributs à la prochaine collecte.",
     "testAll": "Tester le jeu de règles",
     "testRule": "Tester cette règle",
-    "kind": { "simple": "simple", "meta": "méta" },
+    "kind": {
+      "simple": "simple",
+      "meta": "méta"
+    },
     "target": {
       "environment": {
         "tab": "Environnements",
@@ -164,12 +213,22 @@
     },
     "tracker": {
       "notFound": "Tracker introuvable."
+    },
+    "auth": {
+      "required": "Connectez-vous pour accéder à cette page.",
+      "forbidden": "Votre compte n'a pas accès à cette page.",
+      "invalidCredentials": "Email ou mot de passe incorrect.",
+      "setupDone": "Cette installation possède déjà un compte.",
+      "emailTaken": "Un compte utilise déjà {{email}}.",
+      "userNotFound": "Compte introuvable.",
+      "lastAdmin": "C'est le dernier administrateur : l'installation ne serait plus configurable."
     }
   },
   "empty": {
     "title": "Aucune source configurée",
     "text": "Ajoutez une source pour afficher le tableau de bord live.",
-    "cta": "Configurer une source"
+    "cta": "Configurer une source",
+    "textVisitor": "Aucune source n'a encore été configurée sur cette installation."
   },
   "dashboard": {
     "title": "Vue live",

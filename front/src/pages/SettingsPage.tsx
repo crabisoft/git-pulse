@@ -2,17 +2,19 @@ import { type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import type { AppSettings, SourcePublic } from '@repo/shared';
-import { LayersIcon, LinkIcon, ServerIcon, SlidersIcon, TicketIcon } from '../icons';
+import { LayersIcon, LinkIcon, ServerIcon, SlidersIcon, TicketIcon, UsersIcon } from '../icons';
 import { GeneralSettings } from './settings/GeneralSettings';
+import { UsersSettings } from './settings/UsersSettings';
 import { SourcesPage } from './SourcesPage';
 import { EnvRulesPage } from './EnvRulesPage';
 import { TicketRulesPage } from './TicketRulesPage';
 import { TrackersPage } from './TrackersPage';
 
-export type SettingsSection = 'general' | 'sources' | 'trackers' | 'env' | 'tickets';
+export type SettingsSection = 'general' | 'users' | 'sources' | 'trackers' | 'env' | 'tickets';
 
 const SECTIONS: { key: SettingsSection; icon: ReactNode }[] = [
   { key: 'general', icon: <SlidersIcon /> },
+  { key: 'users', icon: <UsersIcon /> },
   { key: 'sources', icon: <ServerIcon /> },
   { key: 'trackers', icon: <LinkIcon /> },
   { key: 'env', icon: <LayersIcon /> },
@@ -30,6 +32,7 @@ const SECTIONS: { key: SettingsSection; icon: ReactNode }[] = [
  */
 export const SECTION_PATHS: Record<SettingsSection, string> = {
   general: '/settings/general',
+  users: '/settings/users',
   sources: '/settings/sources',
   trackers: '/settings/trackers',
   env: '/settings/environments',
@@ -87,6 +90,7 @@ export function SettingsPage({
         {section === 'general' && (
           <GeneralSettings settings={settings} onChange={onSettingsChange} />
         )}
+        {section === 'users' && <UsersSettings />}
         {section === 'sources' && <SourcesPage onChange={onSourcesChange} />}
         {section === 'trackers' && <TrackersPage sources={sources} />}
         {section === 'env' && <EnvRulesPage />}

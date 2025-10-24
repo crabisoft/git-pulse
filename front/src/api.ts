@@ -1,6 +1,9 @@
 import type {
   ApiQuotaPublic,
   AppSettings,
+  AuthState,
+  UserPublic,
+  UserRole,
   SourcePublic,
   DashboardLive,
   ConnectionTestResult,
@@ -48,17 +51,34 @@ export function isAbort(e: unknown): boolean {
   return e instanceof DOMException && e.name === 'AbortError';
 }
 
+/**
+ * Called whenever the API answers that the session no longer opens a route —
+ * expired, signed out elsewhere, or a role that has just been taken away. The
+ * auth provider registers itself here so a stale screen re-reads its state
+ * instead of showing an error nobody can act on.
+ */
+let onUnauthorized: (() => void) | null = null;
+
+export function setUnauthorizedHandler(handler: (() => void) | null): void {
+  onUnauthorized = handler;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
   try {
     res = await fetch(BASE + path, {
       headers: { 'Content-Type': 'application/json' },
+      // Sent along even cross-origin, which is what carries the session cookie
+      // when VITE_API_URL points the frontend at another host.
+      credentials: 'include',
       ...init,
     });
   } catch (e) {
     if (isAbort(e)) throw e;
     throw new ApiError('errors.network', { error: e instanceof Error ? e.message : String(e) });
   }
+
+  if (res.status === 401 || res.status === 403) onUnauthorized?.();
 
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as
@@ -174,7 +194,34 @@ export interface CreateTrackerInput {
 
 export type UpdateTrackerInput = Partial<CreateTrackerInput>;
 
+export interface CreateUserInput {
+  email: string;
+  name: string;
+  password: string;
+  /** Omitted means `user`. */
+  role?: UserRole;
+}
+
+/** Every field is optional; omitting the password keeps the stored one. */
+export type UpdateUserInput = Partial<CreateUserInput>;
+
 export const api = {
+  /** Session state in one call: who you are, and what this install is open to. */
+  authState: () => request<AuthState>('/auth/me'),
+  login: (email: string, password: string) =>
+    request<AuthState>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  logout: () => request<void>('/auth/logout', { method: 'POST' }),
+  /** First admin of a fresh install — refused once an account exists. */
+  setupAdmin: (input: CreateUserInput) =>
+    request<AuthState>('/auth/setup', { method: 'POST', body: JSON.stringify(input) }),
+
+  listUsers: (page?: PageQuery) => request<Page<UserPublic>>(`/users${qs({ ...page })}`),
+  createUser: (input: CreateUserInput) =>
+    request<UserPublic>('/users', { method: 'POST', body: JSON.stringify(input) }),
+  updateUser: (id: string, input: UpdateUserInput) =>
+    request<UserPublic>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
+  deleteUser: (id: string) => request<void>(`/users/${id}`, { method: 'DELETE' }),
+
   listSources: (page?: PageQuery) => request<Page<SourcePublic>>(`/sources${qs({ ...page })}`),
   createSource: (input: CreateSourceInput) =>
     request<SourcePublic>('/sources', { method: 'POST', body: JSON.stringify(input) }),

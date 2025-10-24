@@ -5,7 +5,10 @@ import { toWindow } from '../common/pagination';
 import { abortOnDisconnect } from '../common/request-abort';
 import { SettingsService } from '../settings/settings.service';
 import { DoraQueryDto, toDimensionFilter } from './dto/dora-query.dto';
+import { Viewer } from '../auth/access.decorator';
 
+/** The public half of the application, when the setting says it is public. */
+@Viewer()
 @Controller()
 export class DoraController {
   constructor(

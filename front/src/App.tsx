@@ -13,9 +13,11 @@ import {
 } from 'react-router-dom';
 import { PAGE_LIMIT_MAX, type AppSettings, type SourcePublic } from '@repo/shared';
 import { api, apiErrorInfo } from './api';
+import { useAuth } from './auth';
 import { SECTION_PATHS, SettingsPage, type SettingsSection } from './pages/SettingsPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { DoraPage } from './pages/DoraPage';
+import { LoginPage } from './pages/LoginPage';
 /**
  * Loaded on demand: it is the only page that charts, and the charting library
  * is a third of the bundle. Most sessions never open a metric's detail, and
@@ -26,7 +28,14 @@ const DoraMetricPage = lazy(() =>
 );
 
 /** One route per settings section, at its own path. None takes a source. */
-const SETTINGS_SECTIONS: SettingsSection[] = ['general', 'sources', 'trackers', 'env', 'tickets'];
+const SETTINGS_SECTIONS: SettingsSection[] = [
+  'general',
+  'users',
+  'sources',
+  'trackers',
+  'env',
+  'tickets',
+];
 
 /**
  * Routes the topbar picker drives. Switching source keeps you on the page you
@@ -48,8 +57,35 @@ function useRouteSlug(): { pattern: string; slug: string } | null {
   return null;
 }
 
+/**
+ * Decides what may be rendered at all before anything mounts, so no page fires
+ * a request the session cannot make. The shell below only ever runs once the
+ * caller is allowed in — as a visitor when the dashboard is public, otherwise
+ * as an account.
+ */
 export function App() {
+  const { state, error } = useAuth();
+
+  if (!state) {
+    // Nothing is known yet: the API answering is the only interesting failure.
+    return error ? (
+      <div className="app">
+        <main className="content">
+          <div className="banner error">{error}</div>
+        </main>
+      </div>
+    ) : null;
+  }
+
+  if (state.setupRequired) return <LoginPage setup />;
+  if (!state.user && !state.publicDashboard) return <LoginPage setup={false} />;
+  return <AppShell />;
+}
+
+function AppShell() {
   const { t, i18n } = useTranslation();
+  const { state, signOut } = useAuth();
+  const isAdmin = state?.user?.role === 'admin';
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const [sources, setSources] = useState<SourcePublic[]>([]);
@@ -127,9 +163,12 @@ export function App() {
           <Link className={module === 'dora' ? 'tab active' : 'tab'} to={withSource('/dora')}>
             {t('nav.dora')}
           </Link>
-          <Link className={module === 'settings' ? 'tab active' : 'tab'} to="/settings">
-            {t('nav.settings')}
-          </Link>
+          {/* Hidden rather than disabled: to a visitor, the section does not exist. */}
+          {isAdmin && (
+            <Link className={module === 'settings' ? 'tab active' : 'tab'} to="/settings">
+              {t('nav.settings')}
+            </Link>
+          )}
         </nav>
 
         <div className="topbar-right">
@@ -146,6 +185,21 @@ export function App() {
                 </option>
               ))}
             </select>
+          )}
+
+          {state?.user ? (
+            <div className="account">
+              <span className="account-name" title={state.user.email}>
+                {state.user.name}
+              </span>
+              <button className="btn" type="button" onClick={() => void signOut()}>
+                {t('auth.signOut')}
+              </button>
+            </div>
+          ) : (
+            <Link className="btn" to="/login">
+              {t('auth.signIn')}
+            </Link>
           )}
         </div>
       </header>
@@ -202,19 +256,30 @@ export function App() {
             }
           />
 
+          {/* Reached by hand once signed in; otherwise the shell shows instead. */}
+          <Route
+            path="/login"
+            element={state?.user ? <Navigate to="/dashboard" replace /> : <LoginPage setup={false} />}
+          />
+
           <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
           {SETTINGS_SECTIONS.map((section) => (
             <Route
               key={section}
               path={SECTION_PATHS[section]}
               element={
-                <SettingsPage
-                  section={section}
-                  sources={sources}
-                  settings={settings}
-                  onSourcesChange={refresh}
-                  onSettingsChange={setSettings}
-                />
+                isAdmin ? (
+                  <SettingsPage
+                    section={section}
+                    sources={sources}
+                    settings={settings}
+                    onSourcesChange={refresh}
+                    onSettingsChange={setSettings}
+                  />
+                ) : (
+                  // A hidden tab is not protection: the URL is still typeable.
+                  <AdminOnly />
+                )
               }
             />
           ))}
@@ -267,13 +332,35 @@ function SourcePage({
 
 function EmptyState() {
   const { t } = useTranslation();
+  const { state } = useAuth();
+  // Without the rights to add a source, the call to action is a dead end.
+  const canConfigure = state?.user?.role === 'admin';
   return (
     <div className="empty">
       <h2>{t('empty.title')}</h2>
-      <p>{t('empty.text')}</p>
-      <Link className="btn primary" to="/settings/sources">
-        {t('empty.cta')}
-      </Link>
+      <p>{t(canConfigure ? 'empty.text' : 'empty.textVisitor')}</p>
+      {canConfigure && (
+        <Link className="btn primary" to="/settings/sources">
+          {t('empty.cta')}
+        </Link>
+      )}
+    </div>
+  );
+}
+
+/** Settings reached without the role for it — signed in as a user, or as nobody. */
+function AdminOnly() {
+  const { t } = useTranslation();
+  const { state } = useAuth();
+  return (
+    <div className="empty">
+      <h2>{t('auth.adminOnlyTitle')}</h2>
+      <p>{t('auth.adminOnlyText')}</p>
+      {!state?.user && (
+        <Link className="btn primary" to="/login">
+          {t('auth.signIn')}
+        </Link>
+      )}
     </div>
   );
 }

@@ -4,7 +4,10 @@ import { ReleaseNotesService } from './release-notes.service';
 import { abortOnDisconnect } from '../common/request-abort';
 import { GenerateReleaseNotesDto } from './dto/generate-release-notes.dto';
 import { ListTagsDto } from './dto/list-tags.dto';
+import { Viewer } from '../auth/access.decorator';
 
+/** Reporting over the same data the dashboard shows, so it follows it. */
+@Viewer()
 @Controller()
 export class ReleaseNotesController {
   constructor(private readonly releaseNotes: ReleaseNotesService) {}

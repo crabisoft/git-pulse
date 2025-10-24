@@ -5,6 +5,7 @@ import { MetricSeriesDto } from './dto/metric-series.dto';
 import { toDimensionFilter } from '../dora/dto/dora-query.dto';
 import { toWindow } from '../common/pagination';
 import { SettingsService } from '../settings/settings.service';
+import { Viewer } from '../auth/access.decorator';
 
 @Controller()
 export class CollectionController {
@@ -21,6 +22,7 @@ export class CollectionController {
   }
 
   /** One metric, one dimension combination, bucketed for a chart. */
+  @Viewer()
   @Get('sources/:id/metrics/series')
   series(@Param('id') id: string, @Query() query: MetricSeriesDto) {
     return this.collector.series(id, {
@@ -33,6 +35,7 @@ export class CollectionController {
   }
 
   /** Raw snapshots, paginated. */
+  @Viewer()
   @Get('sources/:id/metrics')
   async metrics(@Param('id') id: string, @Query() query: MetricsQueryDto) {
     const { metric, from, to } = query;

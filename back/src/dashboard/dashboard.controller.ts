@@ -3,7 +3,10 @@ import type { Response } from 'express';
 import { DashboardService } from './dashboard.service';
 import { DashboardLiveQueryDto } from './dto/dashboard-live-query.dto';
 import { abortOnDisconnect } from '../common/request-abort';
+import { Viewer } from '../auth/access.decorator';
 
+/** The public half of the application, when the setting says it is public. */
+@Viewer()
 @Controller('dashboard')
 export class DashboardController {
   constructor(private readonly dashboard: DashboardService) {}

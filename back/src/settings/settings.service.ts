@@ -17,6 +17,10 @@ const FALLBACKS: AppSettings = {
   stalePrHours: 72,
   collectCron: '*/15 * * * *',
   pageSize: PAGE_LIMIT_DEFAULT,
+  // Open by default: an install that has just been upgraded keeps showing its
+  // dashboard to everyone it showed it to yesterday. Closing it is a decision,
+  // and it is one click away in the settings.
+  publicDashboard: true,
   // Pipelines only: the historical behavior, and the only one that needs no
   // configuration to be correct.
   failureSource: 'pipelines',
@@ -51,6 +55,7 @@ export class SettingsService {
       stalePrHours: readNumber(stored.get('stalePrHours'), FALLBACKS.stalePrHours),
       collectCron: stored.get('collectCron') ?? FALLBACKS.collectCron,
       pageSize: readNumber(stored.get('pageSize'), FALLBACKS.pageSize),
+      publicDashboard: readBoolean(stored.get('publicDashboard'), FALLBACKS.publicDashboard),
       failureSource: readFailureSource(stored.get('failureSource')),
       incidentLabels: readList(stored.get('incidentLabels')),
     };
@@ -126,6 +131,13 @@ function readList(raw: string | undefined): string[] {
 
 function readFailureSource(raw: string | undefined): FailureSource {
   return raw === 'incidents' || raw === 'both' ? raw : FALLBACKS.failureSource;
+}
+
+/** `AppSetting.value` is a plain string column, so booleans travel as text. */
+function readBoolean(raw: string | undefined, fallback: boolean): boolean {
+  if (raw === 'true') return true;
+  if (raw === 'false') return false;
+  return fallback;
 }
 
 function readNumber(raw: string | undefined, fallback: number): number {

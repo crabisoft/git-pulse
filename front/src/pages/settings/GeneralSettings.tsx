@@ -91,6 +91,17 @@ export function GeneralSettings({
               required
             />
           </label>
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={form.publicDashboard}
+              onChange={(e) => set('publicDashboard', e.target.checked)}
+            />
+            <span>
+              {t('settings.general.publicDashboard')}{' '}
+              <span className="hint">{t('settings.general.publicDashboardHint')}</span>
+            </span>
+          </label>
           <label>
             {t('settings.general.failureSource')}{' '}
             <span className="hint">{t('settings.general.failureSourceHint')}</span>

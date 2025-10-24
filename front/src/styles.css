@@ -444,3 +444,20 @@ tr.stale td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
 .empty { text-align: center; padding: 60px 20px; }
 .empty h2 { margin: 0 0 8px; }
 .empty p { color: var(--muted); margin: 0 0 20px; }
+
+/* A switch reads as a sentence, so the label sits beside the box, not above it. */
+.form label.checkbox { flex-direction: row; align-items: flex-start; gap: 9px; color: var(--ink); }
+.form label.checkbox input { width: auto; margin: 2px 0 0; padding: 0; accent-color: var(--accent); }
+
+/* Sign-in — the only screen rendered without the application shell around it. */
+.auth-shell { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.auth-card { width: 100%; max-width: 400px; }
+.auth-brand { margin-bottom: 20px; }
+.auth-card h2 { margin: 0 0 6px; }
+.auth-lead { margin: 0 0 18px; font-size: .86rem; }
+
+.account { display: flex; align-items: center; gap: 10px; }
+.account-name {
+  font-size: .85rem; color: var(--muted); max-width: 160px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}

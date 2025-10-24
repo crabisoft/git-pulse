@@ -7,6 +7,23 @@
     "dora": "DORA",
     "settings": "Settings"
   },
+  "auth": {
+    "signInTitle": "Sign in",
+    "signInLead": "This dashboard is reserved to its accounts.",
+    "setupTitle": "Create the first admin",
+    "setupLead": "No account exists yet. The one you create here administers the install; the others are added from the settings.",
+    "name": "Name",
+    "email": "Email",
+    "password": "Password",
+    "confirmPassword": "Confirm the password",
+    "passwordHint": "at least {{min}} characters",
+    "passwordMismatch": "The two passwords do not match.",
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "createAdmin": "Create the account",
+    "adminOnlyTitle": "Settings are reserved to admins",
+    "adminOnlyText": "Your account cannot configure this install."
+  },
   "settings": {
     "title": "Settings",
     "section": {
@@ -14,14 +31,16 @@
       "sources": "Sources",
       "env": "Environments",
       "tickets": "Tickets",
-      "trackers": "Trackers"
+      "trackers": "Trackers",
+      "users": "Accounts"
     },
     "desc": {
       "general": "Collection and thresholds",
       "sources": "Connected Git platforms",
       "env": "Classification rules",
       "tickets": "PR → ticket linking",
-      "trackers": "Jira, Linear, issues"
+      "trackers": "Jira, Linear, issues",
+      "users": "Who may sign in"
     },
     "general": {
       "appTitle": "Application",
@@ -44,7 +63,34 @@
         "both": "Both"
       },
       "incidentLabels": "Incident labels",
-      "incidentLabelsHint": "comma separated; an issue carrying one of them is an incident"
+      "incidentLabelsHint": "comma separated; an issue carrying one of them is an incident",
+      "publicDashboard": "Public dashboard",
+      "publicDashboardHint": "Dashboard and DORA readable without signing in. Off, the whole application asks for an account — the settings always do."
+    }
+  },
+  "users": {
+    "listTitle": "Accounts",
+    "hint": "Accounts are handed out here, never opened from the sign-in screen. Admins configure the install; users only read the dashboard and DORA, which is what matters once they are no longer public.",
+    "addTitle": "Add an account",
+    "editTitle": "Edit {{name}}",
+    "deleteTitle": "Delete the account",
+    "confirmDelete": "Delete \"{{name}}\"? Their open sessions end with them.",
+    "added": "Account added.",
+    "updated": "Account updated.",
+    "deleted": "Account deleted.",
+    "you": "you",
+    "role": {
+      "admin": "Admin",
+      "user": "User"
+    },
+    "form": {
+      "name": "Name",
+      "email": "Email",
+      "password": "Password",
+      "passwordKeepHint": "leave empty to keep the current one",
+      "role": "Role",
+      "roleHint": "an admin configures the install; a user only reads",
+      "submit": "Add"
     }
   },
   "envRules": {
@@ -59,7 +105,10 @@
     "confirmDelete": "Delete the rule \"{{name}}\"? Environments already classified by it will lose its attributes on the next collection.",
     "testAll": "Test the rule set",
     "testRule": "Test this rule",
-    "kind": { "simple": "simple", "meta": "meta" },
+    "kind": {
+      "simple": "simple",
+      "meta": "meta"
+    },
     "target": {
       "environment": {
         "tab": "Environments",
@@ -164,12 +213,22 @@
     },
     "tracker": {
       "notFound": "Tracker not found."
+    },
+    "auth": {
+      "required": "Sign in to reach this page.",
+      "forbidden": "Your account does not have access to this page.",
+      "invalidCredentials": "Wrong email or password.",
+      "setupDone": "This install already has an account.",
+      "emailTaken": "An account already uses {{email}}.",
+      "userNotFound": "Account not found.",
+      "lastAdmin": "This is the last admin: the install would no longer be configurable."
     }
   },
   "empty": {
     "title": "No source configured",
     "text": "Add a source to see the live dashboard.",
-    "cta": "Configure a source"
+    "cta": "Configure a source",
+    "textVisitor": "No source has been configured on this install yet."
   },
   "dashboard": {
     "title": "Live view",

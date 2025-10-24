@@ -1,4 +1,13 @@
-import { ArrayUnique, IsArray, IsEnum, IsInt, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  ArrayUnique,
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  MinLength,
+} from 'class-validator';
 import type { FailureSource } from '@repo/shared';
 
 /** Partial update — only the supplied keys are persisted. */
@@ -19,6 +28,11 @@ export class UpdateSettingsDto {
   @IsOptional()
   @IsInt()
   pageSize?: number;
+
+  /** False puts the whole application behind a sign-in, settings included. */
+  @IsOptional()
+  @IsBoolean()
+  publicDashboard?: boolean;
 
   @IsOptional()
   @IsEnum(['pipelines', 'incidents', 'both'] as const)

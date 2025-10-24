@@ -525,6 +525,43 @@ export interface ApiQuotaPublic {
   observedAt: string;
 }
 
+// ─── Accounts and access ─────────────────────────────────────────────
+
+/**
+ * Coarse on purpose. `admin` configures the install — sources, rules, trackers,
+ * settings; `user` only reads what `publicDashboard` would otherwise open to
+ * everyone, which is the whole point of having the role at all.
+ */
+export type UserRole = 'admin' | 'user';
+
+/**
+ * Enforced when a password is set, and shown as a hint before it is. Long
+ * rather than exotic: a length floor is the only rule that reliably helps, and
+ * the accounts here are handed out by an admin, not opened by the public.
+ */
+export const PASSWORD_MIN_LENGTH = 10;
+
+export interface UserPublic {
+  id: string;
+  email: string;
+  name: string;
+  role: UserRole;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Who the caller is, and what the install lets an anonymous visitor do. */
+export interface AuthState {
+  user: UserPublic | null;
+  /** Dashboard and DORA readable without signing in. */
+  publicDashboard: boolean;
+  /**
+   * No account exists yet, so the first one may be created without signing in.
+   * Closes for good as soon as there is one.
+   */
+  setupRequired: boolean;
+}
+
 // ─── Application settings ────────────────────────────────────────────
 
 /**
@@ -543,6 +580,11 @@ export interface AppSettings {
    * `limit`. Capped at PAGE_LIMIT_MAX.
    */
   pageSize: number;
+  /**
+   * Dashboard and DORA readable without an account. Off, the whole application
+   * asks for one — settings always did, whatever this says.
+   */
+  publicDashboard: boolean;
   /** Which signals feed change failure rate and MTTR. */
   failureSource: FailureSource;
   /**
