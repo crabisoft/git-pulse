@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { AuthService } from './auth.service';
 import { AuthGuard } from './auth.guard';
+import { LoginThrottle } from './login-throttle';
 import { AuthController } from './auth.controller';
 import { UsersController } from './users.controller';
 
@@ -12,7 +13,7 @@ import { UsersController } from './users.controller';
 @Global()
 @Module({
   controllers: [AuthController, UsersController],
-  providers: [AuthService, { provide: APP_GUARD, useClass: AuthGuard }],
+  providers: [AuthService, LoginThrottle, { provide: APP_GUARD, useClass: AuthGuard }],
   exports: [AuthService],
 })
 export class AuthModule {}

@@ -21,6 +21,13 @@ describe('grants', () => {
     expect(grants('viewer', user)).toBe(true);
   });
 
+  it('asks the account routes for an account, whatever the dashboard is open to', () => {
+    expect(grants('account', user)).toBe(true);
+    expect(grants('account', admin)).toBe(true);
+    expect(grants('account', visitor)).toBe(false);
+    expect(grants('account', anonymous)).toBe(false);
+  });
+
   it('reserves the admin routes, public dashboard or not', () => {
     expect(grants('admin', user)).toBe(false);
     expect(grants('admin', { role: 'user', publicDashboard: true })).toBe(false);

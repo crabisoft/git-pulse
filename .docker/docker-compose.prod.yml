@@ -12,6 +12,8 @@ services:
       WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
       # Unset: derived from WEB_ORIGIN. Set it when a proxy terminates TLS.
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-}
+      # Unset: the API is reached directly. Set it when a proxy fronts it.
+      TRUST_PROXY: ${TRUST_PROXY:-}
       DATABASE_URL: postgresql://${POSTGRES_USER:-dashboard}:${POSTGRES_PASSWORD:-dashboard}@db:5432/${POSTGRES_DB:-dashboard}?schema=public
       REDIS_URL: redis://redis:6379
       MASTER_KEY_FILE: ${MASTER_KEY_FILE:-/data/master.key}

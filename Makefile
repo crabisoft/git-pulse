@@ -1,11 +1,13 @@
 # Everyday tasks. Run `make` (or `make help`) to list the commands.
 .DEFAULT_GOAL := help
 COMPOSE := sh .docker/compose.sh
+# Stack the container targets act on. Override with `mode=prod`.
+mode ?= dev
 
 .PHONY: help install build typecheck test \
         dev dev-down logs restart restart-back ps \
         prod prod-down \
-        migrate deploy studio db-reset psql sh-back \
+        migrate deploy studio db-reset psql sh-back set-password \
         clean clean-all
 
 help: ## Show this help
@@ -71,6 +73,15 @@ psql: ## psql console on the dev database (running container)
 
 sh-back: ## Open a shell in the back container (dev)
 	$(COMPOSE) dev exec back sh
+
+# ─── Accounts ────────────────────────────────────────────────────────
+# Recovery only: the UI handles accounts. Use it when no admin can sign in —
+# an unknown address is created as one. The password goes through the shell,
+# so it lands in its history: change it again from the UI afterwards.
+set-password: ## Reset a password, or recreate an admin (usage: make set-password email=… password=… [mode=prod])
+	@test -n "$(email)" -a -n "$(password)" \
+		|| { echo "Usage: make set-password email=<email> password=<password>"; exit 1; }
+	$(COMPOSE) $(mode) exec back node back/dist/scripts/set-password.js "$(email)" "$(password)"
 
 # ─── Cleanup ─────────────────────────────────────────────────────────
 clean: ## Remove build artifacts (dist)

@@ -22,7 +22,22 @@
     "signOut": "Se déconnecter",
     "createAdmin": "Créer le compte",
     "adminOnlyTitle": "Réglages réservés aux administrateurs",
-    "adminOnlyText": "Votre compte ne peut pas configurer cette installation."
+    "adminOnlyText": "Votre compte ne peut pas configurer cette installation.",
+    "account": "Mon compte"
+  },
+  "account": {
+    "title": "Mon compte",
+    "email": "Email",
+    "emailHint": "modifiable par un administrateur",
+    "role": "Rôle",
+    "roleHint": "modifiable par un administrateur",
+    "name": "Nom",
+    "passwordTitle": "Changer le mot de passe",
+    "currentPassword": "Mot de passe actuel",
+    "currentPasswordHint": "exigé pour en définir un nouveau",
+    "newPassword": "Nouveau mot de passe",
+    "sessionsNote": "Changer le mot de passe déconnecte vos autres navigateurs. Celui-ci reste ouvert.",
+    "saved": "Compte mis à jour."
   },
   "settings": {
     "title": "Paramètres",
@@ -221,7 +236,9 @@
       "setupDone": "Cette installation possède déjà un compte.",
       "emailTaken": "Un compte utilise déjà {{email}}.",
       "userNotFound": "Compte introuvable.",
-      "lastAdmin": "C'est le dernier administrateur : l'installation ne serait plus configurable."
+      "lastAdmin": "C'est le dernier administrateur : l'installation ne serait plus configurable.",
+      "wrongPassword": "Mot de passe actuel incorrect.",
+      "tooManyAttempts": "Trop de tentatives échouées. Réessayez dans {{minutes}} minute(s)."
     }
   },
   "empty": {

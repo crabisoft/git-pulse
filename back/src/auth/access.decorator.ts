@@ -17,6 +17,12 @@ export const Anonymous = () => SetMetadata(ACCESS_LEVEL, 'anonymous' satisfies A
  */
 export const Viewer = () => SetMetadata(ACCESS_LEVEL, 'viewer' satisfies AccessLevel);
 
+/**
+ * Any signed-in account, and only a signed-in one — what belongs to somebody
+ * stays out of reach of a visitor however public the dashboard is.
+ */
+export const Account = () => SetMetadata(ACCESS_LEVEL, 'account' satisfies AccessLevel);
+
 /** The signed-in account, or null on the routes that admit anonymous callers. */
 export const CurrentUser = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): UserPublic | null =>

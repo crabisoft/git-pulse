@@ -1,11 +1,12 @@
 import { CanActivate, ExecutionContext, HttpStatus, Injectable } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import type { Response } from 'express';
 import { CodedException } from '../common/coded-exception';
 import { SettingsService } from '../settings/settings.service';
 import { grants, type AccessLevel } from './access';
 import { ACCESS_LEVEL } from './access.decorator';
 import { AuthService } from './auth.service';
-import { readSessionCookie } from './session-cookie';
+import { isSecureDeployment, readSessionCookie, setSessionCookie } from './session-cookie';
 import type { AuthenticatedRequest } from './authenticated-request';
 
 /**
@@ -31,8 +32,14 @@ export class AuthGuard implements CanActivate {
     const req = context.switchToHttp().getRequest<AuthenticatedRequest>();
     // Resolved even on an anonymous route: `/auth/me` answers with it, and a
     // handler that admits both callers still wants to know which one it got.
-    const user = await this.auth.resolve(readSessionCookie(req));
+    const token = readSessionCookie(req);
+    const { user, refreshed } = await this.auth.resolve(token);
     req.user = user;
+    // The row was pushed back; the browser's copy has to hear about it, or the
+    // cookie would expire under a session the database still considers live.
+    if (refreshed && token) {
+      setSessionCookie(context.switchToHttp().getResponse<Response>(), token, isSecureDeployment());
+    }
     if (required === 'anonymous') return true;
 
     const { publicDashboard } = await this.settings.get();

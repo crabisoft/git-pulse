@@ -456,7 +456,13 @@ tr.stale td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
 .auth-card h2 { margin: 0 0 6px; }
 .auth-lead { margin: 0 0 18px; font-size: .86rem; }
 
+/* A form nobody fills twice a day: no reason to let it span a wide screen. */
+.page-narrow { max-width: 520px; }
+.form-section { margin: 6px 0 0; font-size: .95rem; }
+.form input:disabled { color: var(--muted); background: var(--surface-2); }
+
 .account { display: flex; align-items: center; gap: 10px; }
+a.account-name:hover { color: var(--ink); }
 .account-name {
   font-size: .85rem; color: var(--muted); max-width: 160px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;

@@ -7,9 +7,20 @@ import { CodedException } from '../common/coded-exception';
 import { toPage, type PageWindow } from '../common/pagination';
 import { hashPassword, verifyPassword } from './password';
 import { SESSION_TTL_MS } from './session-cookie';
+import { LoginThrottle } from './login-throttle';
 import type { LoginDto } from './dto/login.dto';
 import type { CreateUserDto } from './dto/create-user.dto';
 import type { UpdateUserDto } from './dto/update-user.dto';
+import type { UpdateMeDto } from './dto/update-me.dto';
+
+/**
+ * A resolved cookie. `refreshed` asks the caller to re-send it: the row now
+ * lives longer than the browser's copy says it does.
+ */
+export interface ResolvedSession {
+  user: UserPublic | null;
+  refreshed: boolean;
+}
 
 /**
  * Verified against on a sign-in attempt for an unknown address, so a wrong
@@ -24,6 +35,7 @@ export class AuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly settings: SettingsService,
+    private readonly throttle: LoginThrottle,
   ) {}
 
   // ─── Session ───────────────────────────────────────────────────────
@@ -40,31 +52,57 @@ export class AuthService {
   /**
    * The account behind a session cookie, or null. An expired row is dropped on
    * the way out rather than left for the sweep: it will never be valid again.
+   *
+   * The lifetime is an idle one, so a session still being used is pushed back
+   * — but only past its halfway point, which turns what would be a write per
+   * request into one every six hours.
    */
-  async resolve(token: string | null): Promise<UserPublic | null> {
-    if (!token) return null;
+  async resolve(token: string | null): Promise<ResolvedSession> {
+    if (!token) return { user: null, refreshed: false };
     const session = await this.prisma.session.findUnique({
       where: { tokenHash: hashToken(token) },
       include: { user: true },
     });
-    if (!session) return null;
-    if (session.expiresAt <= new Date()) {
+    if (!session) return { user: null, refreshed: false };
+
+    const now = Date.now();
+    if (session.expiresAt.getTime() <= now) {
       await this.prisma.session.delete({ where: { id: session.id } }).catch(() => undefined);
-      return null;
+      return { user: null, refreshed: false };
     }
-    return toPublic(session.user);
+
+    const refreshed = session.expiresAt.getTime() - now < SESSION_TTL_MS / 2;
+    if (refreshed) {
+      await this.prisma.session.update({
+        where: { id: session.id },
+        data: { expiresAt: new Date(now + SESSION_TTL_MS) },
+      });
+    }
+    return { user: toPublic(session.user), refreshed };
   }
 
   /**
    * Verifies the credentials and opens a session. Every failure answers the
    * same code: which half was wrong is precisely what an attacker is asking.
+   * Failures are counted, and enough of them close the door for a while —
+   * see `LoginThrottle` for what is counted against whom.
    */
-  async login(dto: LoginDto): Promise<{ user: UserPublic; token: string }> {
-    const user = await this.prisma.user.findUnique({ where: { email: normalizeEmail(dto.email) } });
+  async login(dto: LoginDto, ip: string): Promise<{ user: UserPublic; token: string }> {
+    const keys = { email: normalizeEmail(dto.email), ip };
+    const wait = this.throttle.retryAfter(keys);
+    if (wait > 0) {
+      throw new CodedException('errors.auth.tooManyAttempts', HttpStatus.TOO_MANY_REQUESTS, {
+        minutes: Math.ceil(wait / 60_000),
+      });
+    }
+
+    const user = await this.prisma.user.findUnique({ where: { email: keys.email } });
     const ok = await verifyPassword(dto.password, user?.passwordHash ?? DECOY_HASH);
     if (!user || !ok) {
+      this.throttle.recordFailure(keys);
       throw new CodedException('errors.auth.invalidCredentials', HttpStatus.UNAUTHORIZED);
     }
+    this.throttle.clear(keys);
 
     // Cheap, and it keeps the table from growing with sessions nobody can use.
     await this.prisma.session.deleteMany({ where: { expiresAt: { lt: new Date() } } });
@@ -168,6 +206,21 @@ export class AuthService {
       });
     }
     return toPublic(user);
+  }
+
+  /**
+   * What an account may change about itself: its name, and its password on
+   * presenting the current one. Not its role, and not its address — those are
+   * how an admin identifies it, so they stay with the admins.
+   */
+  async updateSelf(id: string, dto: UpdateMeDto, keepToken: string | null): Promise<UserPublic> {
+    const current = await this.byId(id);
+    if (dto.password !== undefined) {
+      // Re-authentication: a borrowed browser must not become a stolen account.
+      const ok = await verifyPassword(dto.currentPassword ?? '', current.passwordHash);
+      if (!ok) throw new CodedException('errors.auth.wrongPassword', HttpStatus.BAD_REQUEST);
+    }
+    return this.updateUser(id, { name: dto.name, password: dto.password }, keepToken);
   }
 
   /** Sessions go with the row: the cascade in the schema is the whole revocation. */

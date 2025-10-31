@@ -4,7 +4,7 @@ import type { UserRole } from '@repo/shared';
  * What a route asks of its caller. `admin` is the default of every route that
  * says nothing, so forgetting to mark one locks it down instead of opening it.
  */
-export type AccessLevel = 'anonymous' | 'viewer' | 'admin';
+export type AccessLevel = 'anonymous' | 'viewer' | 'account' | 'admin';
 
 /** Who is calling, and what the install lets an anonymous visitor read. */
 export interface AccessContext {
@@ -17,12 +17,15 @@ export interface AccessContext {
  * tested — without a request in sight.
  *
  * `viewer` is the only level that depends on the install: it is what the public
- * setting opens or closes. An admin passes everywhere by construction, since
+ * setting opens or closes. `account` sits just above it, for what belongs to
+ * somebody — editing your own profile has no meaning without one, however
+ * public the dashboard is. An admin passes everywhere by construction, since
  * every route a user may call is one an admin may call too.
  */
 export function grants(required: AccessLevel, { role, publicDashboard }: AccessContext): boolean {
   if (required === 'anonymous') return true;
   if (role === 'admin') return true;
   if (required === 'admin') return false;
+  if (required === 'account') return role !== null;
   return role !== null || publicDashboard;
 }

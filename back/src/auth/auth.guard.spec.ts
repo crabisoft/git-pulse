@@ -26,21 +26,22 @@ class DefaultController {
   anything() {}
 }
 
-function guardFor(user: UserPublic | null, publicDashboard: boolean) {
-  const auth = { resolve: async () => user } as unknown as AuthService;
+function guardFor(user: UserPublic | null, publicDashboard: boolean, refreshed = false) {
+  const auth = { resolve: async () => ({ user, refreshed }) } as unknown as AuthService;
   const settings = { get: async () => ({ publicDashboard }) } as unknown as SettingsService;
   return new AuthGuard(new Reflector(), auth, settings);
 }
 
-/** Minimal execution context: a handler, its class, and a bare request. */
-function contextFor(cls: new () => object, method: string) {
-  const req = { headers: {} } as AuthenticatedRequest;
+/** Minimal execution context: a handler, its class, a request and a response. */
+function contextFor(cls: new () => object, method: string, cookie = '') {
+  const req = { headers: cookie ? { cookie } : {} } as AuthenticatedRequest;
+  const res = { cookies: [] as unknown[], cookie: (...args: unknown[]) => res.cookies.push(args) };
   const context = {
     getHandler: () => (cls.prototype as Record<string, unknown>)[method],
     getClass: () => cls,
-    switchToHttp: () => ({ getRequest: () => req }),
+    switchToHttp: () => ({ getRequest: () => req, getResponse: () => res }),
   } as unknown as ExecutionContext;
-  return { context, req };
+  return { context, req, res };
 }
 
 describe('AuthGuard', () => {
@@ -62,7 +63,7 @@ describe('AuthGuard', () => {
     const { context } = contextFor(OpenController, 'open');
     const guard = new AuthGuard(
       new Reflector(),
-      { resolve: async () => null } as unknown as AuthService,
+      { resolve: async () => ({ user: null, refreshed: false }) } as unknown as AuthService,
       {
         get: () => {
           throw new Error('settings must not be read on an anonymous route');
@@ -80,6 +81,25 @@ describe('AuthGuard', () => {
     const anonymous = contextFor(ReadController, 'read');
     await guardFor(null, true).canActivate(anonymous.context);
     expect(anonymous.req.user).toBeNull();
+  });
+
+  it('re-sends the cookie when the session it carried was pushed back', async () => {
+    const { context, res } = contextFor(ReadController, 'read', 'gd_session=abc');
+    await guardFor(USER, false, true).canActivate(context);
+    expect(res.cookies).toHaveLength(1);
+    // Same name, same token — the options are the cookie helper's business.
+    expect((res.cookies[0] as unknown[]).slice(0, 2)).toEqual(['gd_session', 'abc']);
+  });
+
+  it('leaves the cookie alone when nothing was pushed back, or there was none', async () => {
+    const untouched = contextFor(ReadController, 'read', 'gd_session=abc');
+    await guardFor(USER, false, false).canActivate(untouched.context);
+    expect(untouched.res.cookies).toHaveLength(0);
+
+    // A refresh cannot happen without a cookie, but nothing may be sent if it does.
+    const cookieless = contextFor(ReadController, 'read');
+    await guardFor(USER, false, true).canActivate(cookieless.context);
+    expect(cookieless.res.cookies).toHaveLength(0);
   });
 
   it('asks an anonymous caller to sign in, and tells a signed-in one not to bother', async () => {

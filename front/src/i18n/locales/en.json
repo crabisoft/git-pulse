@@ -22,7 +22,22 @@
     "signOut": "Sign out",
     "createAdmin": "Create the account",
     "adminOnlyTitle": "Settings are reserved to admins",
-    "adminOnlyText": "Your account cannot configure this install."
+    "adminOnlyText": "Your account cannot configure this install.",
+    "account": "My account"
+  },
+  "account": {
+    "title": "My account",
+    "email": "Email",
+    "emailHint": "an admin changes it",
+    "role": "Role",
+    "roleHint": "an admin changes it",
+    "name": "Name",
+    "passwordTitle": "Change the password",
+    "currentPassword": "Current password",
+    "currentPasswordHint": "required to set a new one",
+    "newPassword": "New password",
+    "sessionsNote": "Changing the password signs out your other browsers. This one stays open.",
+    "saved": "Account updated."
   },
   "settings": {
     "title": "Settings",
@@ -221,7 +236,9 @@
       "setupDone": "This install already has an account.",
       "emailTaken": "An account already uses {{email}}.",
       "userNotFound": "Account not found.",
-      "lastAdmin": "This is the last admin: the install would no longer be configurable."
+      "lastAdmin": "This is the last admin: the install would no longer be configurable.",
+      "wrongPassword": "Wrong current password.",
+      "tooManyAttempts": "Too many failed attempts. Try again in {{minutes}} minute(s)."
     }
   },
   "empty": {

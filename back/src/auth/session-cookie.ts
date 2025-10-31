@@ -2,7 +2,11 @@ import type { Request, Response } from 'express';
 
 export const SESSION_COOKIE = 'gd_session';
 
-/** How long a browser stays signed in without touching anything. */
+/**
+ * How long a browser stays signed in without touching anything. Idle rather
+ * than absolute: `AuthService.resolve` pushes a session that is still being
+ * used past its halfway point, cookie included.
+ */
 export const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
 /**
@@ -19,8 +23,12 @@ export function readSessionCookie(req: Request): string | null {
 
 /**
  * `httpOnly` so a script cannot read the session, `sameSite: lax` so another
- * site cannot ride it — which only holds because the front and the API are
- * served from the same origin, in prod through nginx as in dev through Vite.
+ * site cannot ride it. Lax is about the *site*, not the origin: in dev Vite
+ * proxies `/api` so there is only one origin anyway, and in prod the front is
+ * served by nginx while the API answers on its own port — a different origin,
+ * the same site, which is what lax asks for. Hosting the two under separate
+ * registrable domains is the case this would not survive.
+ *
  * `secure` is left to the deployment: a plain-HTTP install would otherwise
  * silently drop every cookie.
  */
@@ -42,8 +50,10 @@ export function setSessionCookie(res: Response, token: string, secure: boolean):
  * elsewhere.
  */
 export function isSecureDeployment(): boolean {
+  // Empty counts as unset: compose passes an undefined variable through as an
+  // empty string, and that must not read as "not secure".
   const override = process.env.SESSION_COOKIE_SECURE;
-  if (override !== undefined) return override === 'true';
+  if (override) return override === 'true';
   return (process.env.WEB_ORIGIN ?? '').startsWith('https://');
 }
 

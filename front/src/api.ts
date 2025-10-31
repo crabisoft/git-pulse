@@ -211,6 +211,12 @@ export const api = {
   login: (email: string, password: string) =>
     request<AuthState>('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
   logout: () => request<void>('/auth/logout', { method: 'POST' }),
+  /**
+   * What an account may change about itself. The role and the address are not
+   * part of it — an admin hands those out.
+   */
+  updateMe: (input: { name?: string; password?: string; currentPassword?: string }) =>
+    request<AuthState>('/auth/me', { method: 'PATCH', body: JSON.stringify(input) }),
   /** First admin of a fresh install — refused once an account exists. */
   setupAdmin: (input: CreateUserInput) =>
     request<AuthState>('/auth/setup', { method: 'POST', body: JSON.stringify(input) }),

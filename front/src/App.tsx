@@ -18,6 +18,7 @@ import { SECTION_PATHS, SettingsPage, type SettingsSection } from './pages/Setti
 import { DashboardPage } from './pages/DashboardPage';
 import { DoraPage } from './pages/DoraPage';
 import { LoginPage } from './pages/LoginPage';
+import { AccountPage } from './pages/AccountPage';
 /**
  * Loaded on demand: it is the only page that charts, and the charting library
  * is a third of the bundle. Most sessions never open a metric's detail, and
@@ -189,9 +190,9 @@ function AppShell() {
 
           {state?.user ? (
             <div className="account">
-              <span className="account-name" title={state.user.email}>
+              <Link className="account-name" to="/account" title={t('auth.account')}>
                 {state.user.name}
-              </span>
+              </Link>
               <button className="btn" type="button" onClick={() => void signOut()}>
                 {t('auth.signOut')}
               </button>
@@ -260,6 +261,12 @@ function AppShell() {
           <Route
             path="/login"
             element={state?.user ? <Navigate to="/dashboard" replace /> : <LoginPage setup={false} />}
+          />
+          <Route
+            path="/account"
+            element={
+              state?.user ? <AccountPage user={state.user} /> : <Navigate to="/login" replace />
+            }
           />
 
           <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
