@@ -1,12 +1,13 @@
-import { Body, Controller, Get, HttpCode, Patch, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Patch, Post, Req, Res } from '@nestjs/common';
 import type { Response } from 'express';
-import type { AuthState, UserPublic } from '@repo/shared';
+import type { AuthState, PasswordResetTarget, UserPublic } from '@repo/shared';
 import { AuthService } from './auth.service';
 import { Account, Anonymous, CurrentUser } from './access.decorator';
 import { clearSessionCookie, isSecureDeployment, readSessionCookie, setSessionCookie } from './session-cookie';
 import { LoginDto } from './dto/login.dto';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateMeDto } from './dto/update-me.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import type { AuthenticatedRequest } from './authenticated-request';
 
 /**
@@ -56,6 +57,22 @@ export class AuthController {
   ): Promise<void> {
     await this.auth.logout(readSessionCookie(req));
     clearSessionCookie(res, isSecureDeployment());
+  }
+
+  /**
+   * Whose password a reset link would change. Read before the form is shown, so
+   * a stale link says so instead of wasting a password on it.
+   */
+  @Get('reset/:token')
+  resetTarget(@Param('token') token: string): Promise<PasswordResetTarget> {
+    return this.auth.resetTarget(token);
+  }
+
+  /** Spends the link. No session in exchange: signing in is the proof it worked. */
+  @Post('reset')
+  @HttpCode(204)
+  reset(@Body() dto: ResetPasswordDto): Promise<void> {
+    return this.auth.consumeResetLink(dto.token, dto.password);
   }
 
   /** First admin of a fresh install. Rejected as soon as one account exists. */

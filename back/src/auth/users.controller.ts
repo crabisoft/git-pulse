@@ -31,6 +31,16 @@ export class UsersController {
     return this.auth.updateUser(id, dto, readSessionCookie(req));
   }
 
+  /**
+   * A one-shot link for an account that can no longer sign in. The token comes
+   * back once, for the admin to hand over — nothing is sent from here.
+   */
+  @Post(':id/reset-link')
+  @HttpCode(200)
+  issueResetLink(@Param('id') id: string) {
+    return this.auth.issueResetLink(id);
+  }
+
   @Delete(':id')
   @HttpCode(204)
   remove(@Param('id') id: string) {

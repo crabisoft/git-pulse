@@ -550,6 +550,22 @@ export interface UserPublic {
   updatedAt: string;
 }
 
+/**
+ * A freshly issued reset link. The token is readable exactly once, in the
+ * answer that created it — only its digest is kept, so an admin who loses it
+ * issues another rather than looking it up.
+ */
+export interface PasswordResetIssued {
+  token: string;
+  expiresAt: string;
+}
+
+/** Whose password a reset link would change, shown before it is used. */
+export interface PasswordResetTarget {
+  email: string;
+  name: string;
+}
+
 /** Who the caller is, and what the install lets an anonymous visitor do. */
 export interface AuthState {
   user: UserPublic | null;

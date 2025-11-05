@@ -221,7 +221,8 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  sessions Session[]
+  sessions       Session[]
+  passwordResets PasswordReset[]
 }
 
 /// A signed-in browser. Sessions live in the database rather than in a signed
@@ -238,6 +239,21 @@ model Session {
 
   @@index([userId])
   @@index([expiresAt])
+}
+
+/// A one-shot link an admin hands to someone who can no longer sign in. Hashed
+/// like a session and for the same reason, short-lived, and single use — using
+/// it deletes the row, along with every other outstanding link for that user.
+model PasswordReset {
+  id        String   @id @default(uuid())
+  /// SHA-256 of the link's token: the table must not hand out live links.
+  tokenHash String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 /// Application-wide setting, editable from the UI. A missing key falls back to

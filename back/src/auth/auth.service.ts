@@ -1,6 +1,13 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
-import type { AuthState, Page, UserPublic, UserRole } from '@repo/shared';
+import type {
+  AuthState,
+  Page,
+  PasswordResetIssued,
+  PasswordResetTarget,
+  UserPublic,
+  UserRole,
+} from '@repo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
 import { CodedException } from '../common/coded-exception';
@@ -29,6 +36,13 @@ export interface ResolvedSession {
  * doing the work that makes the timings match.
  */
 const DECOY_HASH = `${'0'.repeat(32)}:${'0'.repeat(128)}`;
+
+/**
+ * How long a reset link stays usable. Short, because it is handed over by
+ * whatever channel the admin has at hand and lives there afterwards — a link
+ * that outlives the conversation carrying it is a password lying around.
+ */
+export const RESET_TTL_MS = 60 * 60 * 1000;
 
 @Injectable()
 export class AuthService {
@@ -221,6 +235,70 @@ export class AuthService {
       if (!ok) throw new CodedException('errors.auth.wrongPassword', HttpStatus.BAD_REQUEST);
     }
     return this.updateUser(id, { name: dto.name, password: dto.password }, keepToken);
+  }
+
+  // ─── Reset links ───────────────────────────────────────────────────
+
+  /**
+   * Mints a link for an account that can no longer sign in, and returns its
+   * token — the only time it is readable. Issuing one drops that account's
+   * previous links, so the newest is always the only one that works.
+   *
+   * Nothing is sent anywhere: the admin hands the link over by whatever channel
+   * they already have. That is the whole feature, and it is what lets it exist
+   * without this install having to know how to send mail.
+   */
+  async issueResetLink(userId: string): Promise<PasswordResetIssued> {
+    await this.byId(userId);
+    const token = randomBytes(32).toString('base64url');
+    const expiresAt = new Date(Date.now() + RESET_TTL_MS);
+
+    await this.prisma.$transaction([
+      this.prisma.passwordReset.deleteMany({ where: { userId } }),
+      this.prisma.passwordReset.create({
+        data: { tokenHash: hashToken(token), userId, expiresAt },
+      }),
+    ]);
+    return { token, expiresAt: expiresAt.toISOString() };
+  }
+
+  /** Whose password this link would change — shown before anything is typed. */
+  async resetTarget(token: string): Promise<PasswordResetTarget> {
+    const { user } = await this.findReset(token);
+    return { email: user.email, name: user.name };
+  }
+
+  /**
+   * Spends the link: new password, every session of that account closed, and
+   * every link for it gone — including this one, which is what makes it single
+   * use. No session is opened in exchange; signing in is the proof it worked.
+   */
+  async consumeResetLink(token: string, password: string): Promise<void> {
+    const reset = await this.findReset(token);
+    const passwordHash = await hashPassword(password);
+    await this.prisma.$transaction([
+      this.prisma.user.update({ where: { id: reset.userId }, data: { passwordHash } }),
+      this.prisma.session.deleteMany({ where: { userId: reset.userId } }),
+      this.prisma.passwordReset.deleteMany({ where: { userId: reset.userId } }),
+    ]);
+  }
+
+  /**
+   * An expired link answers differently from an unknown one: the token is the
+   * secret here, so there is nothing to hide by conflating them, and "it has
+   * expired" is the difference between asking for a new link and giving up.
+   */
+  private async findReset(token: string) {
+    const reset = await this.prisma.passwordReset.findUnique({
+      where: { tokenHash: hashToken(token) },
+      include: { user: true },
+    });
+    if (!reset) throw new CodedException('errors.auth.resetInvalid', HttpStatus.BAD_REQUEST);
+    if (reset.expiresAt <= new Date()) {
+      await this.prisma.passwordReset.delete({ where: { id: reset.id } }).catch(() => undefined);
+      throw new CodedException('errors.auth.resetExpired', HttpStatus.BAD_REQUEST);
+    }
+    return reset;
   }
 
   /** Sessions go with the row: the cascade in the schema is the whole revocation. */

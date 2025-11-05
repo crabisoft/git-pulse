@@ -65,6 +65,7 @@ and by Vite in dev.
 | `/dora/:slug/:metric` | One metric: its trend, then the events behind it |
 | `/login` | Sign in — or create the first admin on a fresh install |
 | `/account` | Your own name and password |
+| `/reset/:token` | Choose a new password, from a link an admin issued |
 | `/settings/general` | Application settings |
 | `/settings/users` | Accounts allowed to sign in |
 | `/settings/sources` | Connected Git platforms |
@@ -150,6 +151,19 @@ process — a store on the sign-in path is a store whose outage takes sign-in
 down with it, and the API runs as a single container here. Behind a reverse
 proxy, set `TRUST_PROXY` (Express's own value: `1` for one hop) or every caller
 is counted as the proxy.
+
+**Forgotten password.** An admin issues a link from `Settings → Accounts` and
+hands it over by whatever channel they already have — nothing is sent from here,
+which is what lets the feature exist without this install having to know how to
+send mail. The link is hashed like a session, lives an hour, and works once:
+using it sets the password, closes every session of that account and cancels any
+other outstanding link for it. Issuing a new one cancels the previous one too,
+so the newest link is always the only one that works. The token is readable in
+the answer that mints it and nowhere else — an admin who loses it issues another.
+
+> Should non-admin accounts ever need this without an admin in reach, the token
+> model does not change: only the delivery does, and that is where SMTP, a queued
+> send and an enumeration-safe request route would come in.
 
 **Locked out?** No admin able to sign in is the one state the UI cannot repair,
 so there is a way back:

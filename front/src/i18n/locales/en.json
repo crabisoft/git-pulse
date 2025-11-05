@@ -39,6 +39,12 @@
     "sessionsNote": "Changing the password signs out your other browsers. This one stays open.",
     "saved": "Account updated."
   },
+  "reset": {
+    "title": "Choose a new password",
+    "lead": "This link sets the password of {{email}}.",
+    "submit": "Set the password",
+    "done": "Password set. Your other browsers have been signed out."
+  },
   "settings": {
     "title": "Settings",
     "section": {
@@ -106,6 +112,15 @@
       "role": "Role",
       "roleHint": "an admin configures the install; a user only reads",
       "submit": "Add"
+    },
+    "reset": {
+      "action": "Reset link",
+      "title": "Reset link for {{name}}",
+      "lead": "Hand this link over. It works once, until {{at}}.",
+      "link": "Link",
+      "copy": "Copy",
+      "copied": "Copied",
+      "note": "Shown once — it is not stored in readable form. Issuing another link cancels this one, and using it signs that account out everywhere."
     }
   },
   "envRules": {
@@ -238,7 +253,9 @@
       "userNotFound": "Account not found.",
       "lastAdmin": "This is the last admin: the install would no longer be configurable.",
       "wrongPassword": "Wrong current password.",
-      "tooManyAttempts": "Too many failed attempts. Try again in {{minutes}} minute(s)."
+      "tooManyAttempts": "Too many failed attempts. Try again in {{minutes}} minute(s).",
+      "resetInvalid": "This reset link is not valid. Ask for another one.",
+      "resetExpired": "This reset link has expired. Ask for another one."
     }
   },
   "empty": {

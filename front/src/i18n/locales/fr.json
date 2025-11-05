@@ -39,6 +39,12 @@
     "sessionsNote": "Changer le mot de passe déconnecte vos autres navigateurs. Celui-ci reste ouvert.",
     "saved": "Compte mis à jour."
   },
+  "reset": {
+    "title": "Choisir un nouveau mot de passe",
+    "lead": "Ce lien définit le mot de passe de {{email}}.",
+    "submit": "Définir le mot de passe",
+    "done": "Mot de passe défini. Vos autres navigateurs ont été déconnectés."
+  },
   "settings": {
     "title": "Paramètres",
     "section": {
@@ -106,6 +112,15 @@
       "role": "Rôle",
       "roleHint": "un administrateur configure l'installation ; un utilisateur ne fait que lire",
       "submit": "Ajouter"
+    },
+    "reset": {
+      "action": "Lien de réinitialisation",
+      "title": "Lien de réinitialisation pour {{name}}",
+      "lead": "Transmettez ce lien. Il fonctionne une fois, jusqu'à {{at}}.",
+      "link": "Lien",
+      "copy": "Copier",
+      "copied": "Copié",
+      "note": "Affiché une seule fois — il n'est pas conservé en clair. Émettre un autre lien annule celui-ci, et son usage déconnecte ce compte partout."
     }
   },
   "envRules": {
@@ -238,7 +253,9 @@
       "userNotFound": "Compte introuvable.",
       "lastAdmin": "C'est le dernier administrateur : l'installation ne serait plus configurable.",
       "wrongPassword": "Mot de passe actuel incorrect.",
-      "tooManyAttempts": "Trop de tentatives échouées. Réessayez dans {{minutes}} minute(s)."
+      "tooManyAttempts": "Trop de tentatives échouées. Réessayez dans {{minutes}} minute(s).",
+      "resetInvalid": "Ce lien de réinitialisation n'est pas valide. Demandez-en un autre.",
+      "resetExpired": "Ce lien de réinitialisation a expiré. Demandez-en un autre."
     }
   },
   "empty": {

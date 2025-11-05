@@ -19,6 +19,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { DoraPage } from './pages/DoraPage';
 import { LoginPage } from './pages/LoginPage';
 import { AccountPage } from './pages/AccountPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 /**
  * Loaded on demand: it is the only page that charts, and the charting library
  * is a third of the bundle. Most sessions never open a metric's detail, and
@@ -66,6 +67,12 @@ function useRouteSlug(): { pattern: string; slug: string } | null {
  */
 export function App() {
   const { state, error } = useAuth();
+  const { pathname } = useLocation();
+
+  // A reset link has to open when nothing else does — its holder cannot sign
+  // in, which is the whole reason they were given one.
+  const resetToken = matchPath('/reset/:token', pathname)?.params.token;
+  if (resetToken) return <ResetPasswordPage token={resetToken} />;
 
   if (!state) {
     // Nothing is known yet: the API answering is the only interesting failure.

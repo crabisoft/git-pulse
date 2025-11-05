@@ -1,9 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { PAGE_LIMIT_MAX, PASSWORD_MIN_LENGTH, type UserPublic, type UserRole } from '@repo/shared';
+import {
+  PAGE_LIMIT_MAX,
+  PASSWORD_MIN_LENGTH,
+  type PasswordResetIssued,
+  type UserPublic,
+  type UserRole,
+} from '@repo/shared';
 import { api, apiErrorInfo, type CreateUserInput } from '../../api';
 import { useAuth } from '../../auth';
-import { DeleteIcon, EditIcon, PlusIcon } from '../../icons';
+import { DeleteIcon, EditIcon, KeyIcon, PlusIcon } from '../../icons';
 import { IconButton } from '../../IconButton';
 import { ConfirmDialog, Modal } from '../../Modal';
 
@@ -18,6 +24,7 @@ export function UsersSettings() {
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [editing, setEditing] = useState<{ user: UserPublic | null } | null>(null);
   const [deleting, setDeleting] = useState<UserPublic | null>(null);
+  const [link, setLink] = useState<{ user: UserPublic; issued: PasswordResetIssued } | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -40,6 +47,16 @@ export function UsersSettings() {
       await api.deleteUser(user.id);
       setMsg({ kind: 'ok', text: t('users.deleted') });
       await load();
+    } catch (err) {
+      const { code, params } = apiErrorInfo(err);
+      setMsg({ kind: 'err', text: t(code, params) });
+    }
+  }
+
+  async function issueLink(user: UserPublic) {
+    setMsg(null);
+    try {
+      setLink({ user, issued: await api.issueResetLink(user.id) });
     } catch (err) {
       const { code, params } = apiErrorInfo(err);
       setMsg({ kind: 'err', text: t(code, params) });
@@ -86,6 +103,12 @@ export function UsersSettings() {
                       <IconButton label={t('common.edit')} onClick={() => setEditing({ user })}>
                         <EditIcon />
                       </IconButton>
+                      <IconButton
+                        label={t('users.reset.action')}
+                        onClick={() => void issueLink(user)}
+                      >
+                        <KeyIcon />
+                      </IconButton>
                       {/* Deleting the account you are signed in with only ever
                           ends one way; the API would allow it, the UI does not. */}
                       {!isSelf && (
@@ -121,6 +144,14 @@ export function UsersSettings() {
         />
       )}
 
+      {link && (
+        <ResetLinkDialog
+          user={link.user}
+          issued={link.issued}
+          onClose={() => setLink(null)}
+        />
+      )}
+
       {deleting && (
         <ConfirmDialog
           title={t('users.deleteTitle')}
@@ -131,6 +162,73 @@ export function UsersSettings() {
         />
       )}
     </>
+  );
+}
+
+/**
+ * The link, once. It is not stored anywhere in readable form, so closing this
+ * dialog without copying it means issuing another — which is said plainly
+ * rather than discovered later.
+ */
+function ResetLinkDialog({
+  user,
+  issued,
+  onClose,
+}: {
+  user: UserPublic;
+  issued: PasswordResetIssued;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  // Built from where this page is served, which is where the link must point.
+  const url = `${window.location.origin}/reset/${issued.token}`;
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+    } catch {
+      // No clipboard (an insecure context, typically): the field is selectable.
+      setCopied(false);
+    }
+  }
+
+  const title = t('users.reset.title', { name: user.name });
+
+  return (
+    <Modal
+      title={title}
+      label={title}
+      onClose={onClose}
+      footer={
+        <button className="btn primary" type="button" onClick={onClose}>
+          {t('common.close')}
+        </button>
+      }
+    >
+      <div className="form">
+        <p className="muted">
+          {t('users.reset.lead', { at: new Date(issued.expiresAt).toLocaleString() })}
+        </p>
+        <label>
+          {t('users.reset.link')}
+          <input
+            className="mono-input"
+            value={url}
+            readOnly
+            spellCheck={false}
+            onFocus={(e) => e.target.select()}
+          />
+        </label>
+        <div className="form-actions">
+          <button className="btn" type="button" onClick={() => void copy()}>
+            {copied ? t('users.reset.copied') : t('users.reset.copy')}
+          </button>
+        </div>
+        <p className="hint">{t('users.reset.note')}</p>
+      </div>
+    </Modal>
   );
 }
 

@@ -2,6 +2,8 @@ import type {
   ApiQuotaPublic,
   AppSettings,
   AuthState,
+  PasswordResetIssued,
+  PasswordResetTarget,
   UserPublic,
   UserRole,
   SourcePublic,
@@ -227,6 +229,14 @@ export const api = {
   updateUser: (id: string, input: UpdateUserInput) =>
     request<UserPublic>(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   deleteUser: (id: string) => request<void>(`/users/${id}`, { method: 'DELETE' }),
+  /** Mints a one-shot link for an account. The token is readable only here. */
+  issueResetLink: (id: string) =>
+    request<PasswordResetIssued>(`/users/${id}/reset-link`, { method: 'POST' }),
+  /** Whose password the link would change — read before showing the form. */
+  resetTarget: (token: string) =>
+    request<PasswordResetTarget>(`/auth/reset/${encodeURIComponent(token)}`),
+  resetPassword: (token: string, password: string) =>
+    request<void>('/auth/reset', { method: 'POST', body: JSON.stringify({ token, password }) }),
 
   listSources: (page?: PageQuery) => request<Page<SourcePublic>>(`/sources${qs({ ...page })}`),
   createSource: (input: CreateSourceInput) =>
