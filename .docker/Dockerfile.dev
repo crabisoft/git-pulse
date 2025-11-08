@@ -1,6 +1,6 @@
 # Dev image: Node + OpenSSL (Prisma needs system libssl, absent from the slim
 # base). Source code is bind-mounted at runtime, so nothing is copied here.
-ARG NODE_IMAGE=node:20-slim
+ARG NODE_IMAGE=node:24-slim
 FROM ${NODE_IMAGE}
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates \

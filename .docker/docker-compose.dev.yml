@@ -3,7 +3,7 @@
 #   front : Vite dev server with HMR
 # Usage: npm run docker:dev
 #
-# Both services share a small image (node:20-slim + openssl) so Prisma finds
+# Both services share a small image (node:24-slim + openssl) so Prisma finds
 # libssl. node_modules lives in a named volume (not the host's) mounted over
 # the bind-mounted code.
 services:
@@ -12,7 +12,7 @@ services:
       context: ..
       dockerfile: .docker/Dockerfile.dev
       args:
-        NODE_IMAGE: ${NODE_IMAGE:-node:20-slim}
+        NODE_IMAGE: ${NODE_IMAGE:-node:24-slim}
     image: git-dashboard-dev
     working_dir: /app
     # The shared package is compiled once, then kept under `tsc --watch` in the
