@@ -27,6 +27,6 @@
     "test": "npm run test -w @repo/back && npm run test -w @repo/front"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   }
 }

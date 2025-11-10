@@ -718,9 +718,8 @@ npm run docker:up
 
 ## Getting started — local (dev)
 
-Prerequisites: Node 22+, a reachable PostgreSQL and Redis (see `.env`). The
-Docker stacks run the active LTS, Node 24 — 22 is the floor because it is the
-oldest release still receiving fixes.
+Prerequisites: Node 24+, a reachable PostgreSQL and Redis (see `.env`). The
+Docker stacks and the local floor both track the active LTS, Node 24.
 
 ```bash
 npm install
