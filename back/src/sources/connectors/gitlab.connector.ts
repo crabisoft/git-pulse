@@ -147,6 +147,7 @@ export class GitLabConnector implements SourceConnector {
     const gl = this.client(ctx);
     const sinceMs = new Date(since).getTime();
     const out: MergedPullRequest[] = [];
+    let skipped = 0;
     for (const repo of repos) {
       ctx.signal?.throwIfAborted();
       const mrs = await gl.MergeRequests.all({
@@ -161,10 +162,17 @@ export class GitLabConnector implements SourceConnector {
         // One extra call per MR: worth checking inside this loop too.
         ctx.signal?.throwIfAborted();
         const author = (mr.author as { id?: number } | undefined)?.id ?? null;
-        const [firstCommitAt, firstReviewAt] = await Promise.all([
-          this.firstCommitAt(gl, repo, mr.iid as number),
-          this.firstReviewAt(gl, repo, mr.iid as number, author),
-        ]);
+        // The heaviest fan-out of the whole collection, and the first thing
+        // given up under the reserve: the merge request keeps its lead time,
+        // and loses the coding and pickup segments it cuts into.
+        const enrich = ctx.allowsOptionalCalls?.() !== false;
+        if (!enrich) skipped++;
+        const [firstCommitAt, firstReviewAt] = enrich
+          ? await Promise.all([
+              this.firstCommitAt(gl, repo, mr.iid as number),
+              this.firstReviewAt(gl, repo, mr.iid as number, author),
+            ])
+          : [null, null];
         out.push({
           id: `gl:${repo}:${mr.iid}`,
           repo,
@@ -178,6 +186,12 @@ export class GitLabConnector implements SourceConnector {
           mergedAt,
         });
       }
+    }
+    if (skipped > 0) {
+      this.logger.warn(
+        `Segments de lead time non collectés pour ${skipped} merge request(s) : ` +
+          `budget d'API sous la réserve.`,
+      );
     }
     return out;
   }
@@ -287,10 +301,12 @@ export function gitlabFor(ctx: ConnectorContext): GitlabClient {
  * included.
  */
 function meterGitlab(client: GitlabClient, onQuota: QuotaSink): void {
+  // Every call is reported, counters or not — and here that is the common case
+  // rather than the exception: an instance with rate limiting switched off
+  // sends no header at all, and a declared budget is the only thing left to
+  // count its calls against.
   const report = (headers: HeaderBag | undefined) => {
-    if (!headers) return;
-    const sample = gitlabQuota(headers);
-    if (sample) onQuota(sample);
+    onQuota(headers ? gitlabQuota(headers) : null);
   };
 
   for (const resource of Object.values(client as unknown as Record<string, unknown>)) {

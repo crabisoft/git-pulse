@@ -86,7 +86,9 @@
       "incidentLabels": "Incident labels",
       "incidentLabelsHint": "comma separated; an issue carrying one of them is an incident",
       "publicDashboard": "Public dashboard",
-      "publicDashboardHint": "Dashboard and DORA readable without signing in. Off, the whole application asks for an account — the settings always do."
+      "publicDashboardHint": "Dashboard and DORA readable without signing in. Off, the whole application asks for an account — the settings always do.",
+      "quotaReservePct": "API reserve (%)",
+      "quotaReservePctHint": "share of a budget kept for the essential calls: below it, the collection drops the per-pull-request and per-deployment enrichment"
     }
   },
   "users": {
@@ -256,6 +258,9 @@
       "tooManyAttempts": "Too many failed attempts. Try again in {{minutes}} minute(s).",
       "resetInvalid": "This reset link is not valid. Ask for another one.",
       "resetExpired": "This reset link has expired. Ask for another one."
+    },
+    "quota": {
+      "invalidBudget": "Invalid budget: at least {{limitMin}} call, over a window of {{windowMin}} to {{windowMax}} seconds."
     }
   },
   "empty": {
@@ -455,6 +460,22 @@
       "noTrackerDeclared": "No tracker declared yet — start with the Trackers section.",
       "noTrackerAttached": "Attach a tracker to this source first, above.",
       "noEligibleTracker": "None of the attached trackers can supply incidents: not every kind is able to."
+    },
+    "budget": {
+      "none": "No declared ceiling",
+      "stated": "Declared ceiling: {{limit}} calls / {{window}}",
+      "declare": "Declare one",
+      "title": "API budget — {{name}}",
+      "hint": "For an instance that sends no rate-limit header: the calls are then counted here, against what you state below.",
+      "limit": "Calls allowed",
+      "windowLabel": "Per",
+      "withdraw": "Withdraw",
+      "observedNote": "A reading coming from the instance itself always takes precedence over this figure.",
+      "window": {
+        "60": "minute",
+        "3600": "hour",
+        "86400": "day"
+      }
     }
   },
   "ticketRules": {

@@ -45,4 +45,9 @@ export class UpdateSettingsDto {
   @IsString({ each: true })
   @MinLength(1, { each: true })
   incidentLabels?: string[];
+
+  /** Percent of a rate-limit budget the optional calls may not dip into. */
+  @IsOptional()
+  @IsInt()
+  quotaReservePct?: number;
 }

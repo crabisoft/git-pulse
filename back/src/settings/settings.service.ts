@@ -4,6 +4,8 @@ import {
   DORA_WINDOW_MIN,
   PAGE_LIMIT_DEFAULT,
   PAGE_LIMIT_MAX,
+  QUOTA_RESERVE_PCT_MAX,
+  QUOTA_RESERVE_PCT_MIN,
   type AppSettings,
   type FailureSource,
 } from '@repo/shared';
@@ -25,12 +27,16 @@ const FALLBACKS: AppSettings = {
   // configuration to be correct.
   failureSource: 'pipelines',
   incidentLabels: [],
+  // A tenth of the budget: enough to leave the calls that carry the metrics
+  // room to finish, small enough that the enrichment runs on any normal day.
+  quotaReservePct: 10,
 };
 
 const LIMITS = {
   doraWindowDays: { min: DORA_WINDOW_MIN, max: DORA_WINDOW_MAX },
   stalePrHours: { min: 1, max: 8760 },
   pageSize: { min: 1, max: PAGE_LIMIT_MAX },
+  quotaReservePct: { min: QUOTA_RESERVE_PCT_MIN, max: QUOTA_RESERVE_PCT_MAX },
 };
 
 type Listener = (settings: AppSettings) => void;
@@ -58,6 +64,7 @@ export class SettingsService {
       publicDashboard: readBoolean(stored.get('publicDashboard'), FALLBACKS.publicDashboard),
       failureSource: readFailureSource(stored.get('failureSource')),
       incidentLabels: readList(stored.get('incidentLabels')),
+      quotaReservePct: readNumber(stored.get('quotaReservePct'), FALLBACKS.quotaReservePct),
     };
   }
 
@@ -71,6 +78,7 @@ export class SettingsService {
     assertInRange('doraWindowDays', dto.doraWindowDays);
     assertInRange('stalePrHours', dto.stalePrHours);
     assertInRange('pageSize', dto.pageSize);
+    assertInRange('quotaReservePct', dto.quotaReservePct);
     if (dto.collectCron !== undefined) assertValidCron(dto.collectCron);
     await this.assertIncidentsConfigured(dto);
 

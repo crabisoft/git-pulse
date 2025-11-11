@@ -203,6 +203,32 @@ model ApiQuota {
   @@unique([subjectKind, subjectId, bucket])
 }
 
+/// A ceiling stated by hand, for the instances that meter nothing — a
+/// self-hosted GitLab with rate limiting off sends no header to read.
+///
+/// Kept apart from ApiQuota because it is configuration, not a reading: the
+/// quota row it feeds is rewritten at every window, where what was declared has
+/// to survive them all.
+///
+/// One per subject, not one per bucket: a response carrying no rate-limit
+/// header names no bucket either, so the calls counted here have exactly one
+/// ceiling to charge.
+model ApiBudget {
+  id          String       @id @default(uuid())
+  subjectKind QuotaSubject
+  subjectId   String
+  /// Bucket the ceiling applies to — "core" for GitHub, "rest" for GitLab.
+  bucket      String
+  /// Calls allowed per window.
+  limit       Int
+  /// Window length, in seconds.
+  windowSec   Int
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@unique([subjectKind, subjectId])
+}
+
 enum UserRole {
   admin
   user

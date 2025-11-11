@@ -1,4 +1,6 @@
 import type {
+  ApiBudgetInput,
+  ApiBudgetPublic,
   ApiQuotaPublic,
   AppSettings,
   AuthState,
@@ -303,6 +305,15 @@ export const api = {
 
   /** Every metered bucket, all subjects at once — see the quotas controller. */
   listQuotas: () => request<ApiQuotaPublic[]>('/quotas'),
+  /** The ceilings declared by hand, for the instances that meter nothing. */
+  listBudgets: () => request<ApiBudgetPublic[]>('/quotas/budgets'),
+  declareBudget: (sourceId: string, input: ApiBudgetInput) =>
+    request<ApiBudgetPublic>(`/quotas/sources/${sourceId}/budget`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
+  withdrawBudget: (sourceId: string) =>
+    request<void>(`/quotas/sources/${sourceId}/budget`, { method: 'DELETE' }),
 
   listTrackers: (page?: PageQuery) =>
     request<Page<TrackerPublic>>(`/trackers${qs({ ...page })}`),

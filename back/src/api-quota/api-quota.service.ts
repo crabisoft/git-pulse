@@ -1,13 +1,18 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import type { ApiQuotaPublic, QuotaSubject } from '@repo/shared';
+import { Injectable, Logger, OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
+import type { ApiQuotaPublic, QuotaOrigin } from '@repo/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { ApiBudgetService } from './api-budget.service';
 import type { QuotaSample, QuotaSink } from './rate-limit-headers';
+import {
+  allowsOptionalWork,
+  countCall,
+  remainingShare,
+  subjectKey,
+  type Reading,
+  type QuotaSubjectRef,
+} from './quota-pressure';
 
-/** Whose credentials a series of calls is billed to. */
-export interface QuotaSubjectRef {
-  kind: QuotaSubject;
-  id: string;
-}
+export type { QuotaSubjectRef };
 
 /**
  * How long observations are held before being written. A collection run makes
@@ -20,18 +25,65 @@ const FLUSH_DELAY_MS = 2_000;
 /**
  * Keeps track of what each source consumes of its provider's rate limit.
  *
- * Observation only: nothing here throttles or refuses a call. It answers "where
- * do I stand", which is the question that has to be answerable before deciding
- * what to do about it.
+ * Two ways in. A provider that meters its API is **read**: its counters come
+ * back on every response and are recorded as observed. One that meters nothing
+ * is **counted** here instead, against the ceiling an admin declared — a
+ * supposition, marked as such, and dropped the moment a real reading turns up
+ * for that subject.
+ *
+ * The readings outlive their write, which is what lets a run be steered by
+ * them: `allowsOptional` answers from memory, on the response path, with no
+ * query in sight.
  */
 @Injectable()
-export class ApiQuotaService implements OnModuleDestroy {
+export class ApiQuotaService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(ApiQuotaService.name);
-  /** Latest observation per subject and bucket, awaiting a write. */
-  private readonly pending = new Map<string, { subject: QuotaSubjectRef; sample: QuotaSample }>();
+  /** Latest reading per subject and bucket — kept after the write, not cleared. */
+  private readonly current = new Map<string, { subject: QuotaSubjectRef; reading: Reading }>();
+  /** Keys whose reading has changed since the last successful write. */
+  private readonly dirty = new Set<string>();
+  /** Subjects the provider meters itself: their declared budget is ignored. */
+  private readonly metered = new Set<string>();
   private flushTimer: NodeJS.Timeout | null = null;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly budgets: ApiBudgetService,
+  ) {}
+
+  /**
+   * Restores what was known before the restart. Without it the first run back
+   * would spend its optional calls on a budget it cannot see yet, which is the
+   * one moment the degradation exists for.
+   */
+  async onModuleInit(): Promise<void> {
+    try {
+      const rows = await this.prisma.apiQuota.findMany();
+      for (const row of rows) {
+        const subject: QuotaSubjectRef = {
+          kind: row.subjectKind as QuotaSubjectRef['kind'],
+          id: row.subjectId,
+        };
+        const origin = row.origin as QuotaOrigin;
+        this.current.set(keyOf(subject, row.bucket), {
+          subject,
+          reading: {
+            origin,
+            sample: {
+              bucket: row.bucket,
+              limit: row.limit,
+              used: row.used,
+              resetAt: row.resetAt,
+              windowSec: row.windowSec,
+            },
+          },
+        });
+        if (origin === 'observed') this.metered.add(subjectKey(subject));
+      }
+    } catch (e) {
+      this.logger.warn(`Quotas non rechargés au démarrage : ${asMessage(e)}`);
+    }
+  }
 
   /**
    * A sink bound to one subject, for a connector to call on every response.
@@ -43,40 +95,79 @@ export class ApiQuotaService implements OnModuleDestroy {
   }
 
   /**
-   * Takes one reading. Never throws and never awaits: it sits on the response
-   * path of every API call, where a metering failure must not become a
-   * collection failure.
+   * Takes one reading, or counts one unmetered call. Never throws and never
+   * awaits: it sits on the response path of every API call, where a metering
+   * failure must not become a collection failure.
    */
-  record(subject: QuotaSubjectRef, sample: QuotaSample): void {
-    const key = `${subject.kind}:${subject.id}:${sample.bucket}`;
-    const held = this.pending.get(key)?.sample;
+  record(subject: QuotaSubjectRef, sample: QuotaSample | null): void {
+    if (sample === null) {
+      this.countAgainstBudget(subject);
+      return;
+    }
+
+    // A measurement settles the question: whatever was declared for this
+    // subject stops being counted. The declared row is overwritten as soon as
+    // the provider meters the bucket it was declared for, which is the bucket
+    // the UI offers — an instance metering some other one keeps a stale row
+    // until its window elapses, where the gauge draws it as expired.
+    this.metered.add(subjectKey(subject));
+
+    const key = keyOf(subject, sample.bucket);
+    const held = this.current.get(key)?.reading;
     // Responses come back out of order, and these headers are counters rather
     // than increments: the highest count of a window is the current one. A later
     // reset date means the window rolled over, where a lower count is expected.
     const stale =
       held !== undefined &&
-      sample.resetAt.getTime() <= held.resetAt.getTime() &&
-      sample.used < held.used;
+      held.origin === 'observed' &&
+      sample.resetAt.getTime() <= held.sample.resetAt.getTime() &&
+      sample.used < held.sample.used;
     if (stale) return;
 
-    this.pending.set(key, { subject, sample });
-    this.scheduleFlush();
+    this.hold(key, subject, { sample, origin: 'observed' });
   }
 
   /**
-   * Drops everything known about a subject. The polymorphic key rules out a
-   * foreign key, so the rows of a deleted source have to be cleared here —
-   * including the readings still held, which would otherwise write themselves
-   * back after the deletion.
+   * Drops everything known about a subject, declaration included. The
+   * polymorphic key rules out a foreign key, so the rows of a deleted source
+   * have to be cleared here — including the readings still held, which would
+   * otherwise write themselves back after the deletion.
    */
   async forget(subject: QuotaSubjectRef): Promise<void> {
-    const prefix = `${subject.kind}:${subject.id}:`;
-    for (const key of this.pending.keys()) {
-      if (key.startsWith(prefix)) this.pending.delete(key);
+    const prefix = `${subjectKey(subject)}:`;
+    for (const key of this.current.keys()) {
+      if (key.startsWith(prefix)) {
+        this.current.delete(key);
+        this.dirty.delete(key);
+      }
     }
+    this.metered.delete(subjectKey(subject));
+    await this.budgets.forget(subject);
     await this.prisma.apiQuota.deleteMany({
       where: { subjectKind: subject.kind, subjectId: subject.id },
     });
+  }
+
+  /**
+   * Share of the budget a subject has left, over the buckets whose window is
+   * still running. Null when nothing has been read or counted yet.
+   */
+  share(subject: QuotaSubjectRef, now: Date = new Date()): number | null {
+    const prefix = `${subjectKey(subject)}:`;
+    const readings: Reading[] = [];
+    for (const [key, held] of this.current) {
+      if (key.startsWith(prefix)) readings.push(held.reading);
+    }
+    return remainingShare(readings, now);
+  }
+
+  /**
+   * Whether a subject may still be charged for optional work — the enrichment
+   * calls that fan out per pull request and per deployment. Synchronous: it is
+   * asked in the middle of a loop over hundreds of items.
+   */
+  allowsOptional(subject: QuotaSubjectRef, reservePct: number, now: Date = new Date()): boolean {
+    return allowsOptionalWork(this.share(subject, now), reservePct);
   }
 
   /** Every known quota, freshest reading first. */
@@ -94,14 +185,19 @@ export class ApiQuotaService implements OnModuleDestroy {
       clearTimeout(this.flushTimer);
       this.flushTimer = null;
     }
-    const entries = [...this.pending.entries()];
-    for (const [key, { subject, sample }] of entries) {
+    for (const key of [...this.dirty]) {
+      const held = this.current.get(key);
+      if (!held) {
+        this.dirty.delete(key);
+        continue;
+      }
+      const { subject, reading } = held;
       const data = {
-        limit: Math.trunc(sample.limit),
-        used: Math.trunc(sample.used),
-        resetAt: sample.resetAt,
-        windowSec: sample.windowSec,
-        origin: 'observed' as const,
+        limit: Math.trunc(reading.sample.limit),
+        used: Math.trunc(reading.sample.used),
+        resetAt: reading.sample.resetAt,
+        windowSec: reading.sample.windowSec,
+        origin: reading.origin,
       };
       try {
         await this.prisma.apiQuota.upsert({
@@ -109,20 +205,20 @@ export class ApiQuotaService implements OnModuleDestroy {
             subjectKind_subjectId_bucket: {
               subjectKind: subject.kind,
               subjectId: subject.id,
-              bucket: sample.bucket,
+              bucket: reading.sample.bucket,
             },
           },
           create: {
             subjectKind: subject.kind,
             subjectId: subject.id,
-            bucket: sample.bucket,
+            bucket: reading.sample.bucket,
             ...data,
           },
           update: data,
         });
-        // Dropped only once written: a failed flush keeps its reading for the
+        // Cleared only once written: a failed flush keeps its reading for the
         // next one rather than losing the window it measured.
-        this.pending.delete(key);
+        this.dirty.delete(key);
       } catch (e) {
         this.logger.warn(`Quota non enregistré pour ${key} : ${asMessage(e)}`);
       }
@@ -131,6 +227,29 @@ export class ApiQuotaService implements OnModuleDestroy {
 
   async onModuleDestroy(): Promise<void> {
     await this.flush();
+  }
+
+  /**
+   * Counts a call the provider reported nothing about, against the ceiling
+   * declared for its subject. With no declaration there is nothing to count
+   * against: the call is real, but no number would describe what it consumed.
+   */
+  private countAgainstBudget(subject: QuotaSubjectRef): void {
+    if (this.metered.has(subjectKey(subject))) return;
+    const budget = this.budgets.for(subject);
+    if (!budget) return;
+
+    const key = keyOf(subject, budget.bucket);
+    const held = this.current.get(key)?.reading;
+    const counted = held?.origin === 'declared' ? held.sample : undefined;
+    const sample = countCall(counted, budget, new Date());
+    this.hold(key, subject, { sample, origin: 'declared' });
+  }
+
+  private hold(key: string, subject: QuotaSubjectRef, reading: Reading): void {
+    this.current.set(key, { subject, reading });
+    this.dirty.add(key);
+    this.scheduleFlush();
   }
 
   private scheduleFlush(): void {
@@ -142,6 +261,11 @@ export class ApiQuotaService implements OnModuleDestroy {
     // Metering must never be the reason the process stays alive.
     this.flushTimer.unref();
   }
+}
+
+/** Addresses one bucket of one subject in the in-memory maps. */
+function keyOf(subject: QuotaSubjectRef, bucket: string): string {
+  return `${subjectKey(subject)}:${bucket}`;
 }
 
 function toPublic(row: {

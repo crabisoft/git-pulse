@@ -14,6 +14,7 @@ import { toPage, type PageWindow } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../crypto/crypto.service';
 import { ApiQuotaService } from '../api-quota/api-quota.service';
+import { SettingsService } from '../settings/settings.service';
 import type { ConnectorContext, SourceAuth } from './connectors/source-connector.interface';
 import { ConnectorFactory } from './connectors/connector.factory';
 import type { CreateSourceDto } from './dto/create-source.dto';
@@ -26,6 +27,7 @@ export class SourcesService {
     private readonly crypto: CryptoService,
     private readonly connectors: ConnectorFactory,
     private readonly quotas: ApiQuotaService,
+    private readonly settings: SettingsService,
   ) {}
 
   async create(dto: CreateSourceDto): Promise<SourcePublic> {
@@ -246,6 +248,12 @@ export class SourcesService {
       authTag: source.credential.authTag,
       keyVersion: source.credential.keyVersion,
     });
+    // Read once, here: the reserve is a setting, and asking the database for it
+    // per pull request would cost more than the calls it saves. What it guards
+    // against — the consumption — is what moves during a run, and that is read
+    // from memory at every item.
+    const subject = { kind: 'source' as const, id };
+    const { quotaReservePct } = await this.settings.get();
     return {
       kind: source.kind as SourceKind,
       ctx: {
@@ -255,7 +263,8 @@ export class SourcesService {
         signal,
         // Git-hosted trackers borrow this context, so their calls are billed
         // here too — which is right: they spend this source's token.
-        onQuota: this.quotas.sinkFor({ kind: 'source', id }),
+        onQuota: this.quotas.sinkFor(subject),
+        allowsOptionalCalls: () => this.quotas.allowsOptional(subject, quotaReservePct),
       },
     };
   }

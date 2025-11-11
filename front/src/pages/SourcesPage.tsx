@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import {
   INCIDENT_TRACKER_KINDS,
   PAGE_LIMIT_MAX,
+  QUOTA_LIMIT_MIN,
+  type ApiBudgetPublic,
   type ApiQuotaPublic,
   type EnvRulePublic,
   type RuleTarget,
@@ -117,6 +119,8 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [tested, setTested] = useState<Record<string, ConnectionTestResult | 'pending'>>({});
   const [quotas, setQuotas] = useState<ApiQuotaPublic[]>([]);
+  const [budgets, setBudgets] = useState<ApiBudgetPublic[]>([]);
+  const [budgeting, setBudgeting] = useState<SourcePublic | null>(null);
   /** Open editor: `null` source means creation. */
   const [editing, setEditing] = useState<{ source: SourcePublic | null } | null>(null);
   const [deleting, setDeleting] = useState<SourcePublic | null>(null);
@@ -139,9 +143,12 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
    */
   const loadQuotas = useCallback(async () => {
     try {
-      setQuotas(await api.listQuotas());
+      const [readings, declared] = await Promise.all([api.listQuotas(), api.listBudgets()]);
+      setQuotas(readings);
+      setBudgets(declared);
     } catch {
       setQuotas([]);
+      setBudgets([]);
     }
   }, []);
 
@@ -162,6 +169,15 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
     }
     return map;
   }, [quotas]);
+
+  /** The ceiling declared for a source, if any — at most one per subject. */
+  const budgetBySource = useMemo(() => {
+    const map = new Map<string, ApiBudgetPublic>();
+    for (const budget of budgets) {
+      if (budget.subjectKind === 'source') map.set(budget.subjectId, budget);
+    }
+    return map;
+  }, [budgets]);
 
   /** Refreshes both this list and the sources App holds (picker, badge). */
   async function refresh() {
@@ -227,6 +243,16 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
                   {(quotasBySource.get(s.id) ?? []).map((quota) => (
                     <QuotaGauge key={quota.bucket} quota={quota} />
                   ))}
+                  {/* Offered where a gauge is missing, and kept wherever one was
+                      declared: a source the provider meters needs no ceiling
+                      typed by hand, and saying so under every gauge would be
+                      noise on the sources that are fine. */}
+                  {(budgetBySource.has(s.id) || (quotasBySource.get(s.id) ?? []).length === 0) && (
+                    <BudgetLine
+                      budget={budgetBySource.get(s.id) ?? null}
+                      onEdit={() => setBudgeting(s)}
+                    />
+                  )}
                   {ts && (
                     <div className={`source-test ${ts === 'pending' ? '' : ts.ok ? 'ok' : 'err'}`}>
                       {ts === 'pending'
@@ -263,6 +289,18 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
           source={editing.source}
           onClose={() => setEditing(null)}
           onSaved={saved}
+        />
+      )}
+
+      {budgeting && (
+        <BudgetDialog
+          source={budgeting}
+          budget={budgetBySource.get(budgeting.id) ?? null}
+          onClose={() => setBudgeting(null)}
+          onSaved={async () => {
+            setBudgeting(null);
+            await loadQuotas();
+          }}
         />
       )}
 
@@ -538,6 +576,131 @@ function SourceDialog({
           )}
         </label>
 
+        {error && <div className="banner error">{error}</div>}
+      </form>
+    </Modal>
+  );
+}
+
+/**
+ * The ceiling declared for a source, or the offer to declare one.
+ *
+ * Sits where the gauges are because it answers what their absence asks: an
+ * instance that meters nothing draws none, and nothing else on the page would
+ * say why, nor what can be done about it.
+ */
+function BudgetLine({ budget, onEdit }: { budget: ApiBudgetPublic | null; onEdit: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <div className="quota-budget">
+      <span>
+        {budget
+          ? t('sources.budget.stated', {
+              limit: budget.limit.toLocaleString(),
+              window: t(`sources.budget.window.${budget.windowSec}`, {
+                defaultValue: `${budget.windowSec}s`,
+              }),
+            })
+          : t('sources.budget.none')}
+      </span>
+      <button type="button" onClick={onEdit}>
+        {budget ? t('common.edit') : t('sources.budget.declare')}
+      </button>
+    </div>
+  );
+}
+
+/** Declares, changes or withdraws what a source's instance allows. */
+function BudgetDialog({
+  source,
+  budget,
+  onClose,
+  onSaved,
+}: {
+  source: SourcePublic;
+  budget: ApiBudgetPublic | null;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const { t } = useTranslation();
+  const [limit, setLimit] = useState(String(budget?.limit ?? 600));
+  const [windowSec, setWindowSec] = useState(String(budget?.windowSec ?? 60));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run(action: () => Promise<unknown>) {
+    setBusy(true);
+    setError(null);
+    try {
+      await action();
+      await onSaved();
+    } catch (err) {
+      const { code, params } = apiErrorInfo(err);
+      setError(t(code, params));
+      setBusy(false);
+    }
+  }
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    void run(() =>
+      api.declareBudget(source.id, { limit: Number(limit), windowSec: Number(windowSec) }),
+    );
+  };
+
+  const title = t('sources.budget.title', { name: source.name });
+
+  return (
+    <Modal
+      title={title}
+      label={title}
+      onClose={onClose}
+      footer={
+        <>
+          {budget && (
+            <button
+              className="btn danger"
+              type="button"
+              disabled={busy}
+              onClick={() => void run(() => api.withdrawBudget(source.id))}
+            >
+              {t('sources.budget.withdraw')}
+            </button>
+          )}
+          <button className="btn" type="button" onClick={onClose}>
+            {t('common.cancel')}
+          </button>
+          <button className="btn primary" type="submit" form="budget-form" disabled={busy}>
+            {t('common.save')}
+          </button>
+        </>
+      }
+    >
+      <form id="budget-form" onSubmit={submit} className="form">
+        <p className="hint">{t('sources.budget.hint')}</p>
+        <label>
+          {t('sources.budget.limit')}
+          <input
+            type="number"
+            min={QUOTA_LIMIT_MIN}
+            step={1}
+            value={limit}
+            onChange={(e) => setLimit(e.target.value)}
+            required
+            autoFocus
+          />
+        </label>
+        <label>
+          {t('sources.budget.windowLabel')}
+          <select value={windowSec} onChange={(e) => setWindowSec(e.target.value)}>
+            {['60', '3600', '86400'].map((sec) => (
+              <option key={sec} value={sec}>
+                {t(`sources.budget.window.${sec}`)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="field-note">{t('sources.budget.observedNote')}</p>
         {error && <div className="banner error">{error}</div>}
       </form>
     </Modal>

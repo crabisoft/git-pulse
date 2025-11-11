@@ -13,8 +13,12 @@ export interface QuotaSample {
   windowSec: number | null;
 }
 
-/** Receives every sample a connector observes. */
-export type QuotaSink = (sample: QuotaSample) => void;
+/**
+ * Receives every call a connector makes. Null says a call was made and carried
+ * no counters — the instance meters nothing, which is exactly the case a
+ * declared budget is counted for, so it must not look like no call at all.
+ */
+export type QuotaSink = (sample: QuotaSample | null) => void;
 
 /**
  * Headers as the two clients hand them over: Octokit builds a plain object,

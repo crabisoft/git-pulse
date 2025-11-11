@@ -86,7 +86,9 @@
       "incidentLabels": "Labels d'incident",
       "incidentLabelsHint": "séparés par des virgules ; une issue portant l'un d'eux est un incident",
       "publicDashboard": "Dashboard public",
-      "publicDashboardHint": "Dashboard et DORA consultables sans connexion. Décoché, toute l'application demande un compte — les réglages le demandent de toute façon."
+      "publicDashboardHint": "Dashboard et DORA consultables sans connexion. Décoché, toute l'application demande un compte — les réglages le demandent de toute façon.",
+      "quotaReservePct": "Réserve d'API (%)",
+      "quotaReservePctHint": "part du budget gardée pour les appels essentiels : en dessous, la collecte abandonne l'enrichissement par pull request et par déploiement"
     }
   },
   "users": {
@@ -256,6 +258,9 @@
       "tooManyAttempts": "Trop de tentatives échouées. Réessayez dans {{minutes}} minute(s).",
       "resetInvalid": "Ce lien de réinitialisation n'est pas valide. Demandez-en un autre.",
       "resetExpired": "Ce lien de réinitialisation a expiré. Demandez-en un autre."
+    },
+    "quota": {
+      "invalidBudget": "Budget invalide : au moins {{limitMin}} appel, sur une fenêtre de {{windowMin}} à {{windowMax}} secondes."
     }
   },
   "empty": {
@@ -455,6 +460,22 @@
       "noTrackerDeclared": "Aucun tracker déclaré : commencez par la section Trackers.",
       "noTrackerAttached": "Rattachez d'abord un tracker à cette source, ci-dessus.",
       "noEligibleTracker": "Aucun tracker rattaché ne sait fournir d'incidents : tous les types n'en sont pas capables."
+    },
+    "budget": {
+      "none": "Aucun plafond déclaré",
+      "stated": "Plafond déclaré : {{limit}} appels / {{window}}",
+      "declare": "En déclarer un",
+      "title": "Budget d'API — {{name}}",
+      "hint": "Pour une instance qui n'envoie aucun en-tête de rate limit : les appels sont alors comptés ici, en face de ce que vous déclarez ci-dessous.",
+      "limit": "Appels autorisés",
+      "windowLabel": "Par",
+      "withdraw": "Retirer",
+      "observedNote": "Une mesure venue de l'instance elle-même l'emporte toujours sur ce chiffre.",
+      "window": {
+        "60": "minute",
+        "3600": "heure",
+        "86400": "jour"
+      }
     }
   },
   "ticketRules": {

@@ -525,6 +525,48 @@ export interface ApiQuotaPublic {
   observedAt: string;
 }
 
+/**
+ * A ceiling stated by hand, for the instances that meter nothing — a
+ * self-hosted GitLab with rate limiting switched off sends no header to read.
+ *
+ * Configuration rather than reading, which is why it lives apart from
+ * `ApiQuotaPublic`: the quota row it feeds is recomputed at every window, where
+ * what was declared must survive them all.
+ */
+export interface ApiBudgetPublic {
+  subjectKind: QuotaSubject;
+  subjectId: string;
+  /** Bucket the ceiling applies to — see `QUOTA_BUCKET_BY_KIND`. */
+  bucket: string;
+  /** Calls allowed per window. */
+  limit: number;
+  /** Window length, in seconds. */
+  windowSec: number;
+  updatedAt: string;
+}
+
+/** Fields a budget is declared with; the subject and bucket address it. */
+export interface ApiBudgetInput {
+  limit: number;
+  windowSec: number;
+}
+
+/**
+ * The bucket a source's calls are charged to when nothing names one. Only the
+ * providers' main bucket can be declared: the others (GitHub's `graphql`,
+ * `search`) are metered by every instance that has them, so a figure typed for
+ * them would compete with a measurement.
+ */
+export const QUOTA_BUCKET_BY_KIND: Record<SourceKind, string> = {
+  github: 'core',
+  gitlab: 'rest',
+};
+
+/** Guard rails on a declared budget — a window of a second meters nothing. */
+export const QUOTA_WINDOW_SEC_MIN = 60;
+export const QUOTA_WINDOW_SEC_MAX = 86_400;
+export const QUOTA_LIMIT_MIN = 1;
+
 // ─── Accounts and access ─────────────────────────────────────────────
 
 /**
@@ -609,7 +651,21 @@ export interface AppSettings {
    * as a production failure.
    */
   incidentLabels: string[];
+  /**
+   * Share of a rate-limit budget kept in reserve, in percent. Below it the
+   * collection drops its optional work — the per-pull-request and
+   * per-deployment enrichment calls — rather than spending the last of the
+   * budget on them and being refused the calls that carry the metrics.
+   *
+   * Zero switches the degradation off: everything is attempted until the
+   * provider says no.
+   */
+  quotaReservePct: number;
 }
+
+/** Bounds of `quotaReservePct`; a reserve of everything would collect nothing. */
+export const QUOTA_RESERVE_PCT_MIN = 0;
+export const QUOTA_RESERVE_PCT_MAX = 90;
 
 // ─── Aggregated dashboard responses ──────────────────────────────────
 

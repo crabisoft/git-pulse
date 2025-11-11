@@ -23,7 +23,10 @@ function respondWith(headers: Record<string, string>, status = 200) {
   return fetch;
 }
 
-function contextFor(kind: 'github' | 'gitlab', onQuota?: (s: QuotaSample) => void): ConnectorContext {
+function contextFor(
+  kind: 'github' | 'gitlab',
+  onQuota?: (s: QuotaSample | null) => void,
+): ConnectorContext {
   return {
     baseUrl: kind === 'github' ? 'https://github.example.com' : 'https://gitlab.example.com',
     auth: { kind: 'token', token: 'secret' },
@@ -36,7 +39,7 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe('GitHub metering', () => {
   it('reports the counters of a call the connector makes', async () => {
-    const samples: QuotaSample[] = [];
+    const samples: (QuotaSample | null)[] = [];
     respondWith({
       'x-ratelimit-limit': '5000',
       'x-ratelimit-used': '17',
@@ -55,7 +58,7 @@ describe('GitHub metering', () => {
   });
 
   it('reports them from a refusal too, which is when the budget is spent', async () => {
-    const samples: QuotaSample[] = [];
+    const samples: (QuotaSample | null)[] = [];
     respondWith(
       {
         'x-ratelimit-limit': '5000',
@@ -83,7 +86,7 @@ describe('GitHub metering', () => {
 
 describe('GitLab metering', () => {
   it('reports the counters of a call the connector makes', async () => {
-    const samples: QuotaSample[] = [];
+    const samples: (QuotaSample | null)[] = [];
     respondWith({
       'ratelimit-limit': '600',
       'ratelimit-observed': '73',
@@ -97,15 +100,16 @@ describe('GitLab metering', () => {
     ]);
   });
 
-  it('says nothing when the instance meters nothing', async () => {
-    const samples: QuotaSample[] = [];
+  it('reports the call itself when the instance meters nothing', async () => {
+    const samples: (QuotaSample | null)[] = [];
     respondWith({});
 
     await gitlabFor(contextFor('gitlab', (s) => samples.push(s))).Projects.show('acme/widget');
 
     // Rate limiting can be switched off on a self-hosted instance. No header
-    // means no measurement, which must not surface as an empty budget.
-    expect(samples).toEqual([]);
+    // means no measurement — which must not surface as an empty budget, but
+    // must not look like no call either: it is what a declared budget counts.
+    expect(samples).toEqual([null]);
   });
 
   it('stays usable with nobody metering', async () => {

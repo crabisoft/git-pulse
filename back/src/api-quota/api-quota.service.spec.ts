@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { PrismaService } from '../prisma/prisma.service';
+import type { ApiBudgetService } from './api-budget.service';
 import { ApiQuotaService } from './api-quota.service';
+import type { DeclaredBudget } from './quota-pressure';
 import type { QuotaSample } from './rate-limit-headers';
 
 const SUBJECT = { kind: 'source', id: 'src-1' } as const;
@@ -10,11 +12,15 @@ function sample(over: Partial<QuotaSample> = {}): QuotaSample {
   return { bucket: 'core', limit: 5000, used: 100, resetAt: RESET, windowSec: 3600, ...over };
 }
 
-function service() {
+function service(budget?: DeclaredBudget) {
   const upsert = vi.fn().mockResolvedValue(undefined);
   const deleteMany = vi.fn().mockResolvedValue({ count: 1 });
   const prisma = { apiQuota: { upsert, deleteMany } } as unknown as PrismaService;
-  return { quotas: new ApiQuotaService(prisma), upsert, deleteMany };
+  const budgets = {
+    for: () => budget,
+    forget: vi.fn().mockResolvedValue(undefined),
+  } as unknown as ApiBudgetService;
+  return { quotas: new ApiQuotaService(prisma, budgets), upsert, deleteMany };
 }
 
 /** What a flush ended up writing for a bucket. */
@@ -83,6 +89,60 @@ describe('ApiQuotaService', () => {
     });
     // A held reading would otherwise write the deleted source back in.
     expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('counts the calls of an instance that meters nothing, against what was declared', async () => {
+    const { quotas, upsert } = service({ bucket: 'rest', limit: 600, windowSec: 60 });
+
+    quotas.record(SUBJECT, null);
+    quotas.record(SUBJECT, null);
+    quotas.record(SUBJECT, null);
+    await quotas.flush();
+
+    expect(written(upsert)).toEqual([
+      expect.objectContaining({ limit: 600, used: 3, origin: 'declared' }),
+    ]);
+  });
+
+  it('counts nothing when no budget was declared: the call is real, its cost unknown', async () => {
+    const { quotas, upsert } = service();
+
+    quotas.record(SUBJECT, null);
+    await quotas.flush();
+
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
+  it('stops counting once the provider meters the subject itself', async () => {
+    const { quotas, upsert } = service({ bucket: 'core', limit: 600, windowSec: 60 });
+
+    quotas.record(SUBJECT, sample({ used: 100 }));
+    quotas.record(SUBJECT, null);
+    await quotas.flush();
+
+    // A measurement beats a supposition, and mixing the two would count the
+    // same call twice — once by the provider, once here.
+    expect(written(upsert)).toEqual([
+      expect.objectContaining({ limit: 5000, used: 100, origin: 'observed' }),
+    ]);
+  });
+
+  it('holds back the optional calls once the reserve is reached', () => {
+    const { quotas } = service();
+    const now = new Date(RESET.getTime() - 60_000);
+
+    quotas.record(SUBJECT, sample({ limit: 5000, used: 4_950 }));
+
+    expect(quotas.allowsOptional(SUBJECT, 10, now)).toBe(false);
+    // The same consumption, with nothing held back, spends to the last call.
+    expect(quotas.allowsOptional(SUBJECT, 0, now)).toBe(true);
+  });
+
+  it('allows everything while nothing is known of a subject', () => {
+    const { quotas } = service();
+
+    expect(quotas.share(SUBJECT)).toBeNull();
+    expect(quotas.allowsOptional(SUBJECT, 10)).toBe(true);
   });
 
   it('bills through a sink that knows the subject, so connectors need not', async () => {

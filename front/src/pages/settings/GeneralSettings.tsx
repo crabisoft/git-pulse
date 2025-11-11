@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { PAGE_LIMIT_MAX, type AppSettings } from '@repo/shared';
+import {
+  PAGE_LIMIT_MAX,
+  QUOTA_RESERVE_PCT_MAX,
+  QUOTA_RESERVE_PCT_MIN,
+  type AppSettings,
+} from '@repo/shared';
 import { api, apiErrorInfo } from '../../api';
 import { windowLabel, windowOptions } from '../../doraWindow';
 import { SUPPORTED_LANGUAGES, LANGUAGE_LABELS } from '../../i18n';
@@ -131,6 +136,18 @@ export function GeneralSettings({
               />
             </label>
           )}
+          <label>
+            {t('settings.general.quotaReservePct')}{' '}
+            <span className="hint">{t('settings.general.quotaReservePctHint')}</span>
+            <input
+              type="number"
+              min={QUOTA_RESERVE_PCT_MIN}
+              max={QUOTA_RESERVE_PCT_MAX}
+              value={form.quotaReservePct}
+              onChange={(e) => set('quotaReservePct', Number(e.target.value))}
+              required
+            />
+          </label>
           <label>
             {t('settings.general.collectCron')}{' '}
             <span className="hint">{t('settings.general.collectCronHint')}</span>

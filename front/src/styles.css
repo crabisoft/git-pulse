@@ -397,6 +397,16 @@ tr.stale td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
    claiming a level. */
 .quota-bar.idle > span { background: var(--muted); opacity: .45; }
 
+/* Declared ceiling — under the gauges, since it is what stands in for one. */
+.quota-budget {
+  display: flex; align-items: baseline; gap: 8px;
+  margin-top: 6px; max-width: 340px; font-size: .76rem; color: var(--muted);
+}
+.quota-budget button {
+  padding: 0; border: 0; background: none; cursor: pointer;
+  font-size: inherit; color: var(--accent); text-decoration: underline;
+}
+
 /* Sub-tabs (rule targets) */
 .subtabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
 .subtab { padding: 7px 14px; border: none; border-bottom: 2px solid transparent; background: none; color: var(--muted); cursor: pointer; font-size: .86rem; font-family: var(--sans); }

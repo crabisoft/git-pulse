@@ -126,6 +126,7 @@ export class GitHubConnector implements SourceConnector {
   async listDeployments(ctx: ConnectorContext, repos: string[]): Promise<Deployment[]> {
     const gh = this.client(ctx);
     const out: Deployment[] = [];
+    let skipped = 0;
     for (const repo of repos) {
       ctx.signal?.throwIfAborted();
       const deps = await gh.rest.repos.listDeployments({
@@ -137,15 +138,27 @@ export class GitHubConnector implements SourceConnector {
         // One status call per deployment, and the helper below swallows errors:
         // without this check a cancelled run would keep polling to no end.
         ctx.signal?.throwIfAborted();
+        // Under the reserve the deployment is still reported, with an unknown
+        // status: it then counts towards the frequency but not towards the
+        // failure rate, where dropping it would have cost both.
+        const enrich = ctx.allowsOptionalCalls?.() !== false;
+        if (!enrich) skipped++;
         out.push({
           id: `gh:${repo}:${d.id}`,
           repo,
           environment: d.environment,
           ref: d.ref,
-          status: await this.deploymentStatus(gh, ctx.scope.owner, repo, d.id),
+          status: enrich
+            ? await this.deploymentStatus(gh, ctx.scope.owner, repo, d.id)
+            : 'unknown',
           createdAt: d.created_at,
         });
       }
+    }
+    if (skipped > 0) {
+      this.logger.warn(
+        `Statut non lu pour ${skipped} déploiement(s) : budget d'API sous la réserve.`,
+      );
     }
     return out;
   }
@@ -158,6 +171,7 @@ export class GitHubConnector implements SourceConnector {
     const gh = this.client(ctx);
     const sinceMs = new Date(since).getTime();
     const out: MergedPullRequest[] = [];
+    let skipped = 0;
     for (const repo of repos) {
       ctx.signal?.throwIfAborted();
       const prs = await gh.rest.pulls.list({
@@ -172,10 +186,17 @@ export class GitHubConnector implements SourceConnector {
         if (!pr.merged_at || new Date(pr.merged_at).getTime() < sinceMs) continue;
         // Two extra calls per PR: worth checking inside this loop too.
         ctx.signal?.throwIfAborted();
-        const [firstCommitAt, firstReviewAt] = await Promise.all([
-          this.firstCommitAt(gh, ctx.scope.owner, repo, pr.number),
-          this.firstReviewAt(gh, ctx.scope.owner, repo, pr.number),
-        ]);
+        // The heaviest fan-out of the whole collection, and the first thing
+        // given up under the reserve: the pull request keeps its lead time,
+        // and loses the coding and pickup segments it cuts into.
+        const enrich = ctx.allowsOptionalCalls?.() !== false;
+        if (!enrich) skipped++;
+        const [firstCommitAt, firstReviewAt] = enrich
+          ? await Promise.all([
+              this.firstCommitAt(gh, ctx.scope.owner, repo, pr.number),
+              this.firstReviewAt(gh, ctx.scope.owner, repo, pr.number),
+            ])
+          : [null, null];
         out.push({
           id: `gh:${repo}:${pr.number}`,
           repo,
@@ -189,6 +210,12 @@ export class GitHubConnector implements SourceConnector {
           mergedAt: pr.merged_at,
         });
       }
+    }
+    if (skipped > 0) {
+      this.logger.warn(
+        `Segments de lead time non collectés pour ${skipped} pull request(s) : ` +
+          `budget d'API sous la réserve.`,
+      );
     }
     return out;
   }
@@ -351,10 +378,12 @@ export function octokitFor(ctx: ConnectorContext): Octokit {
  * every call passes through.
  */
 function meterOctokit(octokit: Octokit, onQuota: QuotaSink): void {
+  // Every call is reported, counters or not: a response that carries none is
+  // what a declared budget is counted against, and a call that never reached
+  // the server is counted with it — an attempt whose cost is unknown is closer
+  // to one than to zero.
   const report = (headers: HeaderBag | undefined) => {
-    if (!headers) return;
-    const sample = githubQuota(headers);
-    if (sample) onQuota(sample);
+    onQuota(headers ? githubQuota(headers) : null);
   };
 
   octokit.hook.after('request', (response) => report(response.headers));

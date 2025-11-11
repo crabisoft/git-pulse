@@ -41,6 +41,19 @@ export interface ConnectorContext {
    * a Nest context.
    */
   onQuota?: QuotaSink;
+  /**
+   * Whether the **optional** calls may still be made — the enrichment that
+   * costs one or two calls per pull request and per deployment, where listing
+   * them costs one per repo. That fan-out is what empties a budget, and it is
+   * also what can be given up without losing a metric outright: a lead time
+   * without its segments, a deployment whose status is unknown.
+   *
+   * Asked once per item rather than once per run: the budget drains as the run
+   * goes, and the point is to stop before the ceiling, not to have decided
+   * beforehand. Absent means yes — a connector run outside a Nest context, or
+   * an install whose consumption nobody knows, attempts everything.
+   */
+  allowsOptionalCalls?: () => boolean;
 }
 
 /**
