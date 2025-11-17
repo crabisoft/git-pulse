@@ -5,8 +5,23 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
 
+/**
+ * Ceiling on a request body. Express defaults to 100 kB, which a webhook payload
+ * routinely exceeds — a push over a large repository carries every commit. Kept
+ * well under what the providers themselves cap deliveries at, so an oversized
+ * body is refused here rather than parsed.
+ */
+const BODY_LIMIT = process.env.BODY_LIMIT ?? '5mb';
+
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: false });
+  // `rawBody` keeps the unparsed body alongside the parsed one. Webhook
+  // signatures are computed over the bytes as sent, and re-serializing the
+  // parsed JSON does not reproduce them.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: false,
+    rawBody: true,
+  });
+  app.useBodyParser('json', { limit: BODY_LIMIT });
 
   // Behind a reverse proxy the caller's address arrives in X-Forwarded-For, and
   // the sign-in throttle counts against it. Opt-in, because trusting that
