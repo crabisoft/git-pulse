@@ -314,6 +314,9 @@ h3.with-help, h2.with-help { display: flex; align-items: center; gap: 6px; }
 .panel h2, .panel h3 { margin: 0 0 14px; }
 .page-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .page-head h2 { margin: 0; }
+/* Age of a stored view, beside the title: it qualifies everything below and
+   belongs to no tile in particular. `auto` keeps the actions hard right. */
+.synced-at { margin: 0 auto 0 12px; color: var(--muted); font-size: .78rem; }
 /* Panel header: title on the left, the panel's CTAs on the right. */
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .panel-head h2, .panel-head h3 { margin: 0; }
@@ -340,6 +343,10 @@ tr.stale td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
 .kind-badge { font-size: .68rem; padding: 1px 7px; border-radius: 5px; font-family: var(--mono); vertical-align: middle; }
 .kind-badge.github { background: #2428320f; color: var(--muted); border: 1px solid var(--line); }
 .kind-badge.gitlab { background: color-mix(in srgb, #fc6d26 18%, transparent); color: #c8551a; }
+/* Where a source is read from. Only the stored one is coloured: live is the
+   default, and marking every source that has not been changed is noise. */
+.mode-badge { font-size: .68rem; padding: 1px 7px; border-radius: 5px; font-family: var(--mono); vertical-align: middle; border: 1px solid var(--line); color: var(--muted); }
+.mode-badge.stored { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); border-color: transparent; }
 
 /* Forms */
 .form { display: flex; flex-direction: column; gap: 12px; }

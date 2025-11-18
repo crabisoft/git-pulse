@@ -37,6 +37,15 @@ export type SourceKind = 'github' | 'gitlab';
 
 export type AuthKind = 'token' | 'app';
 
+/**
+ * Where the dashboard reads a source from.
+ *
+ * `live` asks the provider on every request, so the rate-limit budget is spent
+ * per visitor. `stored` reads what the ingestion wrote, so it is spent per
+ * collection however many people are watching.
+ */
+export type SourceMode = 'live' | 'stored';
+
 export interface ScopeRules {
   /** Root GitHub org or GitLab group to track. */
   owner: string;
@@ -59,6 +68,7 @@ export interface SourcePublic {
   baseUrl: string;
   authKind: AuthKind;
   scope: ScopeRules;
+  mode: SourceMode;
   /** Classification rules that apply to this source, from the global set. */
   envRuleIds: string[];
   /** Trackers this source's pull requests may reference. */
@@ -702,6 +712,14 @@ export interface DashboardLive {
     runningPipelines: number;
     environments: number;
   };
+  mode: SourceMode;
+  /**
+   * When the stored view was last brought up to date, as the stalest of its
+   * listings has it. Null in `live` mode, where the data is of the instant, and
+   * null in `stored` mode before the first synchronisation — where the view is
+   * not current but empty, which the warnings say.
+   */
+  syncedAt: string | null;
   /** Non-blocking errors collected while fetching. */
   warnings: CodedMessage[];
 }

@@ -8,6 +8,7 @@ import {
   type ApiQuotaPublic,
   type EnvRulePublic,
   type RuleTarget,
+  type SourceMode,
   type SourcePublic,
   type ConnectionTestResult,
   type PageInfo,
@@ -32,6 +33,8 @@ interface FormState {
   kind: 'github' | 'gitlab';
   baseUrl: string;
   authKind: 'token' | 'app';
+  /** Where the dashboard reads this source from. */
+  mode: SourceMode;
   owner: string;
   secret: string;
   appId: string;
@@ -50,6 +53,7 @@ const EMPTY: FormState = {
   kind: 'github',
   baseUrl: 'https://github.com',
   authKind: 'token',
+  mode: 'live',
   owner: '',
   secret: '',
   appId: '',
@@ -66,6 +70,7 @@ function toInput(form: FormState): CreateSourceInput {
     kind: form.kind,
     baseUrl: form.baseUrl,
     authKind: form.authKind,
+    mode: form.mode,
     scope: { owner: form.owner },
     envRuleIds: form.envRuleIds,
     trackerIds: form.trackerIds,
@@ -100,6 +105,7 @@ function toForm(source: SourcePublic): FormState {
     kind: source.kind,
     baseUrl: source.baseUrl,
     authKind: source.authKind,
+    mode: source.mode,
     owner: source.scope.owner,
     envRuleIds: source.envRuleIds,
     trackerIds: source.trackerIds,
@@ -238,7 +244,8 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
                     {s.name} <span className={`kind-badge ${s.kind}`}>{s.kind}</span>
                   </div>
                   <div className="source-meta">
-                    {s.baseUrl} · {s.scope.owner} · {t('sources.auth')}: {s.authKind}
+                    {s.baseUrl} · {s.scope.owner} · {t('sources.auth')}: {s.authKind} ·{' '}
+                    <span className={`mode-badge ${s.mode}`}>{t(`sources.mode.${s.mode}`)}</span>
                   </div>
                   {(quotasBySource.get(s.id) ?? []).map((quota) => (
                     <QuotaGauge key={quota.bucket} quota={quota} />
@@ -516,6 +523,18 @@ function SourceDialog({
             </label>
           </>
         )}
+
+        <label>
+          {t('sources.form.mode')} <span className="hint">{t('sources.form.modeHint')}</span>
+          <select
+            value={form.mode}
+            onChange={(e) => set('mode', e.target.value as FormState['mode'])}
+          >
+            <option value="live">{t('sources.mode.live')}</option>
+            <option value="stored">{t('sources.mode.stored')}</option>
+          </select>
+          <span className="hint">{t(`sources.mode.hint.${form.mode}`)}</span>
+        </label>
 
         <label>
           {t('sources.form.envRules')}{' '}

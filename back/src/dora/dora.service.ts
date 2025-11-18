@@ -14,7 +14,7 @@ import { paginate, type PageWindow } from '../common/pagination';
 import { throwIfAborted } from '../common/request-abort';
 import { PrismaService } from '../prisma/prisma.service';
 import { SourcesService } from '../sources/sources.service';
-import { ConnectorFactory } from '../sources/connectors/connector.factory';
+import { ReaderFactory } from '../ingest/reader.factory';
 import { EnvRulesService } from '../env-rules/env-rules.service';
 import { IncidentProviderFactory } from '../incidents/incident-provider.factory';
 import { TrackersService } from '../trackers/trackers.service';
@@ -59,7 +59,7 @@ export class DoraService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sources: SourcesService,
-    private readonly connectors: ConnectorFactory,
+    private readonly readers: ReaderFactory,
     private readonly incidents: IncidentProviderFactory,
     private readonly trackers: TrackersService,
     private readonly envRules: EnvRulesService,
@@ -101,10 +101,9 @@ export class DoraService {
     query: DoraQuery,
     signal?: AbortSignal,
   ): Promise<{ results: DoraResult[]; repos: string[]; period: ResolvedRange }> {
-    const { ctx, kind } = await this.sources.resolveContext(sourceId, signal);
-    const connector = this.connectors.for(kind);
+    const reader = await this.readers.for(sourceId, signal);
     const period = await this.resolveRange(query);
-    const allRepos = await connector.listRepositories(ctx);
+    const allRepos = await reader.listRepositories();
     // Scoping here rather than after the fact: the connectors iterate repo by
     // repo, so a narrower list is also fewer API calls.
     const repos = filterRepos(allRepos, query.repos);
@@ -121,23 +120,29 @@ export class DoraService {
       );
     }
 
+    // Incidents are the one thing the store does not hold: they live in a
+    // tracker, which has a budget of its own. A git-hosted tracker borrows this
+    // source's credentials, so the context is resolved only when one is in play
+    // — a `stored` source counting failures from pipelines decrypts nothing.
+    const ctx = incidentTracker ? (await this.sources.resolveContext(sourceId, signal)).ctx : null;
+
     // Best-effort: a missing permission on one endpoint yields partial metrics
     // rather than failing the whole computation — except for a cancellation,
     // which has nothing to degrade into and must stop the run (throwIfAborted).
     const [deployments, mergedPrs, incidents] = await Promise.all([
-      connector.listDeployments(ctx, repos).catch((e) => {
+      reader.listDeployments(repos).catch((e) => {
         throwIfAborted(signal);
         this.logger.warn(`listDeployments échoué (${sourceId}) : ${asMessage(e)}`);
         return [] as Deployment[];
       }),
-      connector.listMergedPullRequests(ctx, repos, period.from).catch((e) => {
+      reader.listMergedPullRequests(repos, period.from).catch((e) => {
         throwIfAborted(signal);
         this.logger.warn(`listMergedPullRequests échoué (${sourceId}) : ${asMessage(e)}`);
         return [] as MergedPullRequest[];
       }),
       // Not fetched at all while failures come from pipelines only: the issues
       // endpoint costs one call per label and per repo.
-      !incidentTracker
+      !incidentTracker || !ctx
         ? Promise.resolve([] as Incident[])
         : this.incidents
             .for(incidentTracker.kind)
@@ -149,10 +154,11 @@ export class DoraService {
             }),
     ]);
 
+    const owner = reader.scope.owner;
     const [deploymentEvents, prEvents, incidentEvents] = await Promise.all([
       this.toDeploymentEvents(sourceId, deployments, period),
-      this.toMergedPrEvents(sourceId, ctx.scope.owner, mergedPrs, period),
-      this.toIncidentEvents(sourceId, ctx.scope.owner, incidents, period),
+      this.toMergedPrEvents(sourceId, owner, mergedPrs, period),
+      this.toIncidentEvents(sourceId, owner, incidents, period),
     ]);
 
     // A shared ticket between an incident and a merged pull request says which

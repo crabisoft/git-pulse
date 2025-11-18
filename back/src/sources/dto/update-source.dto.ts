@@ -8,7 +8,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import type { AuthKind, SourceKind } from '@repo/shared';
+import type { AuthKind, SourceKind, SourceMode } from '@repo/shared';
 import { GitHubAppDto, ScopeDto } from './create-source.dto';
 
 /**
@@ -47,6 +47,11 @@ export class UpdateSourceDto {
   @ValidateNested()
   @Type(() => ScopeDto)
   scope?: ScopeDto;
+
+  /** Switching to `stored` fills the store before the dashboard reads from it. */
+  @IsOptional()
+  @IsEnum(['live', 'stored'] as const)
+  mode?: SourceMode;
 
   /** Classification rules that apply here, from the global set. Replaces it. */
   @IsOptional()

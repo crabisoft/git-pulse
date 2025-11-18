@@ -8,7 +8,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import type { AuthKind, SourceKind } from '@repo/shared';
+import type { AuthKind, SourceKind, SourceMode } from '@repo/shared';
 
 export class ScopeDto {
   @IsString()
@@ -70,6 +70,11 @@ export class CreateSourceDto {
   @ValidateNested()
   @Type(() => ScopeDto)
   scope!: ScopeDto;
+
+  /** Defaults to `live`, the behaviour of every source created before this. */
+  @IsOptional()
+  @IsEnum(['live', 'stored'] as const)
+  mode?: SourceMode;
 
   /** Classification rules that apply here, from the global set. Replaces it. */
   @IsOptional()

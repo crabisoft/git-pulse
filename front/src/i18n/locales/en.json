@@ -312,8 +312,10 @@
       "reposFailed": "Repository discovery failed: {{error}}",
       "prsFailed": "Failed to load PRs/MRs: {{error}}",
       "pipelinesFailed": "Failed to load pipelines: {{error}}",
-      "deploymentsFailed": "Failed to load deployments: {{error}}"
-    }
+      "deploymentsFailed": "Failed to load deployments: {{error}}",
+      "neverSynced": "This source reads from the database, but no collection has run yet: the view stays empty until the first synchronisation."
+    },
+    "syncedAt": "Data as of {{at}}"
   },
   "dora": {
     "title": "DORA metrics",
@@ -415,7 +417,7 @@
     "updated": "Source updated.",
     "deleted": "Source deleted.",
     "deleteTitle": "Delete the source",
-    "confirmDelete": "Delete the source \"{{name}}\"? Its environment rules and metric history will be deleted too.",
+    "confirmDelete": "Delete source “{{name}}”? Its environment rules, its metric history and its stored data will be deleted too.",
     "test": {
       "ok": "Connected to \"{{owner}}\".",
       "failed": "Connection failed: {{error}}"
@@ -459,7 +461,9 @@
       "noneSelected": "None selected",
       "noTrackerDeclared": "No tracker declared yet — start with the Trackers section.",
       "noTrackerAttached": "Attach a tracker to this source first, above.",
-      "noEligibleTracker": "None of the attached trackers can supply incidents: not every kind is able to."
+      "noEligibleTracker": "None of the attached trackers can supply incidents: not every kind is able to.",
+      "mode": "Data read from",
+      "modeHint": "(decides whether the API quota follows the traffic or the collection)"
     },
     "budget": {
       "none": "No declared ceiling",
@@ -475,6 +479,14 @@
         "60": "minute",
         "3600": "hour",
         "86400": "day"
+      }
+    },
+    "mode": {
+      "live": "Live",
+      "stored": "Stored",
+      "hint": {
+        "live": "every view asks the platform: the quota is spent per visitor",
+        "stored": "the dashboard reads the database, filled by the collection: the quota is spent per collection, whatever the traffic"
       }
     }
   },

@@ -7,8 +7,7 @@ import type {
   Pipeline,
   CodedMessage,
 } from '@repo/shared';
-import { SourcesService } from '../sources/sources.service';
-import { ConnectorFactory } from '../sources/connectors/connector.factory';
+import { ReaderFactory } from '../ingest/reader.factory';
 import { EnvRulesService } from '../env-rules/env-rules.service';
 import { TicketRulesService } from '../ticket-rules/ticket-rules.service';
 import { SettingsService } from '../settings/settings.service';
@@ -21,8 +20,7 @@ export class DashboardService {
   private readonly logger = new Logger(DashboardService.name);
 
   constructor(
-    private readonly sources: SourcesService,
-    private readonly connectors: ConnectorFactory,
+    private readonly readers: ReaderFactory,
     private readonly envRules: EnvRulesService,
     private readonly ticketRules: TicketRulesService,
     private readonly settings: SettingsService,
@@ -38,11 +36,10 @@ export class DashboardService {
     query: DashboardLiveQueryDto = {},
     signal?: AbortSignal,
   ): Promise<DashboardLive> {
-    const { ctx, kind } = await this.sources.resolveContext(sourceId, signal);
-    const connector = this.connectors.for(kind);
+    const reader = await this.readers.for(sourceId, signal);
     const warnings: CodedMessage[] = [];
 
-    const allRepos = await connector.listRepositories(ctx).catch((e) => {
+    const allRepos = await reader.listRepositories().catch((e) => {
       throwIfAborted(signal);
       warnings.push({ code: 'dashboard.warn.reposFailed', params: { error: asMessage(e) } });
       return [] as string[];
@@ -50,26 +47,33 @@ export class DashboardService {
     const repos = filterRepos(allRepos, query.repos);
 
     const pullRequests = await safe(
-      () => connector.listPullRequests(ctx, repos),
+      () => reader.listPullRequests(repos),
       warnings,
       'dashboard.warn.prsFailed',
       signal,
     );
     const pipelines = await safe(
-      () => connector.listPipelines(ctx, repos),
+      () => reader.listPipelines(repos),
       warnings,
       'dashboard.warn.pipelinesFailed',
       signal,
     );
     const deployments = await safe(
-      () => connector.listDeployments(ctx, repos),
+      () => reader.listDeployments(repos),
       warnings,
       'dashboard.warn.deploymentsFailed',
       signal,
     );
-    const withTickets = await this.withTickets(sourceId, ctx.scope.owner, pullRequests);
+    const withTickets = await this.withTickets(sourceId, reader.scope.owner, pullRequests);
     const environments = await this.toEnvironments(sourceId, deployments);
     const { stalePrHours, pageSize } = await this.settings.get();
+
+    // An empty board and a board of an empty project look alike; saying the
+    // ingestion has not run yet is the difference between the two.
+    const syncedAt = await reader.freshness();
+    if (reader.mode === 'stored' && syncedAt === null) {
+      warnings.push({ code: 'dashboard.warn.neverSynced', params: {} });
+    }
 
     return {
       sourceId,
@@ -87,6 +91,8 @@ export class DashboardService {
       ),
       repos: allRepos,
       summary: summarize(withTickets, pipelines, environments, stalePrHours),
+      mode: reader.mode,
+      syncedAt: syncedAt?.toISOString() ?? null,
       warnings,
     };
   }

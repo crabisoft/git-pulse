@@ -4,6 +4,7 @@ import {
   type AuthKind,
   type ScopeRules,
   type SourceKind,
+  type SourceMode,
   type SourcePublic,
   type ConnectionTestResult,
   type Page,
@@ -44,6 +45,7 @@ export class SourcesService {
         baseUrl: dto.baseUrl,
         authKind: dto.authKind,
         scope: dto.scope as unknown as object,
+        mode: dto.mode,
         credential: {
           create: {
             ciphertext: enc.ciphertext,
@@ -127,6 +129,20 @@ export class SourcesService {
     return rows.map((r) => r.id);
   }
 
+  /**
+   * Where a source is read from, and what it tracks. One query rather than two:
+   * this is asked on every dashboard and DORA request, and a `stored` source
+   * needs nothing else — not even its credentials, which is the point.
+   */
+  async readSpec(id: string): Promise<{ mode: SourceMode; scope: ScopeRules }> {
+    const source = await this.prisma.source.findUnique({
+      where: { id },
+      select: { mode: true, scope: true },
+    });
+    if (!source) throw new CodedException('errors.source.notFound', HttpStatus.NOT_FOUND, { id });
+    return { mode: source.mode as SourceMode, scope: source.scope as unknown as ScopeRules };
+  }
+
   async findOne(id: string): Promise<SourcePublic> {
     const source = await this.prisma.source.findUnique({ where: { id }, include: WITH_TRACKERS });
     if (!source) throw new CodedException('errors.source.notFound', HttpStatus.NOT_FOUND, { id });
@@ -183,6 +199,7 @@ export class SourcesService {
         baseUrl: dto.baseUrl,
         authKind,
         scope: dto.scope ? (dto.scope as unknown as object) : undefined,
+        mode: dto.mode,
         credential: newCredential
           ? {
               upsert: {
@@ -340,6 +357,7 @@ function toPublic(s: {
   baseUrl: string;
   authKind: string;
   scope: unknown;
+  mode: string;
   createdAt: Date;
   updatedAt: Date;
   trackers: Array<{ trackerId: string; incidents: boolean }>;
@@ -353,6 +371,7 @@ function toPublic(s: {
     baseUrl: s.baseUrl,
     authKind: s.authKind as SourcePublic['authKind'],
     scope: s.scope as ScopeRules,
+    mode: s.mode as SourceMode,
     envRuleIds: s.envRules.map((b) => b.ruleId),
     trackerIds: s.trackers.map((b) => b.trackerId),
     incidentTrackerId: s.trackers.find((b) => b.incidents)?.trackerId ?? null,

@@ -312,8 +312,10 @@
       "reposFailed": "Découverte des repos échouée : {{error}}",
       "prsFailed": "Collecte des PR/MR échouée : {{error}}",
       "pipelinesFailed": "Collecte des pipelines échouée : {{error}}",
-      "deploymentsFailed": "Collecte des déploiements échouée : {{error}}"
-    }
+      "deploymentsFailed": "Collecte des déploiements échouée : {{error}}",
+      "neverSynced": "Cette source lit la base, mais aucune collecte n'a encore été faite : la vue restera vide jusqu'à la première synchronisation."
+    },
+    "syncedAt": "Données au {{at}}"
   },
   "dora": {
     "title": "Métriques DORA",
@@ -415,7 +417,7 @@
     "updated": "Source mise à jour.",
     "deleted": "Source supprimée.",
     "deleteTitle": "Supprimer la source",
-    "confirmDelete": "Supprimer la source « {{name}} » ? Ses règles d'environnement et son historique de métriques seront également supprimés.",
+    "confirmDelete": "Supprimer la source « {{name}} » ? Ses règles d'environnement, son historique de métriques et ses données stockées seront également supprimés.",
     "test": {
       "ok": "Connexion OK pour « {{owner}} ».",
       "failed": "Échec de connexion : {{error}}"
@@ -459,7 +461,9 @@
       "noneSelected": "Aucune sélection",
       "noTrackerDeclared": "Aucun tracker déclaré : commencez par la section Trackers.",
       "noTrackerAttached": "Rattachez d'abord un tracker à cette source, ci-dessus.",
-      "noEligibleTracker": "Aucun tracker rattaché ne sait fournir d'incidents : tous les types n'en sont pas capables."
+      "noEligibleTracker": "Aucun tracker rattaché ne sait fournir d'incidents : tous les types n'en sont pas capables.",
+      "mode": "Lecture des données",
+      "modeHint": "(décide si le quota d'API suit le trafic ou la collecte)"
     },
     "budget": {
       "none": "Aucun plafond déclaré",
@@ -475,6 +479,14 @@
         "60": "minute",
         "3600": "heure",
         "86400": "jour"
+      }
+    },
+    "mode": {
+      "live": "Direct",
+      "stored": "Stockée",
+      "hint": {
+        "live": "chaque affichage interroge la plateforme : le quota se consomme par visiteur",
+        "stored": "le tableau de bord lit la base, remplie par la collecte : le quota se consomme par collecte, quel que soit le trafic"
       }
     }
   },

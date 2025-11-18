@@ -5,6 +5,7 @@ import { SettingsModule } from './settings/settings.module';
 import { AuthModule } from './auth/auth.module';
 import { CryptoModule } from './crypto/crypto.module';
 import { SourcesModule } from './sources/sources.module';
+import { IngestModule } from './ingest/ingest.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { EnvRulesModule } from './env-rules/env-rules.module';
 import { TrackersModule } from './trackers/trackers.module';
@@ -22,6 +23,7 @@ import { ApiQuotaModule } from './api-quota/api-quota.module';
     AuthModule,
     CryptoModule,
     SourcesModule,
+    IngestModule,
     DashboardModule,
     EnvRulesModule,
     TrackersModule,

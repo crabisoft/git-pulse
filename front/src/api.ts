@@ -8,6 +8,7 @@ import type {
   PasswordResetTarget,
   UserPublic,
   UserRole,
+  SourceMode,
   SourcePublic,
   DashboardLive,
   ConnectionTestResult,
@@ -156,6 +157,8 @@ export interface CreateSourceInput {
   secret?: string;
   app?: { appId: string; privateKey: string; installationId: string };
   scope: { owner: string; include?: string[]; exclude?: string[] };
+  /** Where the dashboard reads it from. Omitted means `live`. */
+  mode?: SourceMode;
   /** Classification rules that apply here — supplying it replaces the set. */
   envRuleIds?: string[];
   /** Trackers this source's PRs may reference — supplying it replaces the set. */

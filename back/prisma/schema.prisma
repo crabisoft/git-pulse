@@ -19,6 +19,16 @@ enum AuthKind {
   app
 }
 
+/// Where the dashboard reads a source from.
+///
+/// `live` calls the provider on every request, which costs one rate-limit
+/// budget per visitor. `stored` reads what the ingestion wrote, which costs one
+/// per collection whatever the traffic — the whole point of the mode.
+enum SourceMode {
+  live
+  stored
+}
+
 /// A Git data source (GitHub or GitLab) with its tracking scope.
 model Source {
   id        String     @id @default(uuid())
@@ -30,6 +40,9 @@ model Source {
   authKind  AuthKind
   /// ScopeRules payload: { owner, include[], exclude[] }.
   scope     Json
+  /// Defaults to `live`: an install upgrading into this keeps behaving exactly
+  /// as it did, and switching is a decision.
+  mode      SourceMode @default(live)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 

@@ -69,6 +69,13 @@ export function DashboardPage({
     <div>
       <div className="page-head">
         <h2>{t('dashboard.title')}</h2>
+        {/* Only a stored source has an age to report: read live, the data is of
+            the moment the page loaded, and dating it would say nothing. */}
+        {data?.syncedAt && (
+          <span className="synced-at">
+            {t('dashboard.syncedAt', { at: new Date(data.syncedAt).toLocaleString() })}
+          </span>
+        )}
         <button className="btn" onClick={reload} disabled={loading}>
           {loading ? t('common.refreshing') : `↻ ${t('common.refresh')}`}
         </button>
