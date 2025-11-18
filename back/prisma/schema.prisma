@@ -37,6 +37,11 @@ model Source {
   envRules    SourceEnvRule[]
   trackers    SourceTracker[]
   snapshots   MetricSnapshot[]
+  repos        StoredRepo[]
+  pullRequests StoredPullRequest[]
+  pipelines    StoredPipeline[]
+  deployments  StoredDeployment[]
+  syncStates   SyncState[]
 }
 
 /// Access secret for a source, encrypted at rest (AES-256-GCM envelope).
@@ -302,4 +307,128 @@ model MetricSnapshot {
   capturedAt DateTime @default(now())
 
   @@index([sourceId, metric, capturedAt])
+}
+
+/// Which listing a sync cursor belongs to.
+enum SyncResource {
+  repos
+  pulls
+  pipelines
+  deployments
+}
+
+/// How far the ingestion has read a given listing, and how it went.
+///
+/// Deliberately the only thing a synchronisation consults to decide what to
+/// fetch next: it must stay correct on an install where no webhook is ever
+/// received, so it never derives its work from the events that arrived.
+model SyncState {
+  id             String       @id @default(uuid())
+  source         Source       @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId       String
+  resource       SyncResource
+  /// Lower bound handed to the next delta fetch. Null before the first run.
+  cursor         DateTime?
+  lastSyncAt     DateTime?
+  /// Start of the last reconciliation pass — rows untouched since are stale.
+  lastFullSyncAt DateTime?
+  /// Message of the last failure, cleared by the next success.
+  lastError      String?
+
+  @@unique([sourceId, resource])
+}
+
+/// Repositories in scope, as the last synchronisation saw them. The repo filter
+/// and every listing below are built from this in `stored` mode, where asking
+/// the provider is exactly what we are avoiding.
+model StoredRepo {
+  id            String   @id @default(uuid())
+  source        Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId      String
+  name          String
+  defaultBranch String?
+  seenAt        DateTime
+
+  @@unique([sourceId, name])
+}
+
+/// A pull request or merge request, open or merged.
+///
+/// One table for both: `MergedPullRequest` is the same object as `PullRequest`
+/// with the lead-time timestamps filled in, and the connectors already give
+/// them the same id. Splitting them would let one pull request exist twice,
+/// with two answers to what state it is in.
+model StoredPullRequest {
+  id            String    @id @default(uuid())
+  source        Source    @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId      String
+  repo          String
+  /// Identity on the provider side — `gh:<repo>:<number>`, as the connectors
+  /// build it. Both feeds agree on it, which is what keeps the row single.
+  externalId    String
+  number        Int
+  title         String
+  /// PullRequestState — open, draft, merged or closed.
+  state         String
+  /// Absent on a row the merged feed created: it reports no author.
+  author        String?
+  url           String
+  /// Stored rather than derived: the shape of a repository URL is a connector's
+  /// business, and re-deriving it here would be a second implementation of it.
+  repoUrl       String?
+  headRef       String
+  openedAt      DateTime
+  /// Last change the provider reported. The upsert guard reads this: an event
+  /// older than what is stored describes a state we have already moved past.
+  updatedAt     DateTime
+  mergedAt      DateTime?
+  reviewers     Int       @default(0)
+  /// Lead-time segments. Null when the enrichment was given up under the quota
+  /// reserve, which is why an upsert never overwrites a known value with null.
+  firstCommitAt DateTime?
+  firstReviewAt DateTime?
+  /// Last sync or event that touched the row — what reconciliation compares.
+  seenAt        DateTime
+
+  @@unique([sourceId, externalId])
+  @@index([sourceId, state, updatedAt])
+  @@index([sourceId, mergedAt])
+}
+
+model StoredPipeline {
+  id          String    @id @default(uuid())
+  source      Source    @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId    String
+  repo        String
+  externalId  String
+  repoUrl     String?
+  ref         String
+  /// PipelineStatus.
+  status      String
+  url         String
+  createdAt   DateTime
+  updatedAt   DateTime
+  durationSec Int?
+  seenAt      DateTime
+
+  @@unique([sourceId, externalId])
+  @@index([sourceId, createdAt])
+}
+
+model StoredDeployment {
+  id          String   @id @default(uuid())
+  source      Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId    String
+  repo        String
+  externalId  String
+  environment String
+  ref         String
+  /// PipelineStatus — `unknown` when the status call was given up.
+  status      String
+  createdAt   DateTime
+  seenAt      DateTime
+
+  @@unique([sourceId, externalId])
+  @@index([sourceId, createdAt])
+  @@index([sourceId, environment, createdAt])
 }
