@@ -69,10 +69,22 @@ export class StoreService {
   async upsertPullRequests(sourceId: string, prs: PullRequest[], seenAt: Date): Promise<number> {
     if (prs.length === 0) return 0;
     const held = await this.loadPullRequests(sourceId, prs.map((pr) => pr.id));
+    const stale: string[] = [];
     let written = 0;
     for (const pr of prs) {
       const row = mergeOpenPullRequest(held.get(pr.id), pr, seenAt);
       if (row) written += await this.writePullRequest(sourceId, pr.id, row);
+      else stale.push(pr.id);
+    }
+    // A reading with nothing to add still says the pull request was listed, and
+    // `seenAt` is what the reconciliation reads to decide one is gone. Without
+    // this, a row a webhook had already carried further would be closed by the
+    // very run that saw it open.
+    if (stale.length > 0) {
+      await this.prisma.storedPullRequest.updateMany({
+        where: { sourceId, externalId: { in: stale } },
+        data: { seenAt },
+      });
     }
     return written;
   }

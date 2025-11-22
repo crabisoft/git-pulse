@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
 import { SourcesModule } from '../sources/sources.module';
+import { SettingsModule } from '../settings/settings.module';
 import { ReaderFactory } from './reader.factory';
 import { StoreService } from './store.service';
+import { SyncService } from './sync.service';
 
 /**
  * Everything that fills the read model and reads it back.
@@ -11,8 +13,8 @@ import { StoreService } from './store.service';
  * module and that one importing each other.
  */
 @Module({
-  imports: [SourcesModule],
-  providers: [StoreService, ReaderFactory],
-  exports: [StoreService, ReaderFactory],
+  imports: [SourcesModule, SettingsModule],
+  providers: [StoreService, ReaderFactory, SyncService],
+  exports: [StoreService, ReaderFactory, SyncService],
 })
 export class IngestModule {}

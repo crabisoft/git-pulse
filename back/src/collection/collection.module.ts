@@ -5,6 +5,7 @@ import { CollectionProcessor } from './collection.processor';
 import { CollectionScheduler } from './collection.scheduler';
 import { CollectionController } from './collection.controller';
 import { SourcesModule } from '../sources/sources.module';
+import { IngestModule } from '../ingest/ingest.module';
 import { DashboardModule } from '../dashboard/dashboard.module';
 import { DoraModule } from '../dora/dora.module';
 import { redisConnection } from './redis.util';
@@ -14,6 +15,7 @@ import { redisConnection } from './redis.util';
     BullModule.forRoot({ connection: redisConnection() }),
     BullModule.registerQueue({ name: 'collection' }),
     SourcesModule,
+    IngestModule,
     DashboardModule,
     DoraModule,
   ],

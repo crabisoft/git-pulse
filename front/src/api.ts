@@ -251,6 +251,13 @@ export const api = {
   deleteSource: (id: string) => request<void>(`/sources/${id}`, { method: 'DELETE' }),
   testSource: (id: string) =>
     request<ConnectionTestResult>(`/sources/${id}/test`, { method: 'POST' }),
+  /**
+   * Collects a source right away. On a stored source this also fills the store,
+   * which is what a fresh switch to that mode is waiting on — otherwise the
+   * board stays empty until the next scheduled run.
+   */
+  collectSource: (id: string) =>
+    request<MetricSnapshotPublic[]>(`/sources/${id}/collect`, { method: 'POST' }),
   /** `signal` lets a newer filter cancel the request this one supersedes. */
   live: (sourceId: string, query: DashboardLiveQuery = {}, signal?: AbortSignal) =>
     request<DashboardLive>(

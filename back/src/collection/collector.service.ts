@@ -9,6 +9,7 @@ import type {
 import { PrismaService } from '../prisma/prisma.service';
 import { DashboardService } from '../dashboard/dashboard.service';
 import { DoraService } from '../dora/dora.service';
+import { SyncService } from '../ingest/sync.service';
 import { toPage, type PageWindow } from '../common/pagination';
 
 interface HistoryQuery {
@@ -25,10 +26,23 @@ export class CollectorService {
     private readonly prisma: PrismaService,
     private readonly dashboard: DashboardService,
     private readonly dora: DoraService,
+    private readonly sync: SyncService,
   ) {}
 
-  /** Fetch live data for a source and persist metric snapshots. */
+  /**
+   * Fetch a source's data and persist metric snapshots.
+   *
+   * A stored source is brought up to date first: the snapshot below reads the
+   * store, so ingesting is part of collecting it rather than a schedule of its
+   * own — two cadences could only ever disagree about what the numbers describe.
+   * A failed ingestion still snapshots what is stored, which is a real reading
+   * of a view that stopped moving, not a hole in the series.
+   */
   async collectSource(sourceId: string): Promise<MetricSnapshotPublic[]> {
+    await this.sync.syncIfStored(sourceId).catch((e) => {
+      this.logger.warn(`Ingestion échouée pour ${sourceId} : ${asMessage(e)}`);
+    });
+
     const live = await this.dashboard.live(sourceId);
     const capturedAt = new Date();
     const points: Array<{ metric: string; value: number }> = [

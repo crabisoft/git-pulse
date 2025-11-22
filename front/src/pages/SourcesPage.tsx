@@ -418,8 +418,15 @@ function SourceDialog({
     setBusy(true);
     setError(null);
     try {
-      if (source) await api.updateSource(source.id, toUpdateInput(form));
-      else await api.createSource(toInput(form));
+      const saved = source
+        ? await api.updateSource(source.id, toUpdateInput(form))
+        : await api.createSource(toInput(form));
+      // A source that has just started reading from the store has nothing in it
+      // yet: waiting for the next scheduled run would show an empty board for
+      // as long as the cron says. Best-effort — the schedule catches up anyway.
+      if (saved.mode === 'stored' && source?.mode !== 'stored') {
+        await api.collectSource(saved.id).catch(() => undefined);
+      }
       await onSaved(!source);
     } catch (err) {
       const { code, params } = apiErrorInfo(err);
