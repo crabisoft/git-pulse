@@ -11,6 +11,7 @@ import {
   type SourceMode,
   type SourcePublic,
   type ConnectionTestResult,
+  type WebhookSetup,
   type PageInfo,
   type TrackerPublic,
 } from '@repo/shared';
@@ -35,6 +36,8 @@ interface FormState {
   authKind: 'token' | 'app';
   /** Where the dashboard reads this source from. */
   mode: SourceMode;
+  /** Accepts provider events. Only offered in `stored` mode. */
+  webhooksEnabled: boolean;
   owner: string;
   secret: string;
   appId: string;
@@ -54,6 +57,7 @@ const EMPTY: FormState = {
   baseUrl: 'https://github.com',
   authKind: 'token',
   mode: 'live',
+  webhooksEnabled: false,
   owner: '',
   secret: '',
   appId: '',
@@ -71,6 +75,8 @@ function toInput(form: FormState): CreateSourceInput {
     baseUrl: form.baseUrl,
     authKind: form.authKind,
     mode: form.mode,
+    // Refused by the API in `live` mode, and meaningless there anyway.
+    webhooksEnabled: form.mode === 'stored' && form.webhooksEnabled,
     scope: { owner: form.owner },
     envRuleIds: form.envRuleIds,
     trackerIds: form.trackerIds,
@@ -106,6 +112,7 @@ function toForm(source: SourcePublic): FormState {
     baseUrl: source.baseUrl,
     authKind: source.authKind,
     mode: source.mode,
+    webhooksEnabled: source.webhooksEnabled,
     owner: source.scope.owner,
     envRuleIds: source.envRuleIds,
     trackerIds: source.trackerIds,
@@ -130,6 +137,8 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
   /** Open editor: `null` source means creation. */
   const [editing, setEditing] = useState<{ source: SourcePublic | null } | null>(null);
   const [deleting, setDeleting] = useState<SourcePublic | null>(null);
+  /** A freshly issued webhook secret, shown once and never readable again. */
+  const [webhookSetup, setWebhookSetup] = useState<WebhookSetup | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -215,10 +224,13 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
     }
   }
 
-  async function saved(created: boolean) {
+  async function saved(created: boolean, webhook: WebhookSetup | null) {
     setEditing(null);
     setMsg({ kind: 'ok', text: created ? t('sources.added') : t('sources.updated') });
     await refresh();
+    // Shown after the refresh so the dialog lands on an up-to-date list, and
+    // last because it is the one thing on screen that cannot be brought back.
+    if (webhook) setWebhookSetup(webhook);
   }
 
   return (
@@ -246,6 +258,12 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
                   <div className="source-meta">
                     {s.baseUrl} · {s.scope.owner} · {t('sources.auth')}: {s.authKind} ·{' '}
                     <span className={`mode-badge ${s.mode}`}>{t(`sources.mode.${s.mode}`)}</span>
+                    {s.webhooksEnabled && (
+                      <>
+                        {' '}
+                        <span className="mode-badge stored">{t('sources.webhooksOn')}</span>
+                      </>
+                    )}
                   </div>
                   {(quotasBySource.get(s.id) ?? []).map((quota) => (
                     <QuotaGauge key={quota.bucket} quota={quota} />
@@ -320,7 +338,46 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
           onClose={() => setDeleting(null)}
         />
       )}
+
+      {webhookSetup && (
+        <WebhookDialog setup={webhookSetup} onClose={() => setWebhookSetup(null)} />
+      )}
     </>
+  );
+}
+
+/**
+ * The one moment a webhook secret is readable. Closing it loses the value for
+ * good — issuing another is the only way back, which is also how a leak is
+ * recovered from.
+ */
+function WebhookDialog({ setup, onClose }: { setup: WebhookSetup; onClose: () => void }) {
+  const { t } = useTranslation();
+  return (
+    <Modal
+      title={t('sources.webhook.title')}
+      label={t('sources.webhook.title')}
+      subtitle={t('sources.webhook.subtitle')}
+      onClose={onClose}
+      footer={
+        <button className="btn primary" onClick={onClose}>
+          {t('common.close')}
+        </button>
+      }
+    >
+      <div className="form">
+        <label>
+          {t('sources.webhook.url')} <span className="hint">{t('sources.webhook.urlHint')}</span>
+          <input readOnly value={setup.path} onFocus={(e) => e.currentTarget.select()} />
+        </label>
+        <label>
+          {t('sources.webhook.secret')}{' '}
+          <span className="hint">{t('sources.webhook.secretHint')}</span>
+          <input readOnly value={setup.secret} onFocus={(e) => e.currentTarget.select()} />
+        </label>
+        <p className="field-note">{t('sources.webhook.warning')}</p>
+      </div>
+    </Modal>
   );
 }
 
@@ -332,7 +389,7 @@ function SourceDialog({
 }: {
   source: SourcePublic | null;
   onClose: () => void;
-  onSaved: (created: boolean) => Promise<void>;
+  onSaved: (created: boolean, webhook: WebhookSetup | null) => Promise<void>;
 }) {
   const { t } = useTranslation();
   const [form, setForm] = useState<FormState>(source ? toForm(source) : EMPTY);
@@ -427,7 +484,13 @@ function SourceDialog({
       if (saved.mode === 'stored' && source?.mode !== 'stored') {
         await api.collectSource(saved.id).catch(() => undefined);
       }
-      await onSaved(!source);
+      // Issued here rather than on the server's own initiative: the value is
+      // readable exactly once, so it has to be asked for by whoever will read it.
+      const webhook =
+        saved.webhooksEnabled && !source?.webhooksEnabled
+          ? await api.issueWebhookSecret(saved.id).catch(() => null)
+          : null;
+      await onSaved(!source, webhook);
     } catch (err) {
       const { code, params } = apiErrorInfo(err);
       setError(t(code, params));
@@ -542,6 +605,22 @@ function SourceDialog({
           </select>
           <span className="hint">{t(`sources.mode.hint.${form.mode}`)}</span>
         </label>
+
+        {/* Only offered where it can do anything: events feed the store, so a
+            source read live has nowhere to put them. */}
+        {form.mode === 'stored' && (
+          <label className="checkbox">
+            <input
+              type="checkbox"
+              checked={form.webhooksEnabled}
+              onChange={(e) => set('webhooksEnabled', e.target.checked)}
+            />
+            <span>
+              {t('sources.form.webhooks')}{' '}
+              <span className="hint">{t('sources.form.webhooksHint')}</span>
+            </span>
+          </label>
+        )}
 
         <label>
           {t('sources.form.envRules')}{' '}

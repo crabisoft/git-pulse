@@ -5,7 +5,10 @@ import { ConnectorFactory } from '../sources/connectors/connector.factory';
 import { SettingsService } from '../settings/settings.service';
 import type { ConnectorContext, SourceConnector } from '../sources/connectors/source-connector.interface';
 import { StoreService } from './store.service';
-import { isDueForFullSync, mergedSince } from './sync-cadence';
+import { isDueForFullSync, mergedSince, skipsDelta } from './sync-cadence';
+
+/** Every listing, for the runs that mark them all at once. */
+const RESOURCES: SyncResource[] = ['repos', 'pulls', 'pipelines', 'deployments'];
 
 /** The listings a cursor is kept for. Mirrors the `SyncResource` enum. */
 type SyncResource = 'repos' | 'pulls' | 'pipelines' | 'deployments';
@@ -14,6 +17,8 @@ type SyncResource = 'repos' | 'pulls' | 'pipelines' | 'deployments';
 export interface SyncOutcome {
   /** Whether this run reconciled — listed the whole window and pruned. */
   full: boolean;
+  /** Whether the listings were spared because events are keeping up. */
+  skipped: boolean;
   repos: number;
   pullRequests: number;
   pipelines: number;
@@ -62,6 +67,7 @@ export class SyncService {
     const full = await this.dueForFullSync(sourceId, startedAt);
     const outcome: SyncOutcome = {
       full,
+      skipped: false,
       repos: 0,
       pullRequests: 0,
       pipelines: 0,
@@ -71,6 +77,21 @@ export class SyncService {
       pruned: 0,
       failed: [],
     };
+
+    if (skipsDelta(await this.lastEventAt(sourceId), startedAt, full)) {
+      // The events are demonstrably keeping the store current, so listing would
+      // spend the budget to learn what is already known. The cursors are still
+      // advanced — the view really is up to date — and the reconciliation clock
+      // is untouched, so this can never become a source that stops being listed.
+      await Promise.all(RESOURCES.map((resource) => this.mark(sourceId, resource, {
+        cursor: startedAt,
+        lastSyncAt: startedAt,
+        lastError: null,
+      })));
+      outcome.skipped = true;
+      this.logger.log(`Listings épargnés pour ${sourceId} : événements récents.`);
+      return outcome;
+    }
 
     const { ctx, kind } = await this.sources.resolveContext(sourceId);
     const connector = this.connectors.for(kind);
@@ -213,6 +234,20 @@ export class SyncService {
       select: { cursor: true },
     });
     return mergedSince(state?.cursor ?? null, now, doraWindowDays, full).toISOString();
+  }
+
+  /**
+   * When this source last heard from its provider, or null if it never has —
+   * which is every source with the webhooks off, and every install whose
+   * network refuses inbound traffic.
+   */
+  private async lastEventAt(sourceId: string): Promise<Date | null> {
+    const last = await this.prisma.webhookDelivery.findFirst({
+      where: { sourceId },
+      orderBy: { receivedAt: 'desc' },
+      select: { receivedAt: true },
+    });
+    return last?.receivedAt ?? null;
   }
 
   private async dueForFullSync(sourceId: string, now: Date): Promise<boolean> {

@@ -69,6 +69,12 @@ export interface SourcePublic {
   authKind: AuthKind;
   scope: ScopeRules;
   mode: SourceMode;
+  /**
+   * Whether events are accepted for this source — an acceleration on top of the
+   * scheduled ingestion, never a replacement for it. Only ever true in `stored`
+   * mode, and false on an install whose network refuses inbound traffic.
+   */
+  webhooksEnabled: boolean;
   /** Classification rules that apply to this source, from the global set. */
   envRuleIds: string[];
   /** Trackers this source's pull requests may reference. */
@@ -81,6 +87,20 @@ export interface SourcePublic {
   incidentTrackerId: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * What an admin needs to declare the hook on the provider side. Returned once,
+ * by the call that generates it: the secret is stored encrypted and never read
+ * back out, exactly like a source credential.
+ *
+ * The path is relative because the backend does not reliably know the origin it
+ * is reachable at from the outside — behind a reverse proxy or a tunnel, only
+ * the operator does.
+ */
+export interface WebhookSetup {
+  path: string;
+  secret: string;
 }
 
 // ─── Normalized entities ─────────────────────────────────────────────

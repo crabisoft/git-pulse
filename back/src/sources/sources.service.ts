@@ -1,4 +1,5 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
+import { randomBytes } from 'node:crypto';
 import {
   INCIDENT_TRACKER_KINDS,
   type AuthKind,
@@ -9,6 +10,7 @@ import {
   type ConnectionTestResult,
   type Page,
   type TrackerKind,
+  type WebhookSetup,
 } from '@repo/shared';
 import { CodedException } from '../common/coded-exception';
 import { toPage, type PageWindow } from '../common/pagination';
@@ -33,6 +35,7 @@ export class SourcesService {
 
   async create(dto: CreateSourceDto): Promise<SourcePublic> {
     await this.assertTrackers(dto.trackerIds, dto.incidentTrackerId);
+    this.assertWebhooksAllowed(dto.mode ?? 'live', dto.webhooksEnabled ?? false);
     const enc = this.crypto.encrypt(credentialPlaintext(dto));
     const source = await this.prisma.source.create({
       include: WITH_TRACKERS,
@@ -46,6 +49,7 @@ export class SourcesService {
         authKind: dto.authKind,
         scope: dto.scope as unknown as object,
         mode: dto.mode,
+        webhooksEnabled: dto.webhooksEnabled,
         credential: {
           create: {
             ciphertext: enc.ciphertext,
@@ -169,6 +173,12 @@ export class SourcesService {
         : null;
 
     await this.assertTrackers(dto.trackerIds, dto.incidentTrackerId);
+    // Checked against the merged state, since an update may set either key on
+    // its own — switching back to `live` has to turn the events off with it.
+    const mode = dto.mode ?? (current.mode as SourceMode);
+    const webhooksEnabled = mode === 'stored' && (dto.webhooksEnabled ?? current.webhooksEnabled);
+    this.assertWebhooksAllowed(mode, dto.webhooksEnabled ?? false);
+
     const renamed = dto.name !== undefined && dto.name !== current.name;
     const source = await this.prisma.source.update({
       where: { id },
@@ -199,7 +209,8 @@ export class SourcesService {
         baseUrl: dto.baseUrl,
         authKind,
         scope: dto.scope ? (dto.scope as unknown as object) : undefined,
-        mode: dto.mode,
+        mode,
+        webhooksEnabled,
         credential: newCredential
           ? {
               upsert: {
@@ -220,7 +231,54 @@ export class SourcesService {
           : undefined,
       },
     });
+
+    // Dropped rather than left behind: a secret nobody remembers turning off
+    // would keep authenticating deliveries for a source that stopped listening.
+    if (!webhooksEnabled) {
+      await this.prisma.webhookSecret.deleteMany({ where: { sourceId: id } });
+    }
     return toPublic(source);
+  }
+
+  /**
+   * Issues a fresh webhook secret and returns it — the only moment it is
+   * readable. Rotating is the same operation: the old one stops being accepted
+   * the instant this returns, which is what makes a leak recoverable.
+   */
+  async issueWebhookSecret(id: string): Promise<WebhookSetup> {
+    const source = await this.prisma.source.findUnique({
+      where: { id },
+      select: { mode: true, webhooksEnabled: true },
+    });
+    if (!source) throw new CodedException('errors.source.notFound', HttpStatus.NOT_FOUND, { id });
+    if (!source.webhooksEnabled) {
+      throw new CodedException('errors.source.webhooksDisabled', HttpStatus.BAD_REQUEST);
+    }
+
+    const secret = randomBytes(32).toString('base64url');
+    const enc = this.crypto.encrypt(secret);
+    const stored = {
+      ciphertext: enc.ciphertext,
+      iv: enc.iv,
+      authTag: enc.authTag,
+      keyVersion: enc.keyVersion,
+    };
+    await this.prisma.webhookSecret.upsert({
+      where: { sourceId: id },
+      create: { sourceId: id, ...stored },
+      update: stored,
+    });
+    return { path: `/webhooks/${id}`, secret };
+  }
+
+  /**
+   * Refuses a combination that cannot work. Events only ever feed the store, so
+   * accepting them for a source read live would be writing rows nothing reads.
+   */
+  private assertWebhooksAllowed(mode: SourceMode, enabled: boolean): void {
+    if (enabled && mode !== 'stored') {
+      throw new CodedException('errors.source.webhooksRequireStored', HttpStatus.BAD_REQUEST);
+    }
   }
 
   async remove(id: string): Promise<void> {
@@ -358,6 +416,7 @@ function toPublic(s: {
   authKind: string;
   scope: unknown;
   mode: string;
+  webhooksEnabled: boolean;
   createdAt: Date;
   updatedAt: Date;
   trackers: Array<{ trackerId: string; incidents: boolean }>;
@@ -372,6 +431,7 @@ function toPublic(s: {
     authKind: s.authKind as SourcePublic['authKind'],
     scope: s.scope as ScopeRules,
     mode: s.mode as SourceMode,
+    webhooksEnabled: s.webhooksEnabled,
     envRuleIds: s.envRules.map((b) => b.ruleId),
     trackerIds: s.trackers.map((b) => b.trackerId),
     incidentTrackerId: s.trackers.find((b) => b.incidents)?.trackerId ?? null,

@@ -10,6 +10,7 @@ import type {
   UserRole,
   SourceMode,
   SourcePublic,
+  WebhookSetup,
   DashboardLive,
   ConnectionTestResult,
   CodedMessage,
@@ -159,6 +160,8 @@ export interface CreateSourceInput {
   scope: { owner: string; include?: string[]; exclude?: string[] };
   /** Where the dashboard reads it from. Omitted means `live`. */
   mode?: SourceMode;
+  /** Refused unless the mode is `stored`; turning it off drops the secret. */
+  webhooksEnabled?: boolean;
   /** Classification rules that apply here — supplying it replaces the set. */
   envRuleIds?: string[];
   /** Trackers this source's PRs may reference — supplying it replaces the set. */
@@ -251,6 +254,12 @@ export const api = {
   deleteSource: (id: string) => request<void>(`/sources/${id}`, { method: 'DELETE' }),
   testSource: (id: string) =>
     request<ConnectionTestResult>(`/sources/${id}/test`, { method: 'POST' }),
+  /**
+   * Issues the webhook secret — and rotates it if one existed. The response is
+   * the only place the value is ever readable.
+   */
+  issueWebhookSecret: (id: string) =>
+    request<WebhookSetup>(`/sources/${id}/webhook`, { method: 'POST' }),
   /**
    * Collects a source right away. On a stored source this also fills the store,
    * which is what a fresh switch to that mode is waiting on — otherwise the

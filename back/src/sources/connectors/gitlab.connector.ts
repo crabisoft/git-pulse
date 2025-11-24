@@ -363,7 +363,8 @@ function toCommit(c: Record<string, unknown>, baseUrl: string, repo: string): Co
   };
 }
 
-function mapGitLabStatus(status: string): PipelineStatus {
+/** Shared with the webhook mapper, so an event and a listing agree on a status. */
+export function mapGitLabStatus(status: string): PipelineStatus {
   switch (status) {
     case 'success':
       return 'success';

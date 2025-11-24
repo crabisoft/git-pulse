@@ -56,6 +56,18 @@ export class SourcesController {
     return this.sources.testConnection(id);
   }
 
+  /**
+   * Issues the webhook secret and returns it — the one and only time it is
+   * readable, exactly like a source credential. Calling it again rotates,
+   * which is the whole of what recovering from a leak takes. Admin-only, like
+   * everything that touches a secret.
+   */
+  @Post(':id/webhook')
+  @HttpCode(200)
+  issueWebhookSecret(@Param('id') id: string) {
+    return this.sources.issueWebhookSecret(id);
+  }
+
   @Delete(':id')
   @HttpCode(204)
   remove(@Param('id') id: string) {

@@ -279,20 +279,7 @@ export class GitHubConnector implements SourceConnector {
         deployment_id: deploymentId,
         per_page: 1,
       });
-      switch (statuses.data[0]?.state) {
-        case 'success':
-          return 'success';
-        case 'failure':
-        case 'error':
-          return 'failed';
-        case 'in_progress':
-          return 'running';
-        case 'queued':
-        case 'pending':
-          return 'pending';
-        default:
-          return 'unknown';
-      }
+      return mapGitHubDeploymentState(statuses.data[0]?.state);
     } catch {
       return 'unknown';
     }
@@ -414,7 +401,26 @@ function toCommit(
   };
 }
 
-function mapGitHubStatus(status: string | null, conclusion: string | null): PipelineStatus {
+/** Shared with the webhook mapper, so an event and a listing agree on a status. */
+export function mapGitHubDeploymentState(state: string | null | undefined): PipelineStatus {
+  switch (state) {
+    case 'success':
+      return 'success';
+    case 'failure':
+    case 'error':
+      return 'failed';
+    case 'in_progress':
+      return 'running';
+    case 'queued':
+    case 'pending':
+      return 'pending';
+    default:
+      return 'unknown';
+  }
+}
+
+/** Shared with the webhook mapper, so an event and a listing agree on a status. */
+export function mapGitHubStatus(status: string | null, conclusion: string | null): PipelineStatus {
   if (status !== 'completed') {
     return status === 'in_progress' ? 'running' : 'pending';
   }

@@ -225,7 +225,9 @@
       "missingAppCredentials": "GitHub App credentials are required.",
       "appUnsupported": "App authentication is not supported by this platform.",
       "incidentTrackerNotAttached": "The incident tracker must be one of the trackers attached to the source.",
-      "incidentTrackerUnsupported": "Incidents cannot be read from a {{kind}} tracker yet."
+      "incidentTrackerUnsupported": "Incidents cannot be read from a {{kind}} tracker yet.",
+      "webhooksRequireStored": "Webhooks only make sense with stored reads: switch the source to “Stored” first.",
+      "webhooksDisabled": "Webhooks are not enabled on this source."
     },
     "envRule": {
       "notFound": "Rule not found.",
@@ -261,6 +263,10 @@
     },
     "quota": {
       "invalidBudget": "Invalid budget: at least {{limitMin}} call, over a window of {{windowMin}} to {{windowMax}} seconds."
+    },
+    "webhook": {
+      "unknown": "No webhook is listening here.",
+      "rejected": "Delivery refused."
     }
   },
   "empty": {
@@ -463,7 +469,9 @@
       "noTrackerAttached": "Attach a tracker to this source first, above.",
       "noEligibleTracker": "None of the attached trackers can supply incidents: not every kind is able to.",
       "mode": "Data read from",
-      "modeHint": "(decides whether the API quota follows the traffic or the collection)"
+      "modeHint": "(decides whether the API quota follows the traffic or the collection)",
+      "webhooks": "Accept events (webhooks)",
+      "webhooksHint": "speeds up freshness; the scheduled synchronisation stays the safety net"
     },
     "budget": {
       "none": "No declared ceiling",
@@ -488,7 +496,17 @@
         "live": "every view asks the platform: the quota is spent per visitor",
         "stored": "the dashboard reads the database, filled by the collection: the quota is spent per collection, whatever the traffic"
       }
-    }
+    },
+    "webhook": {
+      "title": "Source webhook",
+      "subtitle": "Declare it on the GitHub / GitLab side. The secret is shown once.",
+      "url": "Delivery path",
+      "urlHint": "(prefix with the public URL of the API)",
+      "secret": "Secret",
+      "secretHint": "(encrypted at rest, never shown again)",
+      "warning": "Copy this secret now: closing this window makes it unreadable for good. Issuing a new one invalidates the old one immediately."
+    },
+    "webhooksOn": "events"
   },
   "ticketRules": {
     "listTitle": "Ticket rules",

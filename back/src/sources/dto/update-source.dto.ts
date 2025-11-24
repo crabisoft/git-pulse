@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsBoolean,
   IsEnum,
   IsOptional,
   IsString,
@@ -52,6 +53,11 @@ export class UpdateSourceDto {
   @IsOptional()
   @IsEnum(['live', 'stored'] as const)
   mode?: SourceMode;
+
+  /** Turning it off drops the stored secret with it. */
+  @IsOptional()
+  @IsBoolean()
+  webhooksEnabled?: boolean;
 
   /** Classification rules that apply here, from the global set. Replaces it. */
   @IsOptional()

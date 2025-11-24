@@ -1,9 +1,13 @@
 import { Module } from '@nestjs/common';
+import { BullModule } from '@nestjs/bullmq';
 import { SourcesModule } from '../sources/sources.module';
 import { SettingsModule } from '../settings/settings.module';
 import { ReaderFactory } from './reader.factory';
 import { StoreService } from './store.service';
 import { SyncService } from './sync.service';
+import { WebhookController } from './webhooks/webhook.controller';
+import { WebhookService } from './webhooks/webhook.service';
+import { IngestProcessor } from './webhooks/ingest.processor';
 
 /**
  * Everything that fills the read model and reads it back.
@@ -11,10 +15,18 @@ import { SyncService } from './sync.service';
  * Deliberately unaware of the sources module beyond what a reader needs: the
  * dependency runs one way, so a source can enqueue ingestion work without this
  * module and that one importing each other.
+ *
+ * The queue is its own rather than the collection's: events arrive in bursts and
+ * must not queue behind a synchronisation that takes minutes.
  */
 @Module({
-  imports: [SourcesModule, SettingsModule],
-  providers: [StoreService, ReaderFactory, SyncService],
+  imports: [
+    BullModule.registerQueue({ name: 'ingest' }),
+    SourcesModule,
+    SettingsModule,
+  ],
+  controllers: [WebhookController],
+  providers: [StoreService, ReaderFactory, SyncService, WebhookService, IngestProcessor],
   exports: [StoreService, ReaderFactory, SyncService],
 })
 export class IngestModule {}

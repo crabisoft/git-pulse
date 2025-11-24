@@ -28,7 +28,28 @@ export const DELTA_OVERLAP_MS = 10 * 60_000;
  */
 export const FULL_SYNC_INTERVAL_MS = 6 * 3_600_000;
 
+/**
+ * How recently an event must have arrived for the incremental listings to be
+ * worth skipping. Below it, the store is demonstrably being kept current by
+ * something cheaper than a listing.
+ */
+export const EVENT_QUIET_MS = 15 * 60_000;
+
 const DAY_MS = 86_400_000;
+
+/**
+ * Whether the incremental listings can be skipped this run.
+ *
+ * This is the **only** place the events influence the schedule, and it is
+ * deliberately one-way: they can spare a listing, never postpone a
+ * reconciliation. `full` short-circuits before anything else is read, so a flood
+ * of events cannot turn into a source that stops being checked against its
+ * provider — which is the failure mode this whole design exists to avoid.
+ */
+export function skipsDelta(lastEventAt: Date | null, now: Date, full: boolean): boolean {
+  if (full || !lastEventAt) return false;
+  return now.getTime() - lastEventAt.getTime() < EVENT_QUIET_MS;
+}
 
 /**
  * Lower bound of the merged listing.

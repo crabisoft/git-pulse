@@ -1,5 +1,6 @@
 import {
   IsArray,
+  IsBoolean,
   IsEnum,
   IsOptional,
   IsString,
@@ -75,6 +76,11 @@ export class CreateSourceDto {
   @IsOptional()
   @IsEnum(['live', 'stored'] as const)
   mode?: SourceMode;
+
+  /** Only ever true in `stored` mode; refused otherwise. */
+  @IsOptional()
+  @IsBoolean()
+  webhooksEnabled?: boolean;
 
   /** Classification rules that apply here, from the global set. Replaces it. */
   @IsOptional()

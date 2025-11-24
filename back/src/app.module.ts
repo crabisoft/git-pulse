@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { BullModule } from '@nestjs/bullmq';
+import { redisConnection } from './common/redis.util';
 import { PrismaModule } from './prisma/prisma.module';
 import { SettingsModule } from './settings/settings.module';
 import { AuthModule } from './auth/auth.module';
@@ -18,6 +20,10 @@ import { ApiQuotaModule } from './api-quota/api-quota.module';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    // Declared here rather than in the module that first needed a queue: two
+    // modules now register one, and neither should have to know which of them
+    // happens to configure the connection.
+    BullModule.forRoot({ connection: redisConnection() }),
     PrismaModule,
     SettingsModule,
     AuthModule,

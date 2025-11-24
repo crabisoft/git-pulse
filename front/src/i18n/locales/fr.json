@@ -225,7 +225,9 @@
       "missingAppCredentials": "Les identifiants de la GitHub App sont requis.",
       "appUnsupported": "L'authentification par App n'est pas supportée par cette plateforme.",
       "incidentTrackerNotAttached": "Le tracker d'incidents doit faire partie des trackers associés à la source.",
-      "incidentTrackerUnsupported": "Les incidents ne peuvent pas encore être lus depuis un tracker {{kind}}."
+      "incidentTrackerUnsupported": "Les incidents ne peuvent pas encore être lus depuis un tracker {{kind}}.",
+      "webhooksRequireStored": "Les webhooks n'ont de sens qu'en lecture stockée : passez la source en « Stockée » d'abord.",
+      "webhooksDisabled": "Les webhooks ne sont pas activés sur cette source."
     },
     "envRule": {
       "notFound": "Règle introuvable.",
@@ -261,6 +263,10 @@
     },
     "quota": {
       "invalidBudget": "Budget invalide : au moins {{limitMin}} appel, sur une fenêtre de {{windowMin}} à {{windowMax}} secondes."
+    },
+    "webhook": {
+      "unknown": "Aucun webhook n'écoute ici.",
+      "rejected": "Livraison refusée."
     }
   },
   "empty": {
@@ -463,7 +469,9 @@
       "noTrackerAttached": "Rattachez d'abord un tracker à cette source, ci-dessus.",
       "noEligibleTracker": "Aucun tracker rattaché ne sait fournir d'incidents : tous les types n'en sont pas capables.",
       "mode": "Lecture des données",
-      "modeHint": "(décide si le quota d'API suit le trafic ou la collecte)"
+      "modeHint": "(décide si le quota d'API suit le trafic ou la collecte)",
+      "webhooks": "Accepter les événements (webhooks)",
+      "webhooksHint": "accélère la fraîcheur ; la synchronisation planifiée reste le filet de sécurité"
     },
     "budget": {
       "none": "Aucun plafond déclaré",
@@ -488,7 +496,17 @@
         "live": "chaque affichage interroge la plateforme : le quota se consomme par visiteur",
         "stored": "le tableau de bord lit la base, remplie par la collecte : le quota se consomme par collecte, quel que soit le trafic"
       }
-    }
+    },
+    "webhook": {
+      "title": "Webhook de la source",
+      "subtitle": "À déclarer côté GitHub / GitLab. Le secret n'est affiché qu'une fois.",
+      "url": "Chemin de livraison",
+      "urlHint": "(à préfixer par l'URL publique de l'API)",
+      "secret": "Secret",
+      "secretHint": "(chiffré au repos, jamais réaffiché)",
+      "warning": "Copiez ce secret maintenant : fermer cette fenêtre le rend définitivement illisible. En réémettre un nouveau invalide immédiatement l'ancien."
+    },
+    "webhooksOn": "événements"
   },
   "ticketRules": {
     "listTitle": "Règles de ticket",

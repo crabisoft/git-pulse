@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   DELTA_OVERLAP_MS,
+  EVENT_QUIET_MS,
   FULL_SYNC_INTERVAL_MS,
   isDueForFullSync,
   mergedSince,
+  skipsDelta,
 } from './sync-cadence';
 
 const NOW = new Date('2026-07-27T12:00:00Z');
@@ -55,3 +57,26 @@ describe('isDueForFullSync', () => {
   });
 });
 
+describe('skipsDelta', () => {
+  it('spares a listing while the events keep flowing', () => {
+    const recent = new Date(NOW.getTime() - EVENT_QUIET_MS + 60_000);
+    expect(skipsDelta(recent, NOW, false)).toBe(true);
+  });
+
+  it('lists again once the events go quiet', () => {
+    const old = new Date(NOW.getTime() - EVENT_QUIET_MS);
+    expect(skipsDelta(old, NOW, false)).toBe(false);
+  });
+
+  it('lists on a source no event ever reached', () => {
+    // The install whose network refuses inbound traffic. It must behave exactly
+    // as it would with the feature absent.
+    expect(skipsDelta(null, NOW, false)).toBe(false);
+  });
+
+  it('never skips a reconciliation, however fresh the events', () => {
+    // A flood of events must not become a source that stops being checked
+    // against its provider.
+    expect(skipsDelta(NOW, NOW, true)).toBe(false);
+  });
+});

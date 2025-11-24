@@ -43,6 +43,11 @@ model Source {
   /// Defaults to `live`: an install upgrading into this keeps behaving exactly
   /// as it did, and switching is a decision.
   mode      SourceMode @default(live)
+  /// Whether events are accepted for this source. An acceleration, never a
+  /// prerequisite: the scheduled synchronisation stays correct without it, so
+  /// an install whose network refuses inbound traffic simply leaves it off.
+  /// Only meaningful in `stored` mode, which the service enforces.
+  webhooksEnabled Boolean @default(false)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
@@ -50,6 +55,8 @@ model Source {
   envRules    SourceEnvRule[]
   trackers    SourceTracker[]
   snapshots   MetricSnapshot[]
+  webhookSecret WebhookSecret?
+  deliveries    WebhookDelivery[]
   repos        StoredRepo[]
   pullRequests StoredPullRequest[]
   pipelines    StoredPipeline[]
@@ -320,6 +327,46 @@ model MetricSnapshot {
   capturedAt DateTime @default(now())
 
   @@index([sourceId, metric, capturedAt])
+}
+
+/// Shared secret the webhooks of a source are authenticated with.
+///
+/// Kept apart from `Credential` rather than beside it: it authenticates calls
+/// coming **in**, where that one authenticates calls going out. They rotate for
+/// different reasons and one can exist without the other.
+model WebhookSecret {
+  id         String   @id @default(uuid())
+  source     Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId   String   @unique
+  ciphertext Bytes
+  iv         Bytes
+  authTag    Bytes
+  /// Master key version that encrypted this secret (for rotation).
+  keyVersion Int      @default(1)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+/// One delivery already handled.
+///
+/// Providers deliver at least once and retry on anything that is not a quick
+/// 2xx, so the same event arrives more than once as a matter of course. The
+/// unique index below is what makes handling it twice a no-op — including
+/// across several API instances, where an in-memory guard would not.
+model WebhookDelivery {
+  id         String   @id @default(uuid())
+  source     Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId   String
+  /// Identifier the provider stamps the delivery with.
+  deliveryId String
+  event      String
+  receivedAt DateTime @default(now())
+
+  @@unique([sourceId, deliveryId])
+  /// Serves the "has this source heard anything lately" lookup the adaptive
+  /// cadence asks on every run. The retention sweep scans instead, on a table
+  /// kept small by that very sweep.
+  @@index([sourceId, receivedAt])
 }
 
 /// Which listing a sync cursor belongs to.
