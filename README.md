@@ -684,6 +684,94 @@ Consumption nobody knows degrades nothing: a source whose provider meters
 nothing and for which no budget was declared attempts everything, as it always
 did. Declaring the budget is what turns the reserve on for it.
 
+## Reading live, or reading a store
+
+Everything above rations a budget. It does not change what spends it, and what
+spends it is the shape of the read path: a `live` source calls its provider on
+**every dashboard request**, so the cost follows the traffic. Ten people
+refreshing twenty repos every thirty seconds is fifty thousand calls an hour,
+against the five thousand github.com allows.
+
+**Settings › Sources › Data read from** switches a source between the two:
+
+| | `live` | `stored` |
+|---|---|---|
+| Who calls the provider | every request | the collection only |
+| Cost | per visitor | per collection, whatever the traffic |
+| Freshness | of the instant | of the last run (or of the last event) |
+
+In `stored` mode the dashboard and DORA read `StoredRepo`, `StoredPullRequest`,
+`StoredPipeline` and `StoredDeployment` instead. Both callers go through a
+`SourceReader` — the exact subset of `SourceConnector` they consumed — so
+neither knows which one it holds. Release notes stay live in either mode: they
+read tags and commits, which are not stored.
+
+> Classification and ticket rules still apply **at read time**, exactly as they
+> did: changing a rule takes effect on the next page load, with nothing to
+> re-ingest. Only the platform data is stored, never what we make of it.
+
+### One row, two feeds, no ordering
+
+The open listing, the merged listing and the webhooks all write the same rows,
+in an order nobody controls. `merge.ts` holds the rules and is pure for that
+reason:
+
+- A reading older than what is stored is **dropped** — but still marks the row
+  as seen, or the very run that listed a pull request as open would then close it.
+- A feed never blanks what it does not report: the merged listing carries no
+  author, the open one carries no lead-time segments, and `null` from a run
+  degraded under the API reserve means *not read*, not *does not exist*.
+- A deployment states no update date, so its status settles by rank instead:
+  `unknown` < pending < running < terminal. An event arriving late cannot undo a
+  success.
+
+The database guards the same thing again, in the `where` of the update: two
+writers can touch a row at the same moment, and the one holding the older state
+has to lose.
+
+### Staying converged
+
+A stored view that drifts from its provider is worse than no view. Three things
+keep it honest, and all three run without a single event ever arriving:
+
+- The open listing is **complete by construction** — every open pull request of
+  every repo, or it throws — so anything stored as open that it did not report
+  has moved on, and is closed. Every run, not just the reconciliation.
+- A **reconciliation** every six hours re-reads the whole reporting window and
+  drops what the scope no longer covers. Its clock is a duration, not a count of
+  runs, and it is blind to the events received.
+- A **retention sweep** bounds the store at the reporting window plus a week.
+  Open pull requests are exempt however old: one opened two years ago is exactly
+  what the stale-PR tile is for.
+
+### Webhooks, when the network allows
+
+`Accept events` is offered on a stored source only, and is off by default: it is
+an acceleration, never a prerequisite. An install whose network refuses inbound
+traffic leaves it off and loses nothing but freshness.
+
+`POST /api/webhooks/:sourceId` is anonymous to the session layer — GitHub holds
+no account here — and authenticated by the signature over the body. GitHub signs
+it (`X-Hub-Signature-256`), which proves both sender and integrity; GitLab sends
+the secret itself (`X-Gitlab-Token`), which proves only the sender. The secret is
+per source, encrypted at rest like a credential, and readable exactly once when
+issued — issuing another rotates it, which is all recovering from a leak takes.
+
+The endpoint authenticates, records the delivery id and answers `204`. Nothing
+else: a provider kept waiting marks the delivery failed and eventually disables
+the hook. The work goes to its own queue, so a burst of events never sits behind
+a synchronisation that takes minutes.
+
+> Deliveries are at-least-once and out of order by nature. The unique index on
+> `(sourceId, deliveryId)` is what makes handling one twice a no-op — including
+> across several API instances, where an in-memory guard would not.
+
+Events influence the schedule in exactly one direction: while some have arrived
+in the last fifteen minutes, the incremental listings are skipped — the store is
+demonstrably current, and listing would spend the budget to learn it. The
+reconciliation is never skipped. A flood of events cannot become a source that
+stops being checked against its provider.
+
 ## Release notes
 
 `GET /api/sources/:id/release-notes?repo=&from=&to=` summarises a range of

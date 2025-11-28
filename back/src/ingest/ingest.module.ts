@@ -3,6 +3,7 @@ import { BullModule } from '@nestjs/bullmq';
 import { SourcesModule } from '../sources/sources.module';
 import { SettingsModule } from '../settings/settings.module';
 import { ReaderFactory } from './reader.factory';
+import { RetentionService } from './retention.service';
 import { StoreService } from './store.service';
 import { SyncService } from './sync.service';
 import { WebhookController } from './webhooks/webhook.controller';
@@ -26,7 +27,14 @@ import { IngestProcessor } from './webhooks/ingest.processor';
     SettingsModule,
   ],
   controllers: [WebhookController],
-  providers: [StoreService, ReaderFactory, SyncService, WebhookService, IngestProcessor],
-  exports: [StoreService, ReaderFactory, SyncService],
+  providers: [
+    StoreService,
+    ReaderFactory,
+    SyncService,
+    RetentionService,
+    WebhookService,
+    IngestProcessor,
+  ],
+  exports: [StoreService, ReaderFactory, SyncService, RetentionService],
 })
 export class IngestModule {}

@@ -3,6 +3,7 @@ import { Logger } from '@nestjs/common';
 import { Queue, Job } from 'bullmq';
 import { CollectorService } from './collector.service';
 import { SourcesService } from '../sources/sources.service';
+import { RetentionService } from '../ingest/retention.service';
 
 /**
  * Worker for the collection queue.
@@ -16,6 +17,7 @@ export class CollectionProcessor extends WorkerHost {
   constructor(
     private readonly collector: CollectorService,
     private readonly sources: SourcesService,
+    private readonly retention: RetentionService,
     @InjectQueue('collection') private readonly queue: Queue,
   ) {
     super();
@@ -25,7 +27,15 @@ export class CollectionProcessor extends WorkerHost {
     if (job.name === 'collect-all') {
       const sourceIds = await this.sources.listIds();
       await Promise.all(sourceIds.map((sourceId) => this.queue.add('collect-source', { sourceId })));
-      return { enqueued: sourceIds.length };
+      // Once per cycle rather than per source: what it removes is bounded by
+      // the reporting window, which is one setting for the whole install.
+      // Best-effort — a store growing a cycle longer beats a collection that
+      // did not run.
+      const pruned = await this.retention.prune().catch((e) => {
+        this.logger.warn(`Purge du magasin échouée : ${asMessage(e)}`);
+        return null;
+      });
+      return { enqueued: sourceIds.length, pruned };
     }
 
     if (job.name === 'collect-source') {
@@ -37,4 +47,8 @@ export class CollectionProcessor extends WorkerHost {
     this.logger.warn(`Job inconnu ignoré : ${job.name}`);
     return null;
   }
+}
+
+function asMessage(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
 }
