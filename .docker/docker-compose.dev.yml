@@ -65,6 +65,9 @@ services:
       # Same reason as TSC_WATCHFILE on the back: chokidar must poll to see the
       # edits made on the host. Read by vite.config.ts.
       VITE_USE_POLLING: "1"
+      # Hostnames the dev server answers to besides localhost — a tunnel's, when
+      # testing webhooks from a provider. Comma-separated, empty by default.
+      VITE_ALLOWED_HOSTS: ${VITE_ALLOWED_HOSTS:-}
     volumes:
       - ..:/app
       - front-node-modules:/app/node_modules
