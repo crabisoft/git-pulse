@@ -268,7 +268,9 @@ export class SourcesService {
       create: { sourceId: id, ...stored },
       update: stored,
     });
-    return { path: `/webhooks/${id}`, secret };
+    // The global prefix is part of the path: what comes back has to be usable
+    // by appending it to a domain, which is the only thing the operator knows.
+    return { path: `/api/webhooks/${id}`, secret };
   }
 
   /**

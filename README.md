@@ -750,7 +750,26 @@ keep it honest, and all three run without a single event ever arriving:
 an acceleration, never a prerequisite. An install whose network refuses inbound
 traffic leaves it off and loses nothing but freshness.
 
-`POST /api/webhooks/:sourceId` is anonymous to the session layer — GitHub holds
+The URL to declare on the provider side is:
+
+```
+https://<app-domain>/api/webhooks/<sourceId>
+```
+
+**The `/api` prefix is part of it.** Leaving it out is the mistake to expect: the
+provider only reports the status code, so a hook declared without it fails with a
+bare 404 and nothing saying why. The dialog that issues the secret spells the
+full URL out for that reason — it returns a path rather than a URL because the
+backend does not reliably know the origin it is reachable at from the outside.
+Behind a reverse proxy or a tunnel, only the operator does.
+
+> On GitHub, set the content type to **`application/json`**. The default is
+> `application/x-www-form-urlencoded`, whose body is the JSON wrapped in a form
+> field: the signature still verifies, so the delivery is accepted and then
+> ingests nothing. It shows up as a `204` on the provider side and one
+> `Charge utile illisible` line in the logs.
+
+That endpoint is anonymous to the session layer — GitHub holds
 no account here — and authenticated by the signature over the body. GitHub signs
 it (`X-Hub-Signature-256`), which proves both sender and integrity; GitLab sends
 the secret itself (`X-Gitlab-Token`), which proves only the sender. The secret is

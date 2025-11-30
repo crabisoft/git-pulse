@@ -500,11 +500,13 @@
     "webhook": {
       "title": "Source webhook",
       "subtitle": "Declare it on the GitHub / GitLab side. The secret is shown once.",
-      "url": "Delivery path",
-      "urlHint": "(prefix with the public URL of the API)",
+      "url": "Delivery URL",
+      "urlHint": "(prefix with the public domain of the application)",
       "secret": "Secret",
       "secretHint": "(encrypted at rest, never shown again)",
-      "warning": "Copy this secret now: closing this window makes it unreadable for good. Issuing a new one invalidates the old one immediately."
+      "warning": "Copy this secret now: closing this window makes it unreadable for good. Issuing a new one invalidates the old one immediately.",
+      "urlShape": "Full URL to enter on GitHub / GitLab: https://<app-domain>{{path}}",
+      "contentType": "On GitHub, pick the “application/json” content type: the default (form-urlencoded) is accepted but nothing is ingested from it."
     },
     "webhooksOn": "events"
   },

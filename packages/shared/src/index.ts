@@ -93,12 +93,17 @@ export interface SourcePublic {
  * What an admin needs to declare the hook on the provider side. Returned once,
  * by the call that generates it: the secret is stored encrypted and never read
  * back out, exactly like a source credential.
- *
- * The path is relative because the backend does not reliably know the origin it
- * is reachable at from the outside — behind a reverse proxy or a tunnel, only
- * the operator does.
  */
 export interface WebhookSetup {
+  /**
+   * Path to deliver to, API prefix included — `/api/webhooks/<sourceId>`. The
+   * full URL is that appended to the domain the application answers on:
+   * `https://<app-domain>/api/webhooks/<sourceId>`.
+   *
+   * A path and not a URL because the backend does not reliably know the origin
+   * it is reachable at from the outside: behind a reverse proxy or a tunnel,
+   * only the operator does.
+   */
   path: string;
   secret: string;
 }

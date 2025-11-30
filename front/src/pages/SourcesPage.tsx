@@ -369,12 +369,17 @@ function WebhookDialog({ setup, onClose }: { setup: WebhookSetup; onClose: () =>
         <label>
           {t('sources.webhook.url')} <span className="hint">{t('sources.webhook.urlHint')}</span>
           <input readOnly value={setup.path} onFocus={(e) => e.currentTarget.select()} />
+          {/* Spelled out in full: the path alone reads as complete, and a hook
+              declared without the /api prefix answers 404 with nothing to say
+              why — the provider only reports the status. */}
+          <span className="hint">{t('sources.webhook.urlShape', { path: setup.path })}</span>
         </label>
         <label>
           {t('sources.webhook.secret')}{' '}
           <span className="hint">{t('sources.webhook.secretHint')}</span>
           <input readOnly value={setup.secret} onFocus={(e) => e.currentTarget.select()} />
         </label>
+        <p className="field-note">{t('sources.webhook.contentType')}</p>
         <p className="field-note">{t('sources.webhook.warning')}</p>
       </div>
     </Modal>

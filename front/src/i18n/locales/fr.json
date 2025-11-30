@@ -500,11 +500,13 @@
     "webhook": {
       "title": "Webhook de la source",
       "subtitle": "À déclarer côté GitHub / GitLab. Le secret n'est affiché qu'une fois.",
-      "url": "Chemin de livraison",
-      "urlHint": "(à préfixer par l'URL publique de l'API)",
+      "url": "URL de livraison",
+      "urlHint": "(à préfixer par le domaine public de l'application)",
       "secret": "Secret",
       "secretHint": "(chiffré au repos, jamais réaffiché)",
-      "warning": "Copiez ce secret maintenant : fermer cette fenêtre le rend définitivement illisible. En réémettre un nouveau invalide immédiatement l'ancien."
+      "warning": "Copiez ce secret maintenant : fermer cette fenêtre le rend définitivement illisible. En réémettre un nouveau invalide immédiatement l'ancien.",
+      "urlShape": "URL complète à saisir côté GitHub / GitLab : https://<domaine-de-l-application>{{path}}",
+      "contentType": "Côté GitHub, choisissez le type de contenu « application/json » : le défaut (form-urlencoded) est accepté mais rien n'en est ingéré."
     },
     "webhooksOn": "événements"
   },
