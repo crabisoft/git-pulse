@@ -710,6 +710,42 @@ read tags and commits, which are not stored.
 > did: changing a rule takes effect on the next page load, with nothing to
 > re-ingest. Only the platform data is stored, never what we make of it.
 
+### What is stored, and what fills it
+
+Four tables, and nothing else of a source's data. Each column is filled by one
+or two feeds, and which ones is worth knowing: it decides what a webhook can
+keep current on its own, and what only a listing ever brings.
+
+| Table | Columns | Filled by |
+|---|---|---|
+| `StoredRepo` | `name` | the repository listing, only |
+| `StoredPullRequest` | `number`, `title`, `state`, `author`, `url`, `repoUrl`, `headRef`, `openedAt`, `updatedAt`, `mergedAt`, `reviewers` | the open listing, and the pull-request events |
+| | `firstCommitAt`, `firstReviewAt` | the **merged listing only** — see below |
+| `StoredPipeline` | `ref`, `status`, `url`, `createdAt`, `updatedAt`, `durationSec` | the pipeline listing, and the run events |
+| `StoredDeployment` | `environment`, `ref`, `status`, `createdAt` | the deployment listing, and the deployment events |
+
+Three consequences follow, and each is a real behaviour rather than a caveat:
+
+- **The lead-time segments never come from an event.** `firstCommitAt` and
+  `firstReviewAt` cost one API call each and are read during the merged listing,
+  which is also the first thing given up under the API reserve. A pull request
+  merged through a webhook therefore appears in DORA immediately with its lead
+  time, and gains its coding and pickup segments at the next reconciliation.
+- **A new repository appears only at the next synchronisation.** No event maps
+  to a repository. Until one lists it, an event about it is still stored, but
+  invisible: every read filters on the repositories in scope, and that list comes
+  from `StoredRepo`.
+- **A GitLab pipeline gets its duration from events sooner than from listings.**
+  The listing would need one call per pipeline to know it, so it stores `null`;
+  the `Pipeline Hook` reports it directly.
+
+Alongside them sit three tables that are not source data: `SyncState` (the
+cursors), `WebhookSecret` and `WebhookDelivery`.
+
+> `StoredRepo.defaultBranch` exists and is never written: the synchronisation
+> lists names only, and the one caller that needs a default branch — the release
+> notes — reads live in either mode. It is a column waiting for a reader.
+
 ### One row, two feeds, no ordering
 
 The open listing, the merged listing and the webhooks all write the same rows,
@@ -763,17 +799,39 @@ full URL out for that reason — it returns a path rather than a URL because the
 backend does not reliably know the origin it is reachable at from the outside.
 Behind a reverse proxy or a tunnel, only the operator does.
 
+Six events are handled, three per platform — the ones that move a row of the
+four tables above. Subscribing to more is harmless and useless: anything else is
+authenticated, recorded as delivered, and ignored.
+
+| Writes | GitHub | GitLab |
+|---|---|---|
+| `StoredPullRequest` | `pull_request` | `Merge Request Hook` |
+| `StoredPipeline` | `workflow_run` | `Pipeline Hook` |
+| `StoredDeployment` | `deployment_status` | `Deployment Hook` |
+
+Those are the values of the `X-GitHub-Event` and `X-Gitlab-Event` headers. In
+the providers' own forms the boxes read *Pull requests*, *Workflow runs* and
+*Deployment statuses* on GitHub, and *Merge request events*, *Pipeline events*
+and *Deployment events* on GitLab — the dialog that issues the secret names them
+that way, since it is read next to those forms.
+
+`push` is deliberately absent: no table holds commits. So is
+`pull_request_review`, which looks like a way to fill `firstReviewAt` and is not:
+it reports *a* review, with no way of telling whether it is the first, so a hook
+enabled after a pull request was already reviewed would record a later one as
+such — and silently, since nothing downstream can tell the difference.
+
 > On GitHub, set the content type to **`application/json`**. The default is
 > `application/x-www-form-urlencoded`, whose body is the JSON wrapped in a form
 > field: the signature still verifies, so the delivery is accepted and then
 > ingests nothing. It shows up as a `204` on the provider side and one
 > `Charge utile illisible` line in the logs.
 
-That endpoint is anonymous to the session layer — GitHub holds
-no account here — and authenticated by the signature over the body. GitHub signs
-it (`X-Hub-Signature-256`), which proves both sender and integrity; GitLab sends
-the secret itself (`X-Gitlab-Token`), which proves only the sender. The secret is
-per source, encrypted at rest like a credential, and readable exactly once when
+That endpoint is anonymous to the session layer — GitHub holds no account here —
+and authenticated by the signature over the body. GitHub signs it
+(`X-Hub-Signature-256`), which proves both sender and integrity; GitLab sends the
+secret itself (`X-Gitlab-Token`), which proves only the sender. The secret is per
+source, encrypted at rest like a credential, and readable exactly once when
 issued — issuing another rotates it, which is all recovering from a leak takes.
 
 The endpoint authenticates, records the delivery id and answers `204`. Nothing
@@ -805,167 +863,6 @@ not one. Add the tunnel's hostname to `VITE_ALLOWED_HOSTS` (comma-separated) in
 > Which layer answered is settled in one look: every error from the API is JSON
 > shaped `{"statusCode":…,"code":"errors.…"}`. An HTML body, or one mentioning
 > Vite or the tunnel, means the request never got there.
-
-## Release notes
-
-`GET /api/sources/:id/release-notes?repo=&from=&to=` summarises a range of
-commits; `GET /api/sources/:id/tags?repo=` lists what a range can be picked
-from.
-
-Bounds fill themselves in: `to` defaults to the most recent tag — a release is
-summarised as it was cut, not as the branch has drifted since — and `from` to
-the tag below it. With no tag at all the range runs from the beginning of
-history to the default branch, which is what a first release needs.
-
-Each commit is read as a **Conventional Commit** and filed under its type, with
-breaking changes repeated at the top: they are what a reader upgrading needs
-first. A message following no convention is filed under `other` rather than
-dropped, since most histories are mixed. The parser is deliberately strict —
-`Reverting this: fix login` yields nothing rather than a type named `reverting`.
-
-Ticket references are read from commit messages by the **same rules** as branch
-names and PR titles, so a release note links its tickets without any further
-configuration.
-
-> Only the Markdown is produced for now. AI rewriting through an `LLMProvider`
-> and publishing the notes back as a platform release are the remaining steps of
-> this phase; the first needs `Credential` generalised to a polymorphic owner,
-> which has been deferred until it had a consumer.
-
-## Getting started — Docker (recommended)
-
-All the Docker configuration lives in `.docker/`:
-
-```
-.docker/
-  docker-compose.yml       # base: db + redis
-  docker-compose.dev.yml   # DEV override: watch / HMR, code mounted as a volume
-  docker-compose.prod.yml  # PROD override: built images + nginx
-  Dockerfile.back · Dockerfile.front · nginx.conf
-  .env                     # versioned defaults (no real secrets)
-  .env.local               # your local overrides (git-ignored)
-  .env.local.example       # template to copy
-  compose.sh               # wrapper: mode + .env/.env.local chaining
-```
-
-**Dev mode (recommended day to day)** — hot reload: `nest start --watch` on the
-API, the Vite server (HMR) on the front. Source code is mounted as a volume, no
-image rebuild on every change.
-
-```bash
-npm run docker:dev         # db + redis + API (watch) + front (Vite/HMR)
-# Front: http://localhost:5173   ·   API: http://localhost:3001/api
-npm run docker:logs        # followed logs
-npm run docker:dev:down    # stop
-```
-
-> First run: the dev containers execute `npm install` into a dedicated
-> `node_modules` volume (Alpine binaries) — expect a minute the first time,
-> instant afterwards.
-
-**Prod mode (validating a build)** — compiled API + static front served by nginx.
-
-```bash
-npm run docker:prod        # builds the images + starts
-# Web: http://localhost:8080   ·   API: http://localhost:3001/api
-npm run docker:prod:down   # stop
-```
-
-**Customizing the environment** — do not edit `.docker/.env` (versioned): copy
-the template and override only what concerns you.
-
-```bash
-cp .docker/.env.local.example .docker/.env.local
-# edit .docker/.env.local — e.g. WEB_PORT=9090, API_PORT=3100
-npm run docker:up
-```
-
-`.env.local` overrides `.env` at startup (the `compose.sh` wrapper chains both
-`--env-file`). Available variables: host ports, Postgres credentials,
-`WEB_ORIGIN`, `VITE_API_URL`, images…
-
-> ⚠️ **Master key**: persisted in the `master-key` volume. Losing it makes every
-> stored secret unrecoverable — back it up separately.
-
-## Getting started — local (dev)
-
-Prerequisites: Node 24+, a reachable PostgreSQL and Redis (see `.env`). The
-Docker stacks and the local floor both track the active LTS, Node 24.
-
-```bash
-npm install
-npm run build:shared
-npm run db:deploy                        # applies the migrations
-npm run dev:back                         # http://localhost:3001
-npm run dev:front                        # http://localhost:5173
-```
-
-## Configuring a source
-
-1. **Sources** tab → *Add a source*.
-2. Platform, base URL (e.g. `https://gitlab.example.com`), organization/group,
-   auth method and secret (token). The secret is encrypted immediately.
-3. **Test** the connection, then switch to the **Dashboard** tab.
-
-## Database migrations
-
-The schema is managed through **versioned migrations** (Prisma), committed to
-`back/prisma/migrations/` and bundled into the prod image.
-
-**Applying migrations** — automatic when the containers start:
-`prisma migrate deploy` runs before the API, in **dev** as in **prod**
-(non-interactive, idempotent). Locally without Docker: `npm run db:deploy`.
-
-**Creating a migration** — after editing `back/prisma/schema.prisma`:
-
-```bash
-# dev database reachable on localhost:5432 (npm run docker:dev running)
-npm run db:migrate -- --name add_table_x
-# → generates back/prisma/migrations/<timestamp>_add_table_x/  → to commit
-```
-
-> `db:migrate` (= `prisma migrate dev`) creates the SQL file, applies it to the
-> dev database and regenerates the client. In a team, migration files are the
-> source of truth: commit them.
-
-Other commands: `npm run db:deploy` (apply), `npm run db:studio` (Prisma data
-browser).
-
-**Rewritten migrations** — nothing is released yet, so a migration is amended
-in place rather than superseded by a corrective one. A dev database that already
-applied the previous version is then ahead of the files in two ways: its schema
-differs, and `_prisma_migrations` holds the old checksum, which makes
-`migrate deploy` refuse before it looks at anything else.
-
-Catch-up SQL goes under `back/prisma/manual/`, **git-ignored**: such a script is
-written for one developer's database state and would be replayed as part of the
-chain by nobody. Run it by hand (`make psql`, then `\i <file>`).
-
-It only covers the schema — re-recording an amended migration is left to
-`prisma migrate resolve --applied <name>`, which records it with the checksum
-Prisma computes itself instead of one written down by hand. `make db-reset`
-remains the alternative whenever the database holds nothing worth keeping.
-
-## Roadmap
-
-Shipped:
-
-- Foundation, connectors, encryption, live dashboard.
-- Historization + DORA (4 metrics + lead time breakdown), RegEx environment
-  engine (meta-env, priority + accumulation), BullMQ jobs.
-- Trackers, ticket references, incidents, and failures tied to the change that
-  caused them.
-- Accounts, roles and sign-in.
-- API quotas: metering read from the platforms' rate-limit headers, declared
-  budgets for the instances that meter nothing, and optional work given up
-  before the ceiling.
-- Release notes tag→tag, as Markdown.
-
-Planned:
-
-- AI rewriting of the release notes (multi-provider `LLMProvider`) and
-  publishing them back as a platform release.
-- Review/CI/throughput metrics, alerts and thresholds.
 
 ## Release notes
 

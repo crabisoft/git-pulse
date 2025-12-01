@@ -506,7 +506,11 @@
       "secretHint": "(encrypted at rest, never shown again)",
       "warning": "Copy this secret now: closing this window makes it unreadable for good. Issuing a new one invalidates the old one immediately.",
       "urlShape": "Full URL to enter on GitHub / GitLab: https://<app-domain>{{path}}",
-      "contentType": "On GitHub, pick the “application/json” content type: the default (form-urlencoded) is accepted but nothing is ingested from it."
+      "contentType": "On GitHub, pick the “application/json” content type: the default (form-urlencoded) is accepted but nothing is ingested from it.",
+      "events": {
+        "github": "Events to tick on GitHub: pull_request, workflow_run, deployment_status. Anything else is accepted, then ignored.",
+        "gitlab": "Triggers to tick on GitLab: “Merge request events”, “Pipeline events”, “Deployment events”. Anything else is accepted, then ignored."
+      }
     },
     "webhooksOn": "events"
   },

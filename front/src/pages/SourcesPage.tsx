@@ -8,6 +8,7 @@ import {
   type ApiQuotaPublic,
   type EnvRulePublic,
   type RuleTarget,
+  type SourceKind,
   type SourceMode,
   type SourcePublic,
   type ConnectionTestResult,
@@ -138,7 +139,7 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
   const [editing, setEditing] = useState<{ source: SourcePublic | null } | null>(null);
   const [deleting, setDeleting] = useState<SourcePublic | null>(null);
   /** A freshly issued webhook secret, shown once and never readable again. */
-  const [webhookSetup, setWebhookSetup] = useState<WebhookSetup | null>(null);
+  const [webhookSetup, setWebhookSetup] = useState<IssuedWebhook | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -224,7 +225,7 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
     }
   }
 
-  async function saved(created: boolean, webhook: WebhookSetup | null) {
+  async function saved(created: boolean, webhook: IssuedWebhook | null) {
     setEditing(null);
     setMsg({ kind: 'ok', text: created ? t('sources.added') : t('sources.updated') });
     await refresh();
@@ -340,10 +341,16 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
       )}
 
       {webhookSetup && (
-        <WebhookDialog setup={webhookSetup} onClose={() => setWebhookSetup(null)} />
+        <WebhookDialog issued={webhookSetup} onClose={() => setWebhookSetup(null)} />
       )}
     </>
   );
+}
+
+/** A secret just issued, and the platform it has to be declared on. */
+interface IssuedWebhook {
+  setup: WebhookSetup;
+  kind: SourceKind;
 }
 
 /**
@@ -351,8 +358,9 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
  * good — issuing another is the only way back, which is also how a leak is
  * recovered from.
  */
-function WebhookDialog({ setup, onClose }: { setup: WebhookSetup; onClose: () => void }) {
+function WebhookDialog({ issued, onClose }: { issued: IssuedWebhook; onClose: () => void }) {
   const { t } = useTranslation();
+  const { setup, kind } = issued;
   return (
     <Modal
       title={t('sources.webhook.title')}
@@ -379,7 +387,10 @@ function WebhookDialog({ setup, onClose }: { setup: WebhookSetup; onClose: () =>
           <span className="hint">{t('sources.webhook.secretHint')}</span>
           <input readOnly value={setup.secret} onFocus={(e) => e.currentTarget.select()} />
         </label>
-        <p className="field-note">{t('sources.webhook.contentType')}</p>
+        {/* Which boxes to tick, named as the platform names them: the point of
+            this dialog is to be read next to the provider's own form. */}
+        <p className="field-note">{t(`sources.webhook.events.${kind}`)}</p>
+        {kind === 'github' && <p className="field-note">{t('sources.webhook.contentType')}</p>}
         <p className="field-note">{t('sources.webhook.warning')}</p>
       </div>
     </Modal>
@@ -394,7 +405,7 @@ function SourceDialog({
 }: {
   source: SourcePublic | null;
   onClose: () => void;
-  onSaved: (created: boolean, webhook: WebhookSetup | null) => Promise<void>;
+  onSaved: (created: boolean, webhook: IssuedWebhook | null) => Promise<void>;
 }) {
   const { t } = useTranslation();
   const [form, setForm] = useState<FormState>(source ? toForm(source) : EMPTY);
@@ -491,10 +502,11 @@ function SourceDialog({
       }
       // Issued here rather than on the server's own initiative: the value is
       // readable exactly once, so it has to be asked for by whoever will read it.
-      const webhook =
+      const setup =
         saved.webhooksEnabled && !source?.webhooksEnabled
           ? await api.issueWebhookSecret(saved.id).catch(() => null)
           : null;
+      const webhook = setup ? { setup, kind: saved.kind } : null;
       await onSaved(!source, webhook);
     } catch (err) {
       const { code, params } = apiErrorInfo(err);

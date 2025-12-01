@@ -506,7 +506,11 @@
       "secretHint": "(chiffré au repos, jamais réaffiché)",
       "warning": "Copiez ce secret maintenant : fermer cette fenêtre le rend définitivement illisible. En réémettre un nouveau invalide immédiatement l'ancien.",
       "urlShape": "URL complète à saisir côté GitHub / GitLab : https://<domaine-de-l-application>{{path}}",
-      "contentType": "Côté GitHub, choisissez le type de contenu « application/json » : le défaut (form-urlencoded) est accepté mais rien n'en est ingéré."
+      "contentType": "Côté GitHub, choisissez le type de contenu « application/json » : le défaut (form-urlencoded) est accepté mais rien n'en est ingéré.",
+      "events": {
+        "github": "Événements à cocher côté GitHub : pull_request, workflow_run, deployment_status. Les autres sont acceptés puis ignorés.",
+        "gitlab": "Déclencheurs à cocher côté GitLab : « Merge request events », « Pipeline events », « Deployment events ». Les autres sont acceptés puis ignorés."
+      }
     },
     "webhooksOn": "événements"
   },
