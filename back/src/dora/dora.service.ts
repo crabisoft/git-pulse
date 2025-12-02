@@ -11,6 +11,7 @@ import type {
 } from '@repo/shared';
 import { CodedException } from '../common/coded-exception';
 import { paginate, type PageWindow } from '../common/pagination';
+import { resolvePeriod, within } from '../common/period';
 import { throwIfAborted } from '../common/request-abort';
 import { PrismaService } from '../prisma/prisma.service';
 import { SourcesService } from '../sources/sources.service';
@@ -216,23 +217,7 @@ export class DoraService {
    * `windowDays`, and the configured `doraWindowDays`.
    */
   private async resolveRange(range: DoraRange): Promise<ResolvedRange> {
-    const to = range.to ? endOfDayIfDateOnly(range.to) : new Date();
-    // An explicit `to` with no `from` reads as "the window ending that day".
-    let windowDays: number | null = null;
-    let from: Date;
-    if (range.from) {
-      from = new Date(range.from);
-    } else {
-      windowDays = range.windowDays ?? (await this.settings.get()).doraWindowDays;
-      from = new Date(to.getTime() - windowDays * 86_400_000);
-    }
-    if (from.getTime() > to.getTime()) {
-      throw new CodedException('errors.dora.invalidRange', HttpStatus.BAD_REQUEST, {
-        from: from.toISOString(),
-        to: to.toISOString(),
-      });
-    }
-    return { from: from.toISOString(), to: to.toISOString(), windowDays };
+    return resolvePeriod(range, (await this.settings.get()).doraWindowDays);
   }
 
   private async toDeploymentEvents(
@@ -391,17 +376,8 @@ function matchesDimensions(
  * inclusive upper bound. A date without a time therefore means end of day (UTC);
  * a full timestamp is taken as-is.
  */
-function endOfDayIfDateOnly(value: string): Date {
-  return /^\d{4}-\d{2}-\d{2}$/.test(value)
-    ? new Date(`${value}T23:59:59.999Z`)
-    : new Date(value);
-}
 
 /** Inclusive on both bounds. */
-function within(at: string, period: ResolvedRange): boolean {
-  const ms = new Date(at).getTime();
-  return ms >= new Date(period.from).getTime() && ms <= new Date(period.to).getTime();
-}
 
 function asMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);

@@ -1,10 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import {
   PAGE_LIMIT_MAX,
-  type DoraPeriod,
   type DoraReport,
   type DoraMetric,
   type MetricSnapshotPublic,
@@ -12,12 +10,11 @@ import {
 import { api, type DoraQuery, type PageQuery } from '../api';
 import { dimKey, formatValue } from '../doraFormat';
 import { toSearchParams } from '../doraQuery';
-import { windowLabel, windowOptions } from '../doraWindow';
 import { FILTER_DEBOUNCE_MS, useCancellableLoad, useDebounced } from '../hooks';
 import { HelpTip } from '../HelpTip';
-import { Modal } from '../Modal';
 import { Pagination } from '../Pagination';
 import { RepoFilter } from '../RepoFilter';
+import { DimensionFilter, PeriodFilter } from '../Filters';
 
 const METRIC_ORDER: DoraMetric[] = [
   'deployment_frequency',
@@ -35,9 +32,6 @@ const METRIC_ORDER: DoraMetric[] = [
  * Empty everywhere means: rolling window from the settings, every repo, no slice.
  */
 const EMPTY_QUERY: DoraQuery = { repos: [], dimensions: {} };
-
-/** The period part of the query — a rolling window, or explicit bounds. */
-type PeriodValue = Pick<DoraQuery, 'from' | 'to' | 'windowDays'>;
 
 /**
  * Sparklines only need the tail of the series. Snapshots come back in ascending
@@ -209,249 +203,6 @@ export function DoraPage({ sourceId, slug }: { sourceId: string; slug: string })
   );
 }
 
-/** Value of the option that opens the custom-period dialog. */
-const CUSTOM = 'custom';
-
-/** Bounds being edited, as the `YYYY-MM-DD` a date input speaks. Empty means open. */
-type Bounds = { from: string; to: string };
-
-/**
- * Reporting period: a rolling window picked from the presets, or explicit
- * bounds. Untouched, the dropdown shows the window resolved by the backend —
- * the one configured in the settings — so what you read is what you filter on.
- *
- * The bounds are edited in a dialog and applied in one go. Inline date inputs
- * would refetch on every keystroke the picker reports, and each fetch is a full
- * round of connector calls.
- */
-function PeriodFilter({
-  value,
-  effective,
-  onChange,
-  disabled,
-}: {
-  value: PeriodValue;
-  /** What the backend resolved, so the active period is never a mystery. */
-  effective?: DoraPeriod;
-  onChange: (next: PeriodValue) => void;
-  disabled?: boolean;
-}) {
-  const { t } = useTranslation();
-  const custom = Boolean(value.from || value.to);
-  // Nothing chosen yet: the report tells which window is in effect.
-  const windowDays = value.windowDays ?? effective?.windowDays ?? null;
-  /** Draft bounds while the dialog is open; nothing is fetched until applied. */
-  const [draft, setDraft] = useState<Bounds | null>(null);
-
-  /** Starts from the period in effect rather than from two empty fields. */
-  const edit = () =>
-    setDraft({
-      from: value.from ?? (effective ? day(effective.from) : ''),
-      to: value.to ?? (effective ? day(effective.to) : ''),
-    });
-
-  const pick = (picked: string) => {
-    if (picked === CUSTOM) edit();
-    else onChange({ from: undefined, to: undefined, windowDays: Number(picked) });
-  };
-
-  const apply = (bounds: Bounds) => {
-    setDraft(null);
-    onChange({ from: bounds.from || undefined, to: bounds.to || undefined, windowDays: undefined });
-  };
-
-  return (
-    <div className="period-filter">
-      <label>
-        {t('dora.period.window')}
-        <select
-          // The dialog owns the selection while it is open, so cancelling it
-          // snaps the dropdown back to the window still in effect.
-          value={custom || draft ? CUSTOM : (windowDays ?? '')}
-          disabled={disabled}
-          onChange={(e) => pick(e.target.value)}
-        >
-          {/* Placeholder until the first report says which window is in effect. */}
-          {windowDays === null && !custom && <option value="" disabled />}
-          {windowOptions(windowDays).map((days) => (
-            <option key={days} value={days}>
-              {windowLabel(t, days)}
-            </option>
-          ))}
-          <option value={CUSTOM}>{t('dora.period.custom')}</option>
-        </select>
-      </label>
-      {custom ? (
-        <button type="button" className="btn" onClick={edit} disabled={disabled}>
-          {boundsLabel(t, value.from, value.to)}
-        </button>
-      ) : (
-        effective && (
-          <span className="muted period-effective">
-            {t('dora.period.effective', {
-              from: formatDay(effective.from),
-              to: formatDay(effective.to),
-            })}
-          </span>
-        )
-      )}
-      <button
-        type="button"
-        className="btn"
-        onClick={() => onChange({ from: undefined, to: undefined, windowDays: undefined })}
-        disabled={disabled || (!custom && value.windowDays === undefined)}
-        title={t('dora.period.resetHint')}
-      >
-        {t('dora.period.reset')}
-      </button>
-
-      {draft && <PeriodDialog value={draft} onApply={apply} onClose={() => setDraft(null)} />}
-    </div>
-  );
-}
-
-/** Edits both bounds, then applies them as a single change. */
-function PeriodDialog({
-  value,
-  onApply,
-  onClose,
-}: {
-  value: Bounds;
-  onApply: (bounds: Bounds) => void;
-  onClose: () => void;
-}) {
-  const { t } = useTranslation();
-  const [bounds, setBounds] = useState(value);
-  // An inverted period is rejected by the API; catching it here keeps a
-  // half-typed date from costing a round trip.
-  const inverted = Boolean(bounds.from && bounds.to && bounds.from > bounds.to);
-  const valid = Boolean(bounds.from || bounds.to) && !inverted;
-
-  const title = t('dora.period.dialogTitle');
-  return (
-    <Modal
-      title={title}
-      label={title}
-      onClose={onClose}
-      footer={
-        <>
-          <button className="btn" type="button" onClick={onClose}>
-            {t('common.cancel')}
-          </button>
-          <button className="btn primary" type="submit" form="dora-period-form" disabled={!valid}>
-            {t('dora.period.apply')}
-          </button>
-        </>
-      }
-    >
-      <form
-        id="dora-period-form"
-        className="form"
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (valid) onApply(bounds);
-        }}
-      >
-        <p className="muted">{t('dora.period.dialogHint')}</p>
-        <label>
-          {t('dora.period.from')}
-          <input
-            type="date"
-            value={bounds.from}
-            max={bounds.to || undefined}
-            autoFocus
-            onChange={(e) => setBounds((b) => ({ ...b, from: e.target.value }))}
-          />
-        </label>
-        <label>
-          {t('dora.period.to')}
-          <input
-            type="date"
-            value={bounds.to}
-            min={bounds.from || undefined}
-            onChange={(e) => setBounds((b) => ({ ...b, to: e.target.value }))}
-          />
-        </label>
-      </form>
-    </Modal>
-  );
-}
-
-/** Reads the pinned period back, including the half-open cases. */
-function boundsLabel(t: TFunction, from?: string, to?: string): string {
-  if (from && to) return t('dora.period.effective', { from: formatDay(from), to: formatDay(to) });
-  if (from) return t('dora.period.since', { from: formatDay(from) });
-  return t('dora.period.until', { to: formatDay(to!) });
-}
-
-/**
- * One select per dimension key discovered in the results (customer, app, ...).
- * The vocabulary comes from the unsliced computation, so a narrowing choice
- * never removes the options you would need to widen back.
- */
-function DimensionFilter({
-  vocabulary,
-  value,
-  onChange,
-  disabled,
-}: {
-  vocabulary: Record<string, string[]>;
-  value: Record<string, string>;
-  onChange: (next: Record<string, string>) => void;
-  disabled?: boolean;
-}) {
-  const { t } = useTranslation();
-  const keys = Object.keys(vocabulary);
-  if (keys.length === 0) return null;
-
-  const pick = (key: string, picked: string) => {
-    const next = { ...value };
-    if (picked) next[key] = picked;
-    else delete next[key];
-    onChange(next);
-  };
-
-  return (
-    <div className="dimension-filter">
-      {keys.map((key) => (
-        <label key={key}>
-          {key}
-          <select
-            value={value[key] ?? ''}
-            disabled={disabled}
-            onChange={(e) => pick(key, e.target.value)}
-          >
-            <option value="">{t('dora.dimension.any')}</option>
-            {vocabulary[key].map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
-        </label>
-      ))}
-      {Object.keys(value).length > 0 && (
-        <button type="button" className="btn" onClick={() => onChange({})} disabled={disabled}>
-          {t('dora.dimension.clear')}
-        </button>
-      )}
-    </div>
-  );
-}
-
-/**
- * A date with no time parses as UTC midnight, which reads as the day before
- * west of Greenwich — pin it to local midnight so a bound displays as typed.
- */
-function formatDay(value: string): string {
-  const at = /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value;
-  return new Date(at).toLocaleDateString(undefined, { dateStyle: 'short' });
-}
-
-/** ISO timestamp to the `YYYY-MM-DD` a date input expects. */
-function day(iso: string): string {
-  return iso.slice(0, 10);
-}
 
 function Sparkline({ values }: { values: number[] }) {
   if (values.length < 2) return <span className="spark-empty">—</span>;
