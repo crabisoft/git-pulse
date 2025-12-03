@@ -44,9 +44,15 @@ Targets delegate to the npm scripts and the Docker wrapper described below.
   today, `GitHubConnector` and `GitLabConnector`, and adding a third changes
   nothing else. Base URLs are configurable, so self-hosted and enterprise
   instances are the same case as the public ones.
-- **`CryptoModule`** — secrets (tokens, keys) encrypted at rest with
+- **`CryptoModule`** — secrets (tokens, model keys) encrypted at rest with
   AES-256-GCM. The master key is generated on first boot into a `0600` file, or
   supplied through `MASTER_KEY` (base64) for Kubernetes / a secret manager.
+  `Credential` is keyed by **owner** (`source`, `llmProvider`) rather than by
+  relation, the way `ApiQuota` is: a foreign key points at one table, and a
+  model key is not a special case of a Git token. The cost is that no cascade
+  reaches it, so every owner drops its own secret when it is deleted.
+- **`LlmModule`** — model providers, and the one completion this application
+  asks of one. See [Release notes](#release-notes).
 - **`SourcesModule`** — source CRUD plus connection testing.
 - **`DashboardModule`** — live aggregation per source.
 - **`ApiQuotaModule`** — what each source has spent of its platform's rate
@@ -63,6 +69,9 @@ and by Vite in dev.
 | `/dashboard/:slug` | Live view of a source |
 | `/dora/:slug` | DORA metrics for a source |
 | `/dora/:slug/:metric` | One metric: its trend, then the events behind it |
+| `/deployments/:slug` | Deployments, filtered |
+| `/deployments/:slug/changes` | One deployment: the commits it carried |
+| `/release-notes/:slug` | Notes for a range of commits, and their AI rewriting |
 | `/login` | Sign in — or create the first admin on a fresh install |
 | `/account` | Your own name and password |
 | `/reset/:token` | Choose a new password, from a link an admin issued |
@@ -72,10 +81,11 @@ and by Vite in dev.
 | `/settings/environments` | Classification rules, global catalogue (`?target=repository` for the repos tab) |
 | `/settings/trackers` | Ticket trackers (Jira, Linear, issues) |
 | `/settings/tickets` | Ticket rules (PR → ticket linking) |
+| `/settings/ai` | Model providers the install may call |
 
-`/`, `/dashboard`, `/dora` and the source-bound settings sections redirect to
-the first source; `/settings` to `/settings/general`; everything else to the
-dashboard.
+`/`, `/dashboard`, `/dora`, `/deployments`, `/release-notes` and the
+source-bound settings sections redirect to the first source; `/settings` to
+`/settings/general`; everything else to the dashboard.
 
 **Settings is an application-wide module**, and every section in it is global:
 classification rules are a shared catalogue, ticket rules belong to their
@@ -114,6 +124,13 @@ by someone remembering to guard it. Dashboard, DORA, metrics, release notes and
 the two reads the front needs to draw them — `GET /sources`, `GET /settings` —
 are marked `@Viewer()`. Everything else, the whole configuration surface
 included, stays with the admins.
+
+Two routes sit at `account` rather than at either end. **Rewriting release
+notes** spends the install's model budget, which a public dashboard would
+otherwise open to anyone; and **listing the model providers** has to follow it,
+since a caller allowed to rewrite has to be allowed to choose what rewrites.
+That list names providers and models and says whether a key is on file — never
+the key. Declaring, editing and deleting a provider stay with the admins.
 
 **Public dashboard** (`Settings → General`) is what `viewer` reads. On, the
 dashboard and DORA are readable without an account, which is the default and
@@ -181,9 +198,12 @@ account` afterwards.
 
 `make test` (or `npm test`) runs **vitest** over both workspaces.
 
-On the **back**, the pure engines — the classification matcher, the DORA maths
-and the ticket extractor. They take plain values and return plain values, so
-that half boots no Nest container and no database.
+On the **back**, the pure engines — the classification matcher, the DORA maths,
+the ticket extractor, the release-note range resolution, the deployment
+filtering, base selection and ref validation, and the rewriting's prompt and
+answer reading.
+They take plain values and return plain values, so that half boots no Nest
+container and no database.
 
 On the **front**, what sits between a click and a request: the API client's
 query building and error mapping, the debounce and cancellation hooks, the
@@ -199,12 +219,19 @@ that list. Components render under jsdom with
 translations stubbed to echo their key — what a screen *says* is the
 translators' business, what it *does* is what is asserted.
 
-Two suites step outside that rule and boot a **real client**: the quota metering
-seams hook Octokit's request hooks and gitbeaker's built requesters, which no
-type check covers and no upgrade announces. They run the actual clients against
-a stubbed transport, so a library moving its seam fails there rather than in
-production — where the only symptom would be a gauge that quietly stopped
-moving.
+Three suites step outside that rule and boot a **real client**: the quota
+metering seams hook Octokit's request hooks and gitbeaker's built requesters,
+which no type check covers and no upgrade announces, and the model providers
+send a request shape no type check covers either. They run the actual clients
+against a stubbed transport, so a library or a vendor moving its seam fails
+there rather than in production — where the only symptom would be a gauge that
+quietly stopped moving, or a rewriting that quietly stopped working.
+
+The provider suite is where the vendors' disagreements are pinned down: that no
+`temperature` is ever sent to Anthropic, which rejects it outright; that no
+output ceiling is sent to OpenAI, whose parameter for one was renamed; that a
+model name reaching Google's URL is escaped rather than opening a path of its
+own; and that a refusal is reported instead of read as an empty answer.
 
 The pure engines came first on purpose: they are what every metric on screen is
 derived from, and the only place where a silent change of behaviour goes
@@ -388,6 +415,103 @@ deployment that did not include it is attributed to it anyway, so read
 three use the pull request's: how long a change takes to arrive is a property of
 where it lands, so filtering on `type=Prod` answers "time to production" with no
 extra setting.
+
+## Deployments
+
+`GET /api/sources/:id/deployments` lists what went where, over a period, with
+the environment resolved against the classification rules. The attributes on a
+row are the very ones DORA slices on, so a line here and a slice of a metric
+mean the same thing by construction rather than by convention.
+
+The filters split the same way the DORA report's do:
+
+| Parameter | Effect |
+|---|---|
+| `from` / `to` / `windowDays` | Period — the shared resolution, not a second one |
+| `repos` | **Scopes collection** (repeatable or comma-separated) |
+| `environment` | Environment names, exact, repeatable |
+| `status` | Deployment statuses, repeatable |
+| `dimension` | `key:value` pairs from the classification, all must match |
+
+Vocabularies — repos, environments, statuses, dimensions — are computed **before
+the filters apply**, so narrowing one never empties the list you pick the next
+one from. A meta-environment is offered under the key `@meta`: it is a
+membership rather than an attribute, and the `@` is there because a rule
+extracting an attribute literally named `meta` is entirely plausible.
+
+> The period logic is `resolvePeriod`, shared with DORA rather than restated.
+> Two implementations of "what does an omitted `to` mean" would drift, and a
+> period is what every number on screen is relative to.
+
+An environment name is a **link** whenever the platform stated where to reach
+it: GitHub carries it on a deployment status, GitLab on the environment itself.
+It is read and never built — the address of a deployed application follows from
+nothing we hold, so a guess would be a broken link. Null is the common case, and
+also what a GitHub run degraded under the API reserve leaves behind, since the
+status call carries the URL and the status together. Stored sources keep it in a
+column of its own, under the usual rule: a feed that does not report it does not
+blank it.
+
+### What a deployment carried
+
+Each deployment has a **page of its own** at `/deployments/:slug/changes`, which
+lists the commits between it and the previous deployment to the same environment.
+A page rather than a dialog because this is the thing people send each other:
+"look at what went out" is a link, and a link has to survive a refresh and open
+without the list that produced it. Everything it needs therefore travels in the
+URL — the deployment, its repo, the base, and the period — and the payload
+carries the deployment itself so one request draws the whole page.
+
+It asks `GET …/deployments/:deploymentId/changes?repo=&base=`, which compares two
+refs and reads the commits between them with the very same parser the release
+notes use — one reading of a commit message, not two.
+
+**Three bases are offered, and none is right in general:**
+
+| `base` | Answers | Empty when |
+|---|---|---|
+| `previous` | What went out since the last successful deployment of that repo to that environment | It is the first deployment there in the period |
+| `default` | What this ref adds on top of the default branch — its history since diverging from it | The deployed ref *is* that branch |
+| `ref` | What went out since a tag, a branch or a commit the reader names | The named ref is the deployed one |
+
+That second row is why the choice is the reader's. Deploying `main` is the
+common case in production, and comparing `main` to `main` yields nothing;
+`previous` stays useful there. Conversely a first deployment has no predecessor,
+and `default` is the one that still says something.
+
+The third exists because those two answer the questions asked *most often*, not
+all of them: "since the release we rolled back from" is a tag, and "since that
+fix" is a sha. It is picked in a dialog — a list of the repo's tags and branches,
+plus a field for anything else — and applied in one go, the way the custom
+period is: the comparison behind it is a round of platform calls, and refetching
+on every keystroke of a sha would spend a budget answering questions nobody
+asked. The picker and the field are one control: a sha is a ref like the others,
+and whichever was touched last wins.
+
+> A named ref is checked before it travels (`isValidGitRef`). It is permissive —
+> the platform is the authority on what resolves — and rejects only what cannot
+> work: whitespace and the characters git forbids, a leading dash, and `..`.
+> That last one matters most: the compare endpoints are built around
+> `base...head`, so a ref carrying it would be read as a second bound and answer
+> a different question without saying so.
+
+`previous` skips failed deployments deliberately: comparing against one would
+report what was *attempted* rather than what is running, and a run of failures
+would make every deployment after it look empty.
+
+> **The platforms record nothing about which branch a branch was cut from.** It
+> is written neither in Git nor in either API, so `default` is as close to a
+> fork point as anything can honestly get — and it is exact whenever the branch
+> was cut from the default branch, which is the usual case.
+
+The period travels with the detail request: the base is looked for among the
+deployments of the window the list was showing, so both answer about the same
+stretch of time — and a link reproduces exactly what its sender was reading.
+
+> Switching source from that page rewrites the path and drops the query with
+> it, since `generatePath` carries no search string. A page reached without an
+> `id` therefore redirects back to the list rather than reporting a deployment
+> it cannot find — which also covers a hand-edited link.
 
 ## Metric trends
 
@@ -723,6 +847,7 @@ keep current on its own, and what only a listing ever brings.
 | | `firstCommitAt`, `firstReviewAt` | the **merged listing only** — see below |
 | `StoredPipeline` | `ref`, `status`, `url`, `createdAt`, `updatedAt`, `durationSec` | the pipeline listing, and the run events |
 | `StoredDeployment` | `environment`, `ref`, `status`, `createdAt` | the deployment listing, and the deployment events |
+| | `environmentUrl` | the listing, and the GitHub events only |
 
 Three consequences follow, and each is a real behaviour rather than a caveat:
 
@@ -738,6 +863,10 @@ Three consequences follow, and each is a real behaviour rather than a caveat:
 - **A GitLab pipeline gets its duration from events sooner than from listings.**
   The listing would need one call per pipeline to know it, so it stores `null`;
   the `Pipeline Hook` reports it directly.
+- **A GitLab deployment event names the environment but not its address.** The
+  `Deployment Hook` carries no external URL, so an event never fills
+  `environmentUrl` there — only the listing does, and the merge keeps what is
+  already stored rather than blanking it.
 
 Alongside them sit three tables that are not source data: `SyncState` (the
 cursors), `WebhookSecret` and `WebhookDelivery`.
@@ -868,12 +997,27 @@ not one. Add the tunnel's hostname to `VITE_ALLOWED_HOSTS` (comma-separated) in
 
 `GET /api/sources/:id/release-notes?repo=&from=&to=` summarises a range of
 commits; `GET /api/sources/:id/tags?repo=` lists what a range can be picked
-from.
+from, and `GET /api/sources/:id/repos` the repos to pick among. That last one
+goes through the `SourceReader`, so a `stored` source answers it from its own
+table instead of spending a call on a list it already has.
+
+**A bound is a ref, not a release**: a tag or a branch, since that is what the
+platforms compare. `GET /api/sources/:id/branches?repo=` lists the second kind
+alongside `tags`, and the picker offers them in named groups — `release/3.0`
+read as a version would be a poor guess. On GitHub that listing costs two calls
+rather than one: it does not say which branch is the default, and that is the
+branch an omitted bound resolves to. Paid when a picker opens rather than during
+a collection, so it sits outside the fan-out the API reserve guards.
 
 Bounds fill themselves in: `to` defaults to the most recent tag — a release is
 summarised as it was cut, not as the branch has drifted since — and `from` to
 the tag below it. With no tag at all the range runs from the beginning of
 history to the default branch, which is what a first release needs.
+
+> When `to` is a **branch** there is no tag "below" it to find, so `from`
+> becomes the most recent tag instead of the beginning of history: *everything
+> on this branch since the last release* is the question a branch as an upper
+> bound is asking. `resolveRange` is pure and tested for exactly that.
 
 Each commit is read as a **Conventional Commit** and filed under its type, with
 breaking changes repeated at the top: they are what a reader upgrading needs
@@ -885,10 +1029,82 @@ Ticket references are read from commit messages by the **same rules** as branch
 names and PR titles, so a release note links its tickets without any further
 configuration.
 
-> Only the Markdown is produced for now. AI rewriting through an `LLMProvider`
-> and publishing the notes back as a platform release are the remaining steps of
-> this phase; the first needs `Credential` generalised to a polymorphic owner,
-> which has been deferred until it had a consumer.
+### Rewriting them with a model
+
+Generated notes read like a commit log, because that is what they are. **Settings
+› AI providers** declares a model API — a vendor, a model, a key — and the
+release-notes page offers to rewrite the notes through it.
+
+`POST /api/release-notes/rewrite` takes the Markdown in its body rather than a
+range to regenerate: generating costs a walk through a history, and the caller
+is holding the result already. It is also why the route is bound to no source —
+nothing in it needs a connector.
+
+**The Markdown is the only thing that leaves the install.** No token, no repo
+listing, nothing about the source beyond what the notes already say.
+
+The instructions are constraints rather than a style, since the failure that
+matters is not a dull sentence:
+
+| Asked for | Why |
+|---|---|
+| State nothing the input does not | An invented impact or number reads exactly like a real one |
+| Keep every Markdown link as written | The commit and ticket links are how a reader verifies the rest |
+| Keep every entry; merging two is allowed, dropping one is not | A missing entry is invisible, where a clumsy one is not |
+| Rewrite the wording, drop the Conventional Commits prefixes | This is the part worth paying a model for |
+
+The generated notes stay on screen next to the rewriting — reading the two
+together is the only way to catch a model that embellished, and no instruction
+replaces it.
+
+**An install that declared no provider never sees the rewriting at all**: the
+panel is absent rather than present and explaining why it cannot act. A control
+that does nothing is noise on every visit, and the place to fix it is Settings,
+where an admin already is when they care. The same rule hides it from a visitor
+reading a public dashboard, who has no account to spend the budget with.
+
+> The prompt and the reading of the answer are pure functions in
+> `release-notes/rewrite.ts`, tested like the DORA maths: this is a place where
+> a change of behaviour looks stylistic and is not. A model that wraps the whole
+> document in a code fence is unwrapped; one that wraps a shell sample *inside*
+> the notes is not.
+
+### Declaring a provider
+
+| Field | Role |
+|---|---|
+| `kind` | `anthropic`, `openai`, `google`, `mistral` — decides the request shape and the auth header |
+| `model` | free text, as the vendor spells it |
+| `apiKey` | encrypted at rest like a source token, readable by nothing afterwards |
+| `baseUrl` | optional: a gateway, a proxy, a compatible deployment |
+
+Several may coexist — one per vendor, or two of the same vendor on different
+models — and exactly one carries the **default**, which is what a caller naming
+none gets. The first provider declared takes it whatever the form said, and
+deleting the holder promotes the oldest survivor: a provider nobody can reach by
+omitting an id would be a trap. Testing a provider spends one call, and is the
+only way to prove the key, the model name and the endpoint together — a form
+can check none of the three.
+
+**The model is free text on purpose.** Vendors rename models far more often than
+they change their API, so a validated list would go stale between releases. The
+form prefills a default where we can state one that is current, and starts empty
+where we cannot: a model identifier we could not vouch for would be worse than
+none, since it only fails at the first call.
+
+Anthropic goes through the vendor's own SDK, the same choice the Git connectors
+make with Octokit and gitbeaker — it buys retries, typed errors and a request
+shape that follows the API rather than our reading of it. The other three are a
+single JSON POST each, which is not worth a dependency until one of them needs
+more than one call.
+
+> Model budgets are **not** metered. `ApiQuota` counts calls against a
+> rate-limit window, where a vendor bills tokens — a different unit on a
+> different clock. Declaring the ceiling would mean counting what a completion
+> spends, which the answer states and the request does not.
+
+> Publishing the notes back as a platform release is the remaining step of this
+> phase.
 
 ## Getting started — Docker (recommended)
 
@@ -960,10 +1176,72 @@ npm run dev:front                        # http://localhost:5173
 
 ## Configuring a source
 
-1. **Sources** tab → *Add a source*.
+1. **Settings › Sources** → *Add a source*.
 2. Platform, base URL (e.g. `https://gitlab.example.com`), organization/group,
-   auth method and secret (token). The secret is encrypted immediately.
+   auth method and secret. The secret is encrypted immediately.
 3. **Test** the connection, then switch to the **Dashboard** tab.
+
+### What to grant it
+
+Everything below is **read-only**: no call any connector makes writes anything.
+Publishing release notes back as a platform release will be the first exception,
+and it is not implemented yet.
+
+**GitHub App** — the permissions are what the calls need, nothing wider:
+
+| Permission | Level | What uses it |
+|---|---|---|
+| Metadata | Read | Listing the org's repos, and reading a repo's default branch. Mandatory on every GitHub App anyway. |
+| Contents | Read | Tags, branches, commits and comparisons — release notes, and the contents of a deployment |
+| Pull requests | Read | Open and merged PRs, plus their commits and reviews for the lead-time segments |
+| Actions | Read | Workflow runs — the pipelines on the dashboard |
+| Deployments | Read | Deployments and their statuses — the deployments page, and DORA |
+| Issues | Read | **Only** when `failureSource` is `incidents` or `both` and that tracker is GitHub |
+
+Install it on the organization and grant it the repositories the source's scope
+covers — an installation only ever sees what it was given, so a repo missing
+here is a repo missing from every metric.
+
+With **webhooks** on, subscribe to three events; each is covered by a permission
+already granted above:
+
+| Event | Reads through |
+|---|---|
+| *Pull requests* (`pull_request`) | Pull requests |
+| *Workflow runs* (`workflow_run`) | Actions |
+| *Deployment statuses* (`deployment_status`) | Deployments |
+
+**Token instead of an App.** A classic PAT needs `repo` and `read:org`; a
+fine-grained one needs the same repository permissions as the table above.
+
+**GitLab.** A group access token or PAT with `read_api` covers all of it —
+GitLab has no per-resource split to make here.
+
+> A source missing one of these does not fail loudly: the services degrade
+> rather than lose the whole view, so the symptom is a panel that stays empty.
+> The dashboard says which collection failed in its warnings banner, and
+> **Test** proves the credential before any of that — but note it only exercises
+> the repo listing, so it passes on a token that will still come up short on,
+> say, deployments.
+
+### Collecting on demand
+
+**Settings › Sources** carries a *Collect now* action per source, next to *Test*.
+On a `stored` source this is also what fills the store: the ingestion is part of
+collecting it rather than a schedule of its own, so there is nothing else to
+trigger. It is `POST /api/sources/:id/collect`, admin-only like the rest of the
+configuration.
+
+The same call fires by itself, silently, the first time a source is switched to
+`stored` — waiting for the cron would show an empty board for as long as
+`collectCron` says. There, a form closing is no place for an error; on the
+button, the outcome is reported.
+
+> **A first run over a large scope takes minutes**, and walks the whole
+> reporting window repo by repo. Behind a reverse proxy that is long enough to
+> hit a gateway timeout: the browser then reports a network error while the
+> collection carries on server-side. Check `make logs` before starting it again
+> — the failure that matters is logged as `Ingestion échouée pour <id>`.
 
 ## Database migrations
 
@@ -1013,14 +1291,16 @@ Shipped:
   engine (meta-env, priority + accumulation), BullMQ jobs.
 - Trackers, ticket references, incidents, and failures tied to the change that
   caused them.
+- Deployments view: filtered by period, repo, environment, status and
+  dimensions, with what each deployment carried against either base.
 - Accounts, roles and sign-in.
 - API quotas: metering read from the platforms' rate-limit headers, declared
   budgets for the instances that meter nothing, and optional work given up
   before the ceiling.
-- Release notes tag→tag, as Markdown.
+- Release notes tag→tag, as Markdown, and their AI rewriting through a declared
+  model provider (Anthropic, OpenAI, Google, Mistral).
 
 Planned:
 
-- AI rewriting of the release notes (multi-provider `LLMProvider`) and
-  publishing them back as a platform release.
+- Publishing the release notes back as a platform release.
 - Review/CI/throughput metrics, alerts and thresholds.

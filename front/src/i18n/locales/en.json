@@ -5,7 +5,8 @@
   "nav": {
     "dashboard": "Dashboard",
     "dora": "DORA",
-    "settings": "Settings"
+    "settings": "Settings",
+    "releaseNotes": "Release notes"
   },
   "auth": {
     "signInTitle": "Sign in",
@@ -53,7 +54,8 @@
       "env": "Environments",
       "tickets": "Tickets",
       "trackers": "Trackers",
-      "users": "Accounts"
+      "users": "Accounts",
+      "ai": "AI providers"
     },
     "desc": {
       "general": "Collection and thresholds",
@@ -61,7 +63,8 @@
       "env": "Classification rules",
       "tickets": "PR → ticket linking",
       "trackers": "Jira, Linear, issues",
-      "users": "Who may sign in"
+      "users": "Who may sign in",
+      "ai": "Models the install may call"
     },
     "general": {
       "appTitle": "Application",
@@ -267,6 +270,16 @@
     "webhook": {
       "unknown": "No webhook is listening here.",
       "rejected": "Delivery refused."
+    },
+    "llm": {
+      "notFound": "Provider {{id}} not found.",
+      "noProvider": "No AI provider is declared, and none was named.",
+      "noKey": "This provider has no key on file.",
+      "defaultRequired": "One provider has to be the default: move it rather than clearing it.",
+      "unsupportedKind": "Unsupported vendor: {{kind}}.",
+      "callFailed": "The vendor refused the call: {{reason}}",
+      "refused": "The model declined to answer.",
+      "emptyAnswer": "The model answered nothing."
     }
   },
   "empty": {
@@ -577,5 +590,68 @@
       "sources": "Sources"
     },
     "incidentsBadge": "incidents"
+  },
+  "llm": {
+    "listTitle": "AI providers",
+    "hint": "Declared once with a key, and used to rewrite release notes. The key is encrypted at rest and never returned.",
+    "listEmpty": "No provider declared. Release notes are still generated — only the rewriting needs one.",
+    "addTitle": "Add a provider",
+    "editTitle": "Edit {{name}}",
+    "added": "Provider added.",
+    "updated": "Provider updated.",
+    "deleted": "Provider deleted.",
+    "deleteTitle": "Delete this provider",
+    "confirmDelete": "Delete {{name}}? Its key is deleted with it.",
+    "defaultBadge": "default",
+    "noKeyBadge": "no key",
+    "defaultEndpoint": "vendor endpoint",
+    "makeDefault": "Make default",
+    "test": {
+      "ok": "Connection successful ({{model}}).",
+      "failed": "Connection failed: {{reason}}"
+    },
+    "testing": "Testing…",
+    "form": {
+      "name": "Name",
+      "kind": "Vendor",
+      "model": "Model",
+      "modelHint": "as the vendor spells it",
+      "apiKey": "API key",
+      "apiKeyKeep": "leave empty to keep the stored one",
+      "baseUrl": "Base URL",
+      "baseUrlHint": "optional — a gateway or a proxy",
+      "isDefault": "Use this provider when none is named",
+      "submit": "Add"
+    },
+    "runTest": "Test"
+  },
+  "releaseNotes": {
+    "rangeTitle": "Range",
+    "hint": "A range of commits, summarised as Markdown. A bound is a tag or a branch, and they fill themselves in: the most recent tag, and the tag below it.",
+    "repo": "Repository",
+    "from": "From",
+    "fromAuto": "The tag below",
+    "to": "To",
+    "toAuto": "Most recent tag",
+    "generate": "Generate",
+    "generating": "Generating…",
+    "noRepo": "No repository in this source scope.",
+    "noTag": "This repository has no tag: pick a branch, or leave the bounds alone to run from the beginning of history to the default branch.",
+    "breaking": "⚠ Breaking changes",
+    "empty": "No change in this range.",
+    "markdown": "Markdown",
+    "copy": "Copy",
+    "copied": "Copied",
+    "rewriteTitle": "Rewrite with AI",
+    "rewriteHint": "The Markdown above is the only thing sent to the vendor. The generated notes stay on screen, so you can check nothing was added.",
+    "provider": "Provider",
+    "language": "Language",
+    "languageKeep": "Keep as written",
+    "rewrite": "Rewrite",
+    "rewriting": "Rewriting…",
+    "rewrittenBy": "Rewritten by {{name}} ({{model}})",
+    "tags": "Tags",
+    "branches": "Branches",
+    "defaultBranch": "default branch"
   }
 }

@@ -7,6 +7,7 @@ import type {
   ScopeRules,
   ConnectionTestResult,
   Tag,
+  Branch,
 } from '@repo/shared';
 import type { QuotaSink } from '../../api-quota/rate-limit-headers';
 
@@ -84,6 +85,12 @@ export interface SourceConnector {
 
   /** Tags of a repo, most recent first — what a release range is picked from. */
   listTags(ctx: ConnectorContext, repo: string): Promise<Tag[]>;
+
+  /**
+   * Branches of a repo. A range bound may be one: the compare endpoints take a
+   * ref, so a tag and a branch cost the same and read differently.
+   */
+  listBranches(ctx: ConnectorContext, repo: string): Promise<Branch[]>;
 
   /**
    * Commits reachable from `to` but not from `from`. An omitted `from` means

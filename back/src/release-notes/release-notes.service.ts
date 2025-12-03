@@ -1,10 +1,23 @@
 import { Injectable, HttpStatus, Logger } from '@nestjs/common';
-import type { Commit, ReleaseNoteEntry, ReleaseNoteSection, ReleaseNotes, Tag } from '@repo/shared';
+import type {
+  Branch,
+  Commit,
+  ReleaseNoteEntry,
+  ReleaseNoteSection,
+  ReleaseNotes,
+  RewriteResult,
+  Tag,
+} from '@repo/shared';
 import { CodedException } from '../common/coded-exception';
 import { SourcesService } from '../sources/sources.service';
 import { ConnectorFactory } from '../sources/connectors/connector.factory';
 import { TicketRulesService } from '../ticket-rules/ticket-rules.service';
+import { LlmService } from '../llm/llm.service';
+import { ReaderFactory } from '../ingest/reader.factory';
 import { parseConventionalCommit, sectionRank } from './conventional-commit';
+import { resolveRange } from './range';
+import { REWRITE_SYSTEM, buildRewritePrompt, readRewritten } from './rewrite';
+import type { RewriteReleaseNotesDto } from './dto/rewrite-release-notes.dto';
 
 /** What to summarise: a repo, and the range within it. */
 export interface ReleaseNotesQuery {
@@ -23,12 +36,63 @@ export class ReleaseNotesService {
     private readonly sources: SourcesService,
     private readonly connectors: ConnectorFactory,
     private readonly ticketRules: TicketRulesService,
+    private readonly llm: LlmService,
+    private readonly readers: ReaderFactory,
   ) {}
+
+  /**
+   * Repos in the source's scope, for whoever picks the one to summarise. Goes
+   * through the reader rather than the connector: a `stored` source answers
+   * this from its own table, without spending a call on a list it already has.
+   */
+  async repos(sourceId: string, signal?: AbortSignal): Promise<string[]> {
+    const reader = await this.readers.for(sourceId, signal);
+    return reader.listRepositories();
+  }
+
+  /**
+   * Rewrites generated notes through a declared model provider. The notes come
+   * in with the request: regenerating them would replay the whole burst of
+   * connector calls to arrive at the text the caller already has.
+   *
+   * The Markdown is the only thing sent to the vendor — no token, no repo
+   * listing, nothing about the source beyond what the notes already say.
+   */
+  async rewrite(dto: RewriteReleaseNotesDto, signal?: AbortSignal): Promise<RewriteResult> {
+    const answer = await this.llm.complete(
+      dto.providerId,
+      {
+        system: REWRITE_SYSTEM,
+        prompt: buildRewritePrompt(dto.markdown, dto.language),
+      },
+      signal,
+    );
+    this.logger.log(
+      `Notes de version reformulées par ${answer.provider.name} (${answer.provider.model})`,
+    );
+    return {
+      markdown: readRewritten(answer.text),
+      providerId: answer.provider.id,
+      providerName: answer.provider.name,
+      model: answer.provider.model,
+    };
+  }
 
   /** Tags of a repo, for whoever picks the range. */
   async tags(sourceId: string, repo: string, signal?: AbortSignal): Promise<Tag[]> {
     const { ctx, kind } = await this.sources.resolveContext(sourceId, signal);
     return this.connectors.for(kind).listTags(ctx, repo);
+  }
+
+  /**
+   * Branches of a repo — the other kind of bound a range may have. Kept apart
+   * from `tags` rather than merged into one call: the two are picked from the
+   * same control but they are not the same thing, and a repo may have hundreds
+   * of one and none of the other.
+   */
+  async branches(sourceId: string, repo: string, signal?: AbortSignal): Promise<Branch[]> {
+    const { ctx, kind } = await this.sources.resolveContext(sourceId, signal);
+    return this.connectors.for(kind).listBranches(ctx, repo);
   }
 
   async generate(
@@ -40,7 +104,7 @@ export class ReleaseNotesService {
     const connector = this.connectors.for(kind);
     const tags = await connector.listTags(ctx, query.repo);
 
-    const { from, to } = await this.resolveRange(query, tags, () =>
+    const { from, to } = await resolveRange(query, tags, () =>
       connector.defaultBranch(ctx, query.repo),
     );
     const commits = await connector.listCommitsBetween(ctx, query.repo, from, to);
@@ -62,23 +126,22 @@ export class ReleaseNotesService {
   }
 
   /**
-   * Fills the bounds in. `to` defaults to the most recent tag so a release is
-   * summarised as it was cut, not as the branch has drifted since; `from` to
-   * the tag before it, which is the range a reader expects.
+   * Parses each commit and attaches the tickets its message mentions, dropping
+   * the Conventional Commits type — what a caller wants when it has a range of
+   * its own to describe rather than a release to file.
+   *
+   * Public because the deployments page asks the same question of a different
+   * range: what a ref carries over another one is the same reading of the same
+   * commits, and two readings of a commit message would drift.
    */
-  private async resolveRange(
-    query: ReleaseNotesQuery,
-    tags: Tag[],
-    defaultBranch: () => Promise<string>,
-  ): Promise<{ from: string | null; to: string }> {
-    const to = query.to ?? tags[0]?.name ?? (await defaultBranch());
-    if (query.from) return { from: query.from, to };
-
-    // The tag just below `to` in the platform's own ordering. Absent — a first
-    // release, or a branch head — the range starts at the beginning of history.
-    const index = tags.findIndex((tag) => tag.name === to);
-    const previous = index === -1 ? tags[0] : tags[index + 1];
-    return { from: previous?.name ?? null, to };
+  async describeCommits(
+    sourceId: string,
+    owner: string,
+    repo: string,
+    commits: Commit[],
+  ): Promise<ReleaseNoteEntry[]> {
+    const entries = await this.toEntries(sourceId, owner, repo, commits);
+    return entries.map(({ entry }) => entry);
   }
 
   /** Parses each commit and attaches the tickets its message mentions. */

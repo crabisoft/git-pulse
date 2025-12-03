@@ -1,5 +1,5 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import {
   INCIDENT_TRACKER_KINDS,
   type AuthKind,
@@ -16,6 +16,7 @@ import { CodedException } from '../common/coded-exception';
 import { toPage, type PageWindow } from '../common/pagination';
 import { PrismaService } from '../prisma/prisma.service';
 import { CryptoService } from '../crypto/crypto.service';
+import { CredentialsService } from '../crypto/credentials.service';
 import { ApiQuotaService } from '../api-quota/api-quota.service';
 import { SettingsService } from '../settings/settings.service';
 import type { ConnectorContext, SourceAuth } from './connectors/source-connector.interface';
@@ -28,6 +29,7 @@ export class SourcesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
+    private readonly credentials: CredentialsService,
     private readonly connectors: ConnectorFactory,
     private readonly quotas: ApiQuotaService,
     private readonly settings: SettingsService,
@@ -36,30 +38,29 @@ export class SourcesService {
   async create(dto: CreateSourceDto): Promise<SourcePublic> {
     await this.assertTrackers(dto.trackerIds, dto.incidentTrackerId);
     this.assertWebhooksAllowed(dto.mode ?? 'live', dto.webhooksEnabled ?? false);
-    const enc = this.crypto.encrypt(credentialPlaintext(dto));
-    const source = await this.prisma.source.create({
-      include: WITH_TRACKERS,
-      data: {
-        trackers: { create: toBindings(dto.trackerIds, dto.incidentTrackerId) },
-        envRules: { create: (dto.envRuleIds ?? []).map((ruleId) => ({ ruleId })) },
-        name: dto.name,
-        slug: await this.uniqueSlug(dto.name),
-        kind: dto.kind,
-        baseUrl: dto.baseUrl,
-        authKind: dto.authKind,
-        scope: dto.scope as unknown as object,
-        mode: dto.mode,
-        webhooksEnabled: dto.webhooksEnabled,
-        credential: {
-          create: {
-            ciphertext: enc.ciphertext,
-            iv: enc.iv,
-            authTag: enc.authTag,
-            keyVersion: enc.keyVersion,
-          },
+    // The id is minted here rather than by the database: the credential no
+    // longer hangs off the source relation, so the two writes need something to
+    // agree on before either of them runs.
+    const id = randomUUID();
+    const [source] = await this.prisma.$transaction([
+      this.prisma.source.create({
+        include: WITH_TRACKERS,
+        data: {
+          id,
+          trackers: { create: toBindings(dto.trackerIds, dto.incidentTrackerId) },
+          envRules: { create: (dto.envRuleIds ?? []).map((ruleId) => ({ ruleId })) },
+          name: dto.name,
+          slug: await this.uniqueSlug(dto.name),
+          kind: dto.kind,
+          baseUrl: dto.baseUrl,
+          authKind: dto.authKind,
+          scope: dto.scope as unknown as object,
+          mode: dto.mode,
+          webhooksEnabled: dto.webhooksEnabled,
         },
-      },
-    });
+      }),
+      this.credentials.writeOp({ type: 'source', id }, credentialPlaintext(dto)),
+    ]);
     return toPublic(source);
   }
 
@@ -167,9 +168,9 @@ export class SourcesService {
       throw new CodedException('errors.source.appUnsupported', HttpStatus.BAD_REQUEST);
     }
 
-    const newCredential =
+    const newSecret =
       dto.secret !== undefined || dto.app !== undefined || authKind !== current.authKind
-        ? this.crypto.encrypt(credentialPlaintext({ authKind, secret: dto.secret, app: dto.app }))
+        ? credentialPlaintext({ authKind, secret: dto.secret, app: dto.app })
         : null;
 
     await this.assertTrackers(dto.trackerIds, dto.incidentTrackerId);
@@ -180,7 +181,7 @@ export class SourcesService {
     this.assertWebhooksAllowed(mode, dto.webhooksEnabled ?? false);
 
     const renamed = dto.name !== undefined && dto.name !== current.name;
-    const source = await this.prisma.source.update({
+    const updateSource = this.prisma.source.update({
       where: { id },
       include: WITH_TRACKERS,
       data: {
@@ -211,26 +212,15 @@ export class SourcesService {
         scope: dto.scope ? (dto.scope as unknown as object) : undefined,
         mode,
         webhooksEnabled,
-        credential: newCredential
-          ? {
-              upsert: {
-                create: {
-                  ciphertext: newCredential.ciphertext,
-                  iv: newCredential.iv,
-                  authTag: newCredential.authTag,
-                  keyVersion: newCredential.keyVersion,
-                },
-                update: {
-                  ciphertext: newCredential.ciphertext,
-                  iv: newCredential.iv,
-                  authTag: newCredential.authTag,
-                  keyVersion: newCredential.keyVersion,
-                },
-              },
-            }
-          : undefined,
       },
     });
+
+    // One transaction: an auth scheme that changed without its secret following
+    // would authenticate wrongly rather than not at all.
+    const [source] = await this.prisma.$transaction([
+      updateSource,
+      ...(newSecret === null ? [] : [this.credentials.writeOp({ type: 'source', id }, newSecret)]),
+    ]);
 
     // Dropped rather than left behind: a secret nobody remembers turning off
     // would keep authenticating deliveries for a source that stopped listening.
@@ -287,9 +277,10 @@ export class SourcesService {
     await this.prisma.source.delete({ where: { id } }).catch(() => {
       throw new CodedException('errors.source.notFound', HttpStatus.NOT_FOUND, { id });
     });
-    // Quotas are keyed by subject rather than by relation, so no cascade
-    // reaches them.
+    // Quotas and credentials are keyed by owner rather than by relation, so no
+    // cascade reaches either.
     await this.quotas.forget({ kind: 'source', id });
+    await this.credentials.forget({ type: 'source', id });
   }
 
   /** Tests the connection, decrypting the secret on the fly. */
@@ -311,20 +302,12 @@ export class SourcesService {
     id: string,
     signal?: AbortSignal,
   ): Promise<{ ctx: ConnectorContext; kind: SourceKind }> {
-    const source = await this.prisma.source.findUnique({
-      where: { id },
-      include: { credential: true },
-    });
+    const source = await this.prisma.source.findUnique({ where: { id } });
     if (!source) throw new CodedException('errors.source.notFound', HttpStatus.NOT_FOUND, { id });
-    if (!source.credential) {
+    const secret = await this.credentials.read({ type: 'source', id });
+    if (secret === null) {
       throw new CodedException('errors.source.noCredential', HttpStatus.NOT_FOUND, { id });
     }
-    const secret = this.crypto.decrypt({
-      ciphertext: source.credential.ciphertext,
-      iv: source.credential.iv,
-      authTag: source.credential.authTag,
-      keyVersion: source.credential.keyVersion,
-    });
     // Read once, here: the reserve is a setting, and asking the database for it
     // per pull request would cost more than the calls it saves. What it guards
     // against — the consumption — is what moves during a run, and that is read

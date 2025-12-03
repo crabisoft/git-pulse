@@ -5,7 +5,8 @@
   "nav": {
     "dashboard": "Tableau de bord",
     "dora": "DORA",
-    "settings": "Paramètres"
+    "settings": "Paramètres",
+    "releaseNotes": "Notes de version"
   },
   "auth": {
     "signInTitle": "Connexion",
@@ -53,7 +54,8 @@
       "env": "Environnements",
       "tickets": "Tickets",
       "trackers": "Trackers",
-      "users": "Comptes"
+      "users": "Comptes",
+      "ai": "Fournisseurs IA"
     },
     "desc": {
       "general": "Collecte et seuils",
@@ -61,7 +63,8 @@
       "env": "Règles de classification",
       "tickets": "Rattachement PR → ticket",
       "trackers": "Jira, Linear, issues",
-      "users": "Qui peut se connecter"
+      "users": "Qui peut se connecter",
+      "ai": "Modèles que l’installation peut appeler"
     },
     "general": {
       "appTitle": "Application",
@@ -267,6 +270,16 @@
     "webhook": {
       "unknown": "Aucun webhook n'écoute ici.",
       "rejected": "Livraison refusée."
+    },
+    "llm": {
+      "notFound": "Fournisseur {{id}} introuvable.",
+      "noProvider": "Aucun fournisseur IA n’est déclaré, et aucun n’a été nommé.",
+      "noKey": "Ce fournisseur n’a aucune clé enregistrée.",
+      "defaultRequired": "Un fournisseur doit rester celui par défaut : déplacez-le au lieu de le retirer.",
+      "unsupportedKind": "Fournisseur non pris en charge : {{kind}}.",
+      "callFailed": "Le fournisseur a refusé l’appel : {{reason}}",
+      "refused": "Le modèle a refusé de répondre.",
+      "emptyAnswer": "Le modèle n’a rien répondu."
     }
   },
   "empty": {
@@ -577,5 +590,68 @@
       "sources": "Sources"
     },
     "incidentsBadge": "incidents"
+  },
+  "llm": {
+    "listTitle": "Fournisseurs IA",
+    "hint": "Déclarés une fois avec leur clé, puis utilisés pour reformuler les notes de version. La clé est chiffrée au repos et jamais renvoyée.",
+    "listEmpty": "Aucun fournisseur déclaré. Les notes de version restent générées — seule la reformulation en demande un.",
+    "addTitle": "Ajouter un fournisseur",
+    "editTitle": "Modifier {{name}}",
+    "added": "Fournisseur ajouté.",
+    "updated": "Fournisseur mis à jour.",
+    "deleted": "Fournisseur supprimé.",
+    "deleteTitle": "Supprimer ce fournisseur",
+    "confirmDelete": "Supprimer {{name}} ? Sa clé est supprimée avec lui.",
+    "defaultBadge": "par défaut",
+    "noKeyBadge": "sans clé",
+    "defaultEndpoint": "point d’accès du fournisseur",
+    "makeDefault": "Définir par défaut",
+    "test": {
+      "ok": "Connexion réussie ({{model}}).",
+      "failed": "Connexion échouée : {{reason}}"
+    },
+    "testing": "Test en cours…",
+    "form": {
+      "name": "Nom",
+      "kind": "Fournisseur",
+      "model": "Modèle",
+      "modelHint": "tel que le fournisseur l’écrit",
+      "apiKey": "Clé d’API",
+      "apiKeyKeep": "laisser vide pour conserver celle enregistrée",
+      "baseUrl": "URL de base",
+      "baseUrlHint": "facultatif — une passerelle ou un proxy",
+      "isDefault": "Utiliser ce fournisseur quand aucun n’est nommé",
+      "submit": "Ajouter"
+    },
+    "runTest": "Tester"
+  },
+  "releaseNotes": {
+    "rangeTitle": "Plage",
+    "hint": "Une plage de commits, résumée en Markdown. Une borne est un tag ou une branche, et elles se remplissent seules : le tag le plus récent, et celui juste en dessous.",
+    "repo": "Dépôt",
+    "from": "De",
+    "fromAuto": "Le tag précédent",
+    "to": "À",
+    "toAuto": "Tag le plus récent",
+    "generate": "Générer",
+    "generating": "Génération…",
+    "noRepo": "Aucun dépôt dans le périmètre de cette source.",
+    "noTag": "Ce dépôt n’a aucun tag : choisissez une branche, ou laissez les bornes telles quelles pour aller du début de l’historique à la branche par défaut.",
+    "breaking": "⚠ Changements incompatibles",
+    "empty": "Aucun changement dans cette plage.",
+    "markdown": "Markdown",
+    "copy": "Copier",
+    "copied": "Copié",
+    "rewriteTitle": "Reformuler avec l’IA",
+    "rewriteHint": "Le Markdown ci-dessus est la seule chose envoyée au fournisseur. Les notes générées restent affichées, pour vérifier que rien n’a été ajouté.",
+    "provider": "Fournisseur",
+    "language": "Langue",
+    "languageKeep": "Conserver la langue",
+    "rewrite": "Reformuler",
+    "rewriting": "Reformulation…",
+    "rewrittenBy": "Reformulé par {{name}} ({{model}})",
+    "tags": "Tags",
+    "branches": "Branches",
+    "defaultBranch": "branche par défaut"
   }
 }

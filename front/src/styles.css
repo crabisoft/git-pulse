@@ -484,3 +484,20 @@ a.account-name:hover { color: var(--ink); }
   font-size: .85rem; color: var(--muted); max-width: 160px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* Release notes */
+.notes-list { margin: 4px 0 16px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.notes-list li { line-height: 1.55; }
+.markdown-source { margin-top: 14px; }
+.markdown-source summary { cursor: pointer; color: var(--muted); font-size: .85rem; }
+/* Long commit subjects wrap rather than pushing the panel sideways; only the
+   rare unbreakable token scrolls. */
+pre.mono { background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px; overflow-x: auto; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Deployments */
+/* The dialog carries a filter row of its own, which the form layout would
+   otherwise stack vertically like a field. */
+.deployment-detail .filters-row { margin: 10px 0 4px; }
+.deployment-detail .notes-list { margin-bottom: 4px; }
+.back-link { display: inline-block; margin-bottom: 4px; font-size: .82rem; color: var(--muted); text-decoration: none; }
+.back-link:hover { color: var(--ink); }

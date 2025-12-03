@@ -277,6 +277,21 @@ export interface Tag {
   taggedAt: string | null;
 }
 
+/**
+ * A branch, as the platform reports it. A range bound may be either a tag or a
+ * branch: the platforms compare refs, not releases, and "everything on `main`
+ * since the last tag" is what a release about to be cut actually is.
+ */
+export interface Branch {
+  name: string;
+  sha: string;
+  /**
+   * The repo's default branch. Worth knowing rather than merely displaying: an
+   * omitted `to` on a repo with no tag resolves to exactly this.
+   */
+  isDefault: boolean;
+}
+
 /** A commit in a range, before anything is made of it. */
 export interface Commit {
   sha: string;
@@ -318,6 +333,76 @@ export interface ReleaseNotes {
   /** Breaking changes, repeated out of their sections to lead the notes. */
   breaking: ReleaseNoteEntry[];
   markdown: string;
+}
+
+// ─── AI providers ────────────────────────────────────────────────────
+
+/**
+ * Which vendor's API a provider talks to. It decides the request shape and the
+ * authentication header — not the model, which is a free string because vendors
+ * rename theirs far more often than they change their API.
+ */
+export type LlmKind = 'anthropic' | 'openai' | 'google' | 'mistral';
+
+export const LLM_KINDS: readonly LlmKind[] = ['anthropic', 'openai', 'google', 'mistral'];
+
+/** Endpoint a kind is called at when a provider declares no base URL. */
+export const LLM_BASE_URLS: Record<LlmKind, string> = {
+  anthropic: 'https://api.anthropic.com',
+  openai: 'https://api.openai.com',
+  google: 'https://generativelanguage.googleapis.com',
+  mistral: 'https://api.mistral.ai',
+};
+
+/**
+ * Model the form prefills, where we can state one that is current. Null means
+ * the field starts empty on purpose: a model identifier we cannot vouch for
+ * would be worse than none, since the failure only shows up at the first call.
+ */
+export const LLM_DEFAULT_MODELS: Record<LlmKind, string | null> = {
+  anthropic: 'claude-opus-5',
+  openai: null,
+  google: null,
+  mistral: 'mistral-large-latest',
+};
+
+/**
+ * A model API the install may call, declared once with its key. Several may
+ * coexist — one per vendor, or two of the same vendor on different models — and
+ * the caller picks which one it wants.
+ */
+export interface LlmProviderPublic {
+  id: string;
+  name: string;
+  kind: LlmKind;
+  /** Vendor model identifier, as the vendor spells it. */
+  model: string;
+  /** Null uses LLM_BASE_URLS[kind]; set for a gateway or a proxy. */
+  baseUrl: string | null;
+  /** The one a caller gets when it names none. At most one row carries it. */
+  isDefault: boolean;
+  /** Whether a key is on file. The key itself is never returned. */
+  hasKey: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** What the rewriting asks for, and which provider is to do it. */
+export interface RewriteRequest {
+  /** The generated notes, as Markdown. Nothing else is sent to the vendor. */
+  markdown: string;
+  /** Omitted, the default provider — and an error when there is none. */
+  providerId?: string;
+  /** BCP 47 tag the notes should be written in. Omitted, the source language. */
+  language?: string;
+}
+
+/** The rewritten notes, and what produced them. */
+export interface RewriteResult {
+  markdown: string;
+  providerId: string;
+  providerName: string;
+  model: string;
 }
 
 // ─── Localizable messages ────────────────────────────────────────────

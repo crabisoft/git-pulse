@@ -9,6 +9,7 @@ import type {
   PipelineStatus,
   ConnectionTestResult,
   Tag,
+  Branch,
 } from '@repo/shared';
 import type { ConnectorContext, SourceConnector } from './source-connector.interface';
 import { gitlabQuota, type HeaderBag, type QuotaSink } from '../../api-quota/rate-limit-headers';
@@ -204,6 +205,17 @@ export class GitLabConnector implements SourceConnector {
       sha: (tag.commit as { id?: string } | undefined)?.id ?? '',
       // Annotated tags date themselves; lightweight ones do not.
       taggedAt: ((tag.commit as { created_at?: string } | undefined)?.created_at as string) ?? null,
+    }));
+  }
+
+  /** One call: GitLab marks the default branch on the listing itself. */
+  async listBranches(ctx: ConnectorContext, repo: string): Promise<Branch[]> {
+    const gl = this.client(ctx);
+    const branches = await gl.Branches.all(repo, { perPage: 100 });
+    return branches.map((branch) => ({
+      name: branch.name as string,
+      sha: (branch.commit as { id?: string } | undefined)?.id ?? '',
+      isDefault: Boolean(branch.default),
     }));
   }
 

@@ -17,6 +17,7 @@ import { useAuth } from './auth';
 import { SECTION_PATHS, SettingsPage, type SettingsSection } from './pages/SettingsPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { DoraPage } from './pages/DoraPage';
+import { ReleaseNotesPage } from './pages/ReleaseNotesPage';
 import { LoginPage } from './pages/LoginPage';
 import { AccountPage } from './pages/AccountPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
@@ -37,6 +38,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   'trackers',
   'env',
   'tickets',
+  'ai',
 ];
 
 /**
@@ -47,7 +49,12 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
  * Classification rules are a shared catalogue and ticket rules belong to their
  * tracker, so nothing under Settings is scoped to a source at all.
  */
-const SOURCE_ROUTES = ['/dashboard/:slug', '/dora/:slug/:metric', '/dora/:slug'];
+const SOURCE_ROUTES = [
+  '/dashboard/:slug',
+  '/dora/:slug/:metric',
+  '/dora/:slug',
+  '/release-notes/:slug',
+];
 
 /** The source slug the current URL points at, or null on the source-less pages. */
 function useRouteSlug(): { pattern: string; slug: string } | null {
@@ -171,6 +178,12 @@ function AppShell() {
           <Link className={module === 'dora' ? 'tab active' : 'tab'} to={withSource('/dora')}>
             {t('nav.dora')}
           </Link>
+          <Link
+            className={module === 'release-notes' ? 'tab active' : 'tab'}
+            to={withSource('/release-notes')}
+          >
+            {t('nav.releaseNotes')}
+          </Link>
           {/* Hidden rather than disabled: to a visitor, the section does not exist. */}
           {isAdmin && (
             <Link className={module === 'settings' ? 'tab active' : 'tab'} to="/settings">
@@ -260,6 +273,19 @@ function AppShell() {
                     <DoraMetricPage key={source.id} sourceId={source.id} slug={source.slug} />
                   </Suspense>
                 )}
+              </SourcePage>
+            }
+          />
+
+          <Route
+            path="/release-notes"
+            element={<FirstSource base="/release-notes" sources={sources} loaded={loaded} />}
+          />
+          <Route
+            path="/release-notes/:slug"
+            element={
+              <SourcePage sources={sources} loaded={loaded} base="/release-notes">
+                {(source) => <ReleaseNotesPage key={source.id} sourceId={source.id} />}
               </SourcePage>
             }
           />

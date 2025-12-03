@@ -105,3 +105,38 @@ describe('isAbort', () => {
     expect(isAbort(new ApiError('errors.network'))).toBe(false);
   });
 });
+
+describe('release notes and rewriting', () => {
+  it('carries the range in the query, dropping the bounds left to default', async () => {
+    const fetchMock = stubFetch();
+    await api.releaseNotes('s1', { repo: 'extranet-api', to: 'v2.1.0' });
+
+    const params = urlOf(fetchMock).searchParams;
+    expect(params.get('repo')).toBe('extranet-api');
+    expect(params.get('to')).toBe('v2.1.0');
+    // Omitted means "the tag below `to`", which an empty string would not.
+    expect(params.has('from')).toBe(false);
+  });
+
+  it('posts the notes rather than a range, so nothing is regenerated', async () => {
+    const fetchMock = stubFetch();
+    await api.rewriteReleaseNotes({ markdown: '## Release', providerId: 'p1', language: 'fr' });
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toContain('/release-notes/rewrite');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body)).toEqual({
+      markdown: '## Release',
+      providerId: 'p1',
+      language: 'fr',
+    });
+  });
+
+  it('lets a rewriting be cancelled like any other expensive call', async () => {
+    const fetchMock = stubFetch();
+    const controller = new AbortController();
+    await api.rewriteReleaseNotes({ markdown: '## Release' }, controller.signal);
+
+    expect(fetchMock.mock.calls[0][1].signal).toBe(controller.signal);
+  });
+});

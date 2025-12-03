@@ -10,6 +10,7 @@ import type {
   PipelineStatus,
   ConnectionTestResult,
   Tag,
+  Branch,
 } from '@repo/shared';
 import type { ConnectorContext, SourceConnector } from './source-connector.interface';
 import { githubQuota, type HeaderBag, type QuotaSink } from '../../api-quota/rate-limit-headers';
@@ -228,6 +229,26 @@ export class GitHubConnector implements SourceConnector {
       sha: tag.commit.sha,
       // Lightweight tags carry no date; the commit's stands in when needed.
       taggedAt: null,
+    }));
+  }
+
+  /**
+   * Two calls, unlike GitLab's one: the branch listing does not say which is
+   * the default, and that is the branch an omitted bound resolves to. Paid on a
+   * picker opening rather than on a collection, so it is off the fan-out that
+   * the API reserve guards.
+   */
+  async listBranches(ctx: ConnectorContext, repo: string): Promise<Branch[]> {
+    const gh = this.client(ctx);
+    const owner = ctx.scope.owner;
+    const [branches, fallback] = await Promise.all([
+      gh.rest.repos.listBranches({ owner, repo, per_page: 100 }),
+      this.defaultBranch(ctx, repo),
+    ]);
+    return branches.data.map((branch) => ({
+      name: branch.name,
+      sha: branch.commit.sha,
+      isDefault: branch.name === fallback,
     }));
   }
 

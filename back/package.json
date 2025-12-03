@@ -15,6 +15,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.115.0",
     "@gitbeaker/rest": "^40.5.1",
     "@nestjs/bullmq": "^10.2.3",
     "@nestjs/common": "^10.4.4",

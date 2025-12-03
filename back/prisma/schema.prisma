@@ -51,7 +51,6 @@ model Source {
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
-  credential  Credential?
   envRules    SourceEnvRule[]
   trackers    SourceTracker[]
   snapshots   MetricSnapshot[]
@@ -64,19 +63,33 @@ model Source {
   syncStates   SyncState[]
 }
 
-/// Access secret for a source, encrypted at rest (AES-256-GCM envelope).
-/// Plaintext is never stored — see CryptoService.
+/// What a credential unlocks. A source spends its secret against a Git
+/// platform, an LLM provider against a model API — neither is a special case of
+/// the other, and both need the same envelope encryption.
+enum CredentialOwner {
+  source
+  llmProvider
+}
+
+/// Access secret for whatever holds one, encrypted at rest (AES-256-GCM
+/// envelope). Plaintext is never stored — see CryptoService.
+///
+/// Keyed by owner rather than by relation, like ApiQuota: a foreign key can
+/// only point at one table. The cost is that no cascade reaches here, so every
+/// owner deletes its own credential explicitly.
 model Credential {
-  id         String   @id @default(uuid())
-  source     Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
-  sourceId   String   @unique
+  id         String          @id @default(uuid())
+  ownerType  CredentialOwner
+  ownerId    String
   ciphertext Bytes
   iv         Bytes
   authTag    Bytes
   /// Master key version that encrypted this secret (for rotation).
-  keyVersion Int      @default(1)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  keyVersion Int             @default(1)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@unique([ownerType, ownerId])
 }
 
 enum EnvRuleKind {
@@ -491,4 +504,36 @@ model StoredDeployment {
   @@unique([sourceId, externalId])
   @@index([sourceId, createdAt])
   @@index([sourceId, environment, createdAt])
+}
+
+/// Which vendor's API a provider talks to. It decides the request shape and the
+/// authentication header, not the model — that is a free string, since vendors
+/// ship new ones far more often than they change their API.
+enum LlmKind {
+  anthropic
+  openai
+  google
+  mistral
+}
+
+/// A model API the install may call, declared once with its key. Several may
+/// coexist — one per vendor, or two of the same vendor on different models —
+/// and the caller picks which one it wants.
+///
+/// Its key lives in Credential, keyed by `llmProvider`, so no cascade removes
+/// it: the service deletes it with the row.
+model LlmProvider {
+  id        String   @id @default(uuid())
+  name      String
+  kind      LlmKind
+  /// Vendor model identifier, as the vendor spells it.
+  model     String
+  /// Overrides the vendor's public endpoint — a gateway, a proxy, or a
+  /// compatible self-hosted deployment. Null uses the built-in default.
+  baseUrl   String?
+  /// The one a caller gets when it names none. At most one row carries it,
+  /// which the service enforces by clearing the others.
+  isDefault Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

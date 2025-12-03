@@ -2,15 +2,31 @@ import { type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import type { AppSettings, SourcePublic } from '@repo/shared';
-import { LayersIcon, LinkIcon, ServerIcon, SlidersIcon, TicketIcon, UsersIcon } from '../icons';
+import {
+  KeyIcon,
+  LayersIcon,
+  LinkIcon,
+  ServerIcon,
+  SlidersIcon,
+  TicketIcon,
+  UsersIcon,
+} from '../icons';
 import { GeneralSettings } from './settings/GeneralSettings';
 import { UsersSettings } from './settings/UsersSettings';
 import { SourcesPage } from './SourcesPage';
 import { EnvRulesPage } from './EnvRulesPage';
 import { TicketRulesPage } from './TicketRulesPage';
 import { TrackersPage } from './TrackersPage';
+import { LlmProvidersPage } from './LlmProvidersPage';
 
-export type SettingsSection = 'general' | 'users' | 'sources' | 'trackers' | 'env' | 'tickets';
+export type SettingsSection =
+  | 'general'
+  | 'users'
+  | 'sources'
+  | 'trackers'
+  | 'env'
+  | 'tickets'
+  | 'ai';
 
 const SECTIONS: { key: SettingsSection; icon: ReactNode }[] = [
   { key: 'general', icon: <SlidersIcon /> },
@@ -19,6 +35,7 @@ const SECTIONS: { key: SettingsSection; icon: ReactNode }[] = [
   { key: 'trackers', icon: <LinkIcon /> },
   { key: 'env', icon: <LayersIcon /> },
   { key: 'tickets', icon: <TicketIcon /> },
+  { key: 'ai', icon: <KeyIcon /> },
 ];
 
 /**
@@ -37,6 +54,7 @@ export const SECTION_PATHS: Record<SettingsSection, string> = {
   trackers: '/settings/trackers',
   env: '/settings/environments',
   tickets: '/settings/tickets',
+  ai: '/settings/ai',
 };
 
 
@@ -95,6 +113,7 @@ export function SettingsPage({
         {section === 'trackers' && <TrackersPage sources={sources} />}
         {section === 'env' && <EnvRulesPage />}
         {section === 'tickets' && <TicketRulesPage />}
+        {section === 'ai' && <LlmProvidersPage />}
       </div>
     </div>
   );

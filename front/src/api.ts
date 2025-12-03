@@ -16,7 +16,14 @@ import type {
   CodedMessage,
   EnvRulePublic,
   ClassifiedEnvironment,
+  Branch,
   DoraReport,
+  LlmKind,
+  LlmProviderPublic,
+  ReleaseNotes,
+  RewriteRequest,
+  RewriteResult,
+  Tag,
   MetricBucket,
   MetricSeries,
   MetricSnapshotPublic,
@@ -204,6 +211,20 @@ export interface CreateTrackerInput {
 
 export type UpdateTrackerInput = Partial<CreateTrackerInput>;
 
+/** Declaring a model provider. The key is written once and never read back. */
+export interface CreateLlmProviderInput {
+  name: string;
+  kind: LlmKind;
+  model: string;
+  apiKey: string;
+  /** Empty means the vendor's public endpoint; the API spells that null. */
+  baseUrl?: string | null;
+  isDefault?: boolean;
+}
+
+/** An omitted `apiKey` keeps the stored one — the form never held it. */
+export type UpdateLlmProviderInput = Partial<CreateLlmProviderInput>;
+
 export interface CreateUserInput {
   email: string;
   name: string;
@@ -341,6 +362,48 @@ export const api = {
   updateTracker: (id: string, input: UpdateTrackerInput) =>
     request<TrackerPublic>(`/trackers/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   deleteTracker: (id: string) => request<void>(`/trackers/${id}`, { method: 'DELETE' }),
+
+  listLlmProviders: (page?: PageQuery) =>
+    request<Page<LlmProviderPublic>>(`/llm-providers${qs({ ...page })}`),
+  createLlmProvider: (input: CreateLlmProviderInput) =>
+    request<LlmProviderPublic>('/llm-providers', { method: 'POST', body: JSON.stringify(input) }),
+  updateLlmProvider: (id: string, input: UpdateLlmProviderInput) =>
+    request<LlmProviderPublic>(`/llm-providers/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  deleteLlmProvider: (id: string) => request<void>(`/llm-providers/${id}`, { method: 'DELETE' }),
+  /** Spends one call to prove the key, the model and the endpoint together. */
+  testLlmProvider: (id: string) =>
+    request<ConnectionTestResult>(`/llm-providers/${id}/test`, { method: 'POST' }),
+
+  /** Repos in a source's scope — free on a stored source, one call on a live one. */
+  sourceRepos: (sourceId: string, signal?: AbortSignal) =>
+    request<string[]>(`/sources/${sourceId}/repos`, { signal }),
+  /** Tags of a repo, for whoever picks the range a release is cut from. */
+  tags: (sourceId: string, repo: string, signal?: AbortSignal) =>
+    request<Tag[]>(`/sources/${sourceId}/tags${qs({ repo })}`, { signal }),
+  /** Branches of the same repo — a range bound may be either. */
+  branches: (sourceId: string, repo: string, signal?: AbortSignal) =>
+    request<Branch[]>(`/sources/${sourceId}/branches${qs({ repo })}`, { signal }),
+  /** Walks a history, so as expensive as a DORA report — cancellable for that reason. */
+  releaseNotes: (
+    sourceId: string,
+    query: { repo: string; from?: string; to?: string },
+    signal?: AbortSignal,
+  ) =>
+    request<ReleaseNotes>(
+      `/sources/${sourceId}/release-notes` +
+        qs({ repo: query.repo, from: query.from, to: query.to }),
+      { signal },
+    ),
+  /** Bound to no source: the notes travel in the body, already generated. */
+  rewriteReleaseNotes: (input: RewriteRequest, signal?: AbortSignal) =>
+    request<RewriteResult>('/release-notes/rewrite', {
+      method: 'POST',
+      body: JSON.stringify(input),
+      signal,
+    }),
 
   settings: () => request<AppSettings>('/settings'),
   updateSettings: (input: Partial<AppSettings>) =>
