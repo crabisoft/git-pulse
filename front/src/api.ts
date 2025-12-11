@@ -17,8 +17,12 @@ import type {
   EnvRulePublic,
   ClassifiedEnvironment,
   Branch,
+  DeploymentBase,
+  DeploymentChanges,
+  DeploymentReport,
   DoraReport,
   LlmKind,
+  PipelineStatus,
   LlmProviderPublic,
   ReleaseNotes,
   RewriteRequest,
@@ -155,6 +159,16 @@ export interface DoraQuery extends PageQuery {
   repos?: string[];
   /** Keeps only the results carrying every key/value pair. */
   dimensions?: Record<string, string>;
+}
+
+/**
+ * The DORA query, plus what only a list narrows on. Extended rather than
+ * restated: the two views must agree on what a period and a repo scope mean.
+ */
+export interface DeploymentsQuery extends DoraQuery {
+  /** Environment names, matched exactly; empty means every one. */
+  environments?: string[];
+  statuses?: PipelineStatus[];
 }
 
 export interface CreateSourceInput {
@@ -376,6 +390,56 @@ export const api = {
   /** Spends one call to prove the key, the model and the endpoint together. */
   testLlmProvider: (id: string) =>
     request<ConnectionTestResult>(`/llm-providers/${id}/test`, { method: 'POST' }),
+
+  /** Deployments over a period, classified and filtered. */
+  deployments: (sourceId: string, query: DeploymentsQuery = {}, signal?: AbortSignal) =>
+    request<DeploymentReport>(
+      `/sources/${sourceId}/deployments` +
+        qs({
+          limit: query.limit,
+          offset: query.offset,
+          from: query.from,
+          to: query.to,
+          windowDays: query.windowDays,
+          repos: query.repos?.length ? query.repos : undefined,
+          environment: query.environments?.length ? query.environments : undefined,
+          status: query.statuses?.length ? query.statuses : undefined,
+          // The API takes `key:value` pairs, repeatable — same as DORA.
+          dimension: Object.entries(query.dimensions ?? {}).map(([k, v]) => `${k}:${v}`),
+        }),
+      { signal },
+    ),
+  /**
+   * What one deployment carried. The period travels with it: the base is looked
+   * for among the deployments of that window, so a detail opened from a list
+   * answers about the same window the list was showing.
+   */
+  deploymentChanges: (
+    sourceId: string,
+    deploymentId: string,
+    query: {
+      repo: string;
+      base: DeploymentBase;
+      /** The ref to compare against, when `base` is `ref`. */
+      ref?: string;
+      from?: string;
+      to?: string;
+      windowDays?: number;
+    },
+    signal?: AbortSignal,
+  ) =>
+    request<DeploymentChanges>(
+      `/sources/${sourceId}/deployments/${encodeURIComponent(deploymentId)}/changes` +
+        qs({
+          repo: query.repo,
+          base: query.base,
+          ref: query.ref,
+          from: query.from,
+          to: query.to,
+          windowDays: query.windowDays,
+        }),
+      { signal },
+    ),
 
   /** Repos in a source's scope — free on a stored source, one call on a live one. */
   sourceRepos: (sourceId: string, signal?: AbortSignal) =>

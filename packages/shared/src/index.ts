@@ -250,6 +250,87 @@ export interface Deployment {
   ref: string;
   status: PipelineStatus;
   createdAt: string;
+  /**
+   * Where the deployed environment can be reached, when the platform states
+   * one. Read, never built: the address of a deployed application is not
+   * derivable from anything we hold, so a guess would be a broken link.
+   *
+   * Null is the common case. GitHub carries it on a deployment status, which is
+   * the call given up under the API reserve; GitLab carries it on the
+   * environment, and only when one was configured with an external URL.
+   */
+  environmentUrl: string | null;
+}
+
+// ─── Deployments ─────────────────────────────────────────────────────
+
+/**
+ * A deployment with its environment resolved against the classification rules.
+ * The attributes are the same ones DORA slices on, so a row on the deployments
+ * page and a slice of a metric mean the same thing by construction.
+ */
+export interface ClassifiedDeployment extends Deployment {
+  /** Attributes from named capture groups — empty when no rule matches. */
+  attributes: Record<string, string>;
+  metaEnvironments: string[];
+}
+
+/**
+ * What the deployments endpoint answers. Beyond the page it carries the
+ * vocabularies the filter controls need, computed **before** filtering — so
+ * narrowing one filter never empties the list you pick the next one from.
+ */
+export interface DeploymentReport {
+  deployments: Page<ClassifiedDeployment>;
+  /** Every repo in the source scope, filter applied or not. */
+  repos: string[];
+  /** Every environment seen over the period, before the environment filter. */
+  environments: string[];
+  /** Statuses seen over the period — a vocabulary, not the enum. */
+  statuses: PipelineStatus[];
+  /** Dimension key → observed values, over the repo-scoped deployments. */
+  dimensions: Record<string, string[]>;
+  period: DoraPeriod;
+}
+
+/**
+ * What a deployment's contents are compared against.
+ *
+ * - `previous`: the ref of the last successful deployment of the same repo to
+ *   the same environment — "what went out since the last time".
+ * - `default`: the repo's default branch — "what this ref adds on top of main",
+ *   which is also the history since it diverged from it.
+ * - `ref`: a tag, a branch or a commit named by the reader. The two above
+ *   answer the questions asked most often; this one exists because they are not
+ *   the only questions — "since the release we rolled back from" is a tag, and
+ *   "since that fix" is a sha.
+ *
+ * The platforms record nothing about which branch a branch was cut from, so
+ * `default` is as close to a fork point as anything can honestly get.
+ */
+export type DeploymentBase = 'previous' | 'default' | 'ref';
+
+/** What a deployment carried, against the base that was asked for. */
+export interface DeploymentChanges {
+  /**
+   * The deployment itself, so the page that shows this can stand on its own —
+   * a link pasted into a chat has to open without the list that produced it.
+   */
+  deployment: ClassifiedDeployment;
+  repo: string;
+  /** The deployed ref. */
+  head: string;
+  base: DeploymentBase;
+  /**
+   * The ref the base resolved to. Null when `previous` was asked for and the
+   * period holds no earlier successful deployment — there is nothing to compare
+   * against, which is a fact about the data and not an error.
+   */
+  baseRef: string | null;
+  /** Commits reachable from `head` but not from `baseRef`, parsed. */
+  entries: ReleaseNoteEntry[];
+  /** Distinct authors — a cheap sense of how wide the change is. */
+  authors: number;
 }
 
 /** A merged PR/MR with the timestamps needed to derive lead time. */

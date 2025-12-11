@@ -55,6 +55,7 @@ export interface DeploymentRow {
   environment: string;
   ref: string;
   status: PipelineStatus;
+  environmentUrl: string | null;
   createdAt: Date;
   seenAt: Date;
 }
@@ -206,6 +207,9 @@ export function mergeDeployment(
     environment: incoming.environment,
     ref: incoming.ref,
     status: laterStatus(stored?.status, incoming.status),
+    // A feed never blanks what it does not report: a listing degraded under the
+    // reserve reads no URL, which means "not read" and not "there is none".
+    environmentUrl: incoming.environmentUrl ?? stored?.environmentUrl ?? null,
     createdAt: new Date(incoming.createdAt),
     seenAt,
   };

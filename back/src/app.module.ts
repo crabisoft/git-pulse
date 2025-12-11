@@ -15,6 +15,7 @@ import { TicketRulesModule } from './ticket-rules/ticket-rules.module';
 import { ReleaseNotesModule } from './release-notes/release-notes.module';
 import { LlmModule } from './llm/llm.module';
 import { DoraModule } from './dora/dora.module';
+import { DeploymentsModule } from './deployments/deployments.module';
 import { CollectionModule } from './collection/collection.module';
 import { ApiQuotaModule } from './api-quota/api-quota.module';
 
@@ -38,6 +39,7 @@ import { ApiQuotaModule } from './api-quota/api-quota.module';
     LlmModule,
     ReleaseNotesModule,
     DoraModule,
+    DeploymentsModule,
     CollectionModule,
     ApiQuotaModule,
   ],

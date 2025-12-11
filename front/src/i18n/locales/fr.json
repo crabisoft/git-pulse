@@ -6,7 +6,8 @@
     "dashboard": "Tableau de bord",
     "dora": "DORA",
     "settings": "Paramètres",
-    "releaseNotes": "Notes de version"
+    "releaseNotes": "Notes de version",
+    "deployments": "Déploiements"
   },
   "auth": {
     "signInTitle": "Connexion",
@@ -280,6 +281,10 @@
       "callFailed": "Le fournisseur a refusé l’appel : {{reason}}",
       "refused": "Le modèle a refusé de répondre.",
       "emptyAnswer": "Le modèle n’a rien répondu."
+    },
+    "deployment": {
+      "notFound": "Le déploiement {{id}} n’est pas dans cette période.",
+      "invalidRef": "Ref inutilisable : {{ref}}"
     }
   },
   "empty": {
@@ -653,5 +658,35 @@
     "tags": "Tags",
     "branches": "Branches",
     "defaultBranch": "branche par défaut"
+  },
+  "deployments": {
+    "title": "Déploiements",
+    "empty": "Aucun déploiement ne correspond à ces filtres sur cette période.",
+    "when": "Quand",
+    "repo": "Dépôt",
+    "environment": "Environnement",
+    "ref": "Ref",
+    "status": "Statut",
+    "anyEnvironment": "Tous les environnements",
+    "anyStatus": "Tous les statuts",
+    "contents": "Contenu",
+    "detailTitle": "{{repo}} → {{environment}}",
+    "deployedRef": "Ref déployée",
+    "comparedTo": "Comparé à",
+    "basePrevious": "Le déploiement précédent ici",
+    "baseDefault": "La branche par défaut",
+    "against": "Par rapport à",
+    "noBase": "Aucun déploiement réussi antérieur sur cet environnement pour cette période — il n’y a rien à comparer. La branche par défaut est l’autre base proposée.",
+    "noChange": "Rien entre les deux refs. Déployer la branche à laquelle on compare en est la raison habituelle.",
+    "summary": "{{count}} commits · {{authors}} auteurs",
+    "backToList": "Retour aux déploiements",
+    "openEnvironment": "Ouvrir l’environnement",
+    "baseRef": "Un tag, une branche ou un commit…",
+    "refTitle": "Comparer à",
+    "refPick": "Choisir une ref",
+    "refNone": "Aucune choisie",
+    "refType": "Ou saisir",
+    "refTypeHint": "un sha de commit, ou toute ref que la plateforme résout",
+    "refApply": "Comparer"
   }
 }

@@ -144,15 +144,19 @@ export class GitHubConnector implements SourceConnector {
         // failure rate, where dropping it would have cost both.
         const enrich = ctx.allowsOptionalCalls?.() !== false;
         if (!enrich) skipped++;
+        // The status call carries the environment's URL too, so reading it
+        // costs nothing extra — and giving up the call gives up both.
+        const state = enrich
+          ? await this.deploymentStatus(gh, ctx.scope.owner, repo, d.id)
+          : { status: 'unknown' as PipelineStatus, environmentUrl: null };
         out.push({
           id: `gh:${repo}:${d.id}`,
           repo,
           environment: d.environment,
           ref: d.ref,
-          status: enrich
-            ? await this.deploymentStatus(gh, ctx.scope.owner, repo, d.id)
-            : 'unknown',
+          status: state.status,
           createdAt: d.created_at,
+          environmentUrl: state.environmentUrl,
         });
       }
     }
@@ -292,7 +296,7 @@ export class GitHubConnector implements SourceConnector {
     owner: string,
     repo: string,
     deploymentId: number,
-  ): Promise<PipelineStatus> {
+  ): Promise<{ status: PipelineStatus; environmentUrl: string | null }> {
     try {
       const statuses = await gh.rest.repos.listDeploymentStatuses({
         owner,
@@ -300,9 +304,14 @@ export class GitHubConnector implements SourceConnector {
         deployment_id: deploymentId,
         per_page: 1,
       });
-      return mapGitHubDeploymentState(statuses.data[0]?.state);
+      const latest = statuses.data[0];
+      return {
+        status: mapGitHubDeploymentState(latest?.state),
+        // Set by whoever wrote the status, so absent far more often than not.
+        environmentUrl: latest?.environment_url || null,
+      };
     } catch {
-      return 'unknown';
+      return { status: 'unknown', environmentUrl: null };
     }
   }
 

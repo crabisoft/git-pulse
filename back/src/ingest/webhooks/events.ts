@@ -137,6 +137,8 @@ function gitHubDeployment(body: Payload): IngestIntent | null {
       ref: asString(deployment.ref) ?? '',
       status: mapGitHubDeploymentState(asString(asObject(body.deployment_status)?.state)),
       createdAt,
+      // The same status that carries the state carries the environment's URL.
+      environmentUrl: asString(asObject(body.deployment_status)?.environment_url) ?? null,
     },
   };
 }
@@ -225,6 +227,9 @@ function gitLabDeployment(body: Payload): IngestIntent | null {
       ref: asString(body.ref) ?? '',
       status: mapGitLabStatus(asString(body.status) ?? ''),
       createdAt,
+      // The hook names the environment but not its address, so the merge keeps
+      // whatever a listing already stored rather than blanking it.
+      environmentUrl: null,
     },
   };
 }

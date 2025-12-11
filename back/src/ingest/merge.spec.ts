@@ -70,6 +70,7 @@ function deployment(over: Partial<Deployment> = {}): Deployment {
     ref: 'main',
     status: 'pending',
     createdAt: '2026-07-27T10:00:00Z',
+    environmentUrl: null,
     ...over,
   };
 }
@@ -195,5 +196,27 @@ describe('mergeDeployment', () => {
     // `pending` event arriving after the `success` one would undo it.
     const held = mergeDeployment(undefined, deployment({ status: 'success' }), SEEN);
     expect(mergeDeployment(held, deployment({ status: 'pending' }), SEEN).status).toBe('success');
+  });
+
+  it('keeps an environment URL a later feed does not report', () => {
+    // A GitLab deployment hook names the environment but not its address, and a
+    // GitHub listing degraded under the reserve reads neither. Null means "not
+    // read", so blanking would lose the link at the first such event.
+    const held = mergeDeployment(
+      undefined,
+      deployment({ environmentUrl: 'https://prod.example' }),
+      SEEN,
+    );
+    expect(mergeDeployment(held, deployment({ environmentUrl: null }), SEEN).environmentUrl).toBe(
+      'https://prod.example',
+    );
+  });
+
+  it('takes a URL an earlier feed did not have', () => {
+    const held = mergeDeployment(undefined, deployment({ environmentUrl: null }), SEEN);
+    expect(
+      mergeDeployment(held, deployment({ environmentUrl: 'https://prod.example' }), SEEN)
+        .environmentUrl,
+    ).toBe('https://prod.example');
   });
 });

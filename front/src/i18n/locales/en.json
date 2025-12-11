@@ -6,7 +6,8 @@
     "dashboard": "Dashboard",
     "dora": "DORA",
     "settings": "Settings",
-    "releaseNotes": "Release notes"
+    "releaseNotes": "Release notes",
+    "deployments": "Deployments"
   },
   "auth": {
     "signInTitle": "Sign in",
@@ -280,6 +281,10 @@
       "callFailed": "The vendor refused the call: {{reason}}",
       "refused": "The model declined to answer.",
       "emptyAnswer": "The model answered nothing."
+    },
+    "deployment": {
+      "notFound": "Deployment {{id}} is not in this period.",
+      "invalidRef": "Not a usable ref: {{ref}}"
     }
   },
   "empty": {
@@ -653,5 +658,35 @@
     "tags": "Tags",
     "branches": "Branches",
     "defaultBranch": "default branch"
+  },
+  "deployments": {
+    "title": "Deployments",
+    "empty": "No deployment matches these filters over this period.",
+    "when": "When",
+    "repo": "Repository",
+    "environment": "Environment",
+    "ref": "Ref",
+    "status": "Status",
+    "anyEnvironment": "Every environment",
+    "anyStatus": "Every status",
+    "contents": "Contents",
+    "detailTitle": "{{repo}} → {{environment}}",
+    "deployedRef": "Deployed ref",
+    "comparedTo": "Compared to",
+    "basePrevious": "The previous deployment here",
+    "baseDefault": "The default branch",
+    "against": "Against",
+    "noBase": "No earlier successful deployment to this environment over this period — there is nothing to compare against. The default branch is the other base on offer.",
+    "noChange": "Nothing between the two refs. Deploying the branch you are comparing against is the usual reason.",
+    "summary": "{{count}} commits · {{authors}} authors",
+    "backToList": "Back to deployments",
+    "openEnvironment": "Open the environment",
+    "baseRef": "A tag, branch or commit…",
+    "refTitle": "Compare against",
+    "refPick": "Pick a ref",
+    "refNone": "None picked",
+    "refType": "Or type one",
+    "refTypeHint": "a commit sha, or any ref the platform resolves",
+    "refApply": "Compare"
   }
 }

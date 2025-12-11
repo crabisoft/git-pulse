@@ -498,6 +498,10 @@ model StoredDeployment {
   ref         String
   /// PipelineStatus — `unknown` when the status call was given up.
   status      String
+  /// Where the environment can be reached, when the platform states one. Null
+  /// is the common case, and also what a run degraded under the API reserve
+  /// leaves behind on GitHub — the status call carries both.
+  environmentUrl String?
   createdAt   DateTime
   seenAt      DateTime
 

@@ -127,13 +127,17 @@ export class GitLabConnector implements SourceConnector {
       ctx.signal?.throwIfAborted();
       const deployments = await gl.Deployments.all(repo, { perPage: 30 });
       for (const d of deployments) {
+        // The environment travels embedded in the listing, so its external URL
+        // comes free — when the environment was configured with one at all.
+        const environment = d.environment as { name?: string; external_url?: string } | undefined;
         out.push({
           id: `gl:${repo}:${d.id}`,
           repo,
-          environment: (d.environment as { name?: string })?.name ?? 'unknown',
+          environment: environment?.name ?? 'unknown',
           ref: (d.ref as string) ?? '',
           status: mapGitLabStatus(d.status as string),
           createdAt: d.created_at as string,
+          environmentUrl: environment?.external_url || null,
         });
       }
     }

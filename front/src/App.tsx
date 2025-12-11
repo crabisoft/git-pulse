@@ -18,6 +18,8 @@ import { SECTION_PATHS, SettingsPage, type SettingsSection } from './pages/Setti
 import { DashboardPage } from './pages/DashboardPage';
 import { DoraPage } from './pages/DoraPage';
 import { ReleaseNotesPage } from './pages/ReleaseNotesPage';
+import { DeploymentsPage } from './pages/DeploymentsPage';
+import { DeploymentChangesPage } from './pages/DeploymentChangesPage';
 import { LoginPage } from './pages/LoginPage';
 import { AccountPage } from './pages/AccountPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
@@ -53,6 +55,8 @@ const SOURCE_ROUTES = [
   '/dashboard/:slug',
   '/dora/:slug/:metric',
   '/dora/:slug',
+  '/deployments/:slug/changes',
+  '/deployments/:slug',
   '/release-notes/:slug',
 ];
 
@@ -179,6 +183,12 @@ function AppShell() {
             {t('nav.dora')}
           </Link>
           <Link
+            className={module === 'deployments' ? 'tab active' : 'tab'}
+            to={withSource('/deployments')}
+          >
+            {t('nav.deployments')}
+          </Link>
+          <Link
             className={module === 'release-notes' ? 'tab active' : 'tab'}
             to={withSource('/release-notes')}
           >
@@ -272,6 +282,38 @@ function AppShell() {
                   <Suspense fallback={null}>
                     <DoraMetricPage key={source.id} sourceId={source.id} slug={source.slug} />
                   </Suspense>
+                )}
+              </SourcePage>
+            }
+          />
+
+          <Route
+            path="/deployments"
+            element={<FirstSource base="/deployments" sources={sources} loaded={loaded} />}
+          />
+          <Route
+            path="/deployments/:slug"
+            element={
+              <SourcePage sources={sources} loaded={loaded} base="/deployments">
+                {(source) => (
+                  <DeploymentsPage key={source.id} sourceId={source.id} slug={source.slug} />
+                )}
+              </SourcePage>
+            }
+          />
+
+          {/* Its own URL, so "look at what went out" is a link somebody can
+              send — and one that survives a refresh. */}
+          <Route
+            path="/deployments/:slug/changes"
+            element={
+              <SourcePage sources={sources} loaded={loaded} base="/deployments">
+                {(source) => (
+                  <DeploymentChangesPage
+                    key={source.id}
+                    sourceId={source.id}
+                    slug={source.slug}
+                  />
                 )}
               </SourcePage>
             }
