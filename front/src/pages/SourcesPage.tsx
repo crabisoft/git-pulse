@@ -23,7 +23,7 @@ import {
   type PageQuery,
   type UpdateSourceInput,
 } from '../api';
-import { DeleteIcon, EditIcon, PlusIcon, TestIcon } from '../icons';
+import { DeleteIcon, EditIcon, PlusIcon, SyncIcon, TestIcon } from '../icons';
 import { IconButton } from '../IconButton';
 import { ConfirmDialog, Modal } from '../Modal';
 import { MultiSelect } from '../MultiSelect';
@@ -132,6 +132,8 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
   const [page, setPage] = useState<PageQuery>({});
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [tested, setTested] = useState<Record<string, ConnectionTestResult | 'pending'>>({});
+  /** Outcome of a collection asked for by hand, per source. */
+  const [collected, setCollected] = useState<Record<string, ConnectionTestResult | 'pending'>>({});
   const [quotas, setQuotas] = useState<ApiQuotaPublic[]>([]);
   const [budgets, setBudgets] = useState<ApiBudgetPublic[]>([]);
   const [budgeting, setBudgeting] = useState<SourcePublic | null>(null);
@@ -213,6 +215,33 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
     await loadQuotas();
   }
 
+  /**
+   * Runs a collection now rather than waiting for the cron. On a stored source
+   * this is also what fills the store: the ingestion is part of collecting it,
+   * not a schedule of its own.
+   *
+   * The outcome is reported. The same call fires silently when a source is
+   * first switched to `stored`, where a form closing is not the place for an
+   * error — here it is, and swallowing it would leave an empty board with no
+   * way to learn why.
+   */
+  async function collect(id: string) {
+    setCollected((cur) => ({ ...cur, [id]: 'pending' }));
+    try {
+      const snapshots = await api.collectSource(id);
+      setCollected((cur) => ({
+        ...cur,
+        [id]: { ok: true, message: { code: 'sources.collect.ok', params: { count: snapshots.length } } },
+      }));
+    } catch (err) {
+      setCollected((cur) => ({ ...cur, [id]: { ok: false, message: apiErrorInfo(err) } }));
+    }
+    // A collection is the heaviest thing this page can start, and the gauges
+    // are the point of watching it from here. The source itself did not change,
+    // so nothing else needs reloading.
+    await loadQuotas();
+  }
+
   async function remove(source: SourcePublic) {
     setDeleting(null);
     try {
@@ -250,6 +279,7 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
         <ul className="source-list">
           {sources.map((s) => {
             const ts = tested[s.id];
+            const cs = collected[s.id];
             return (
               <li key={s.id} className="source-row">
                 <div>
@@ -286,6 +316,13 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
                         : `${ts.ok ? '✓' : '✗'} ${t(ts.message.code, ts.message.params)}`}
                     </div>
                   )}
+                  {cs && (
+                    <div className={`source-test ${cs === 'pending' ? '' : cs.ok ? 'ok' : 'err'}`}>
+                      {cs === 'pending'
+                        ? t('sources.collect.running')
+                        : `${cs.ok ? '✓' : '✗'} ${t(cs.message.code, cs.message.params)}`}
+                    </div>
+                  )}
                 </div>
                 <div className="row-actions">
                   <IconButton label={t('common.edit')} onClick={() => setEditing({ source: s })}>
@@ -297,6 +334,13 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
                     onClick={() => void test(s.id)}
                   >
                     <TestIcon />
+                  </IconButton>
+                  <IconButton
+                    label={t('sources.collect.action')}
+                    disabled={cs === 'pending'}
+                    onClick={() => void collect(s.id)}
+                  >
+                    <SyncIcon />
                   </IconButton>
                   <IconButton label={t('common.delete')} tone="danger" onClick={() => setDeleting(s)}>
                     <DeleteIcon />

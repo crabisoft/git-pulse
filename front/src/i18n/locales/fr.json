@@ -530,7 +530,12 @@
         "gitlab": "Déclencheurs à cocher côté GitLab : « Merge request events », « Pipeline events », « Deployment events ». Les autres sont acceptés puis ignorés."
       }
     },
-    "webhooksOn": "événements"
+    "webhooksOn": "événements",
+    "collect": {
+      "action": "Collecter maintenant",
+      "running": "Collecte en cours… un premier passage sur un large périmètre prend plusieurs minutes",
+      "ok": "Collecte terminée — {{count}} snapshots écrits."
+    }
   },
   "ticketRules": {
     "listTitle": "Règles de ticket",

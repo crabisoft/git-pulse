@@ -148,3 +148,13 @@ export function CancelIcon(props: IconProps) {
     </Svg>
   );
 }
+
+/** Circular arrows: bringing a source's data up to date. */
+export function SyncIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M21 12a9 9 0 0 1-9 9 9 9 0 0 1-7.5-4M3 12a9 9 0 0 1 9-9 9 9 0 0 1 7.5 4" />
+      <path d="M20 3v4h-4M4 21v-4h4" />
+    </Svg>
+  );
+}

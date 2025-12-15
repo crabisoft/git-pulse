@@ -530,7 +530,12 @@
         "gitlab": "Triggers to tick on GitLab: “Merge request events”, “Pipeline events”, “Deployment events”. Anything else is accepted, then ignored."
       }
     },
-    "webhooksOn": "events"
+    "webhooksOn": "events",
+    "collect": {
+      "action": "Collect now",
+      "running": "Collecting… a first run over a large scope takes minutes",
+      "ok": "Collection done — {{count}} snapshots written."
+    }
   },
   "ticketRules": {
     "listTitle": "Ticket rules",
