@@ -1,9 +1,11 @@
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
-import type { DeploymentBase, DeploymentChanges, ReleaseNoteEntry } from '@repo/shared';
+import type { DeploymentBase, DeploymentChanges } from '@repo/shared';
 import { api } from '../api';
 import { useCancellableLoad } from '../hooks';
+import { RefLink } from '../RefLink';
+import { CommitList } from '../CommitList';
 import { RefDialog } from './RefDialog';
 
 /**
@@ -103,7 +105,8 @@ export function DeploymentChangesPage({ sourceId, slug }: { sourceId: string; sl
 
       {deployment && (
         <p className="muted">
-          {t('deployments.deployedRef')} <span className="mono">{deployment.ref}</span> ·{' '}
+          {t('deployments.deployedRef')}{' '}
+          <RefLink name={deployment.ref} url={deployment.refUrl} /> ·{' '}
           {new Date(deployment.createdAt).toLocaleString()} ·{' '}
           <span className={`pill status-${deployment.status}`}>
             {t(`status.${deployment.status}`, deployment.status)}
@@ -189,7 +192,8 @@ function Changes({ changes }: { changes: DeploymentChanges }) {
   return (
     <>
       <p className="muted">
-        {t('deployments.against')} <span className="mono">{changes.baseRef}</span>
+        {t('deployments.against')}{' '}
+        <RefLink name={changes.baseRef} url={changes.baseRefUrl} />
       </p>
       {changes.entries.length === 0 ? (
         <p className="muted">{t('deployments.noChange')}</p>
@@ -201,42 +205,9 @@ function Changes({ changes }: { changes: DeploymentChanges }) {
               authors: changes.authors,
             })}
           </p>
-          <ul className="notes-list">
-            {changes.entries.map((entry) => (
-              <Entry key={entry.sha} entry={entry} />
-            ))}
-          </ul>
+          <CommitList entries={changes.entries} />
         </>
       )}
     </>
-  );
-}
-
-function Entry({ entry }: { entry: ReleaseNoteEntry }) {
-  return (
-    <li>
-      {entry.scope && <b>{entry.scope}: </b>}
-      {entry.summary}{' '}
-      {entry.tickets.map((ticket) =>
-        ticket.url ? (
-          <a
-            key={ticket.key}
-            className="pill attr"
-            href={ticket.url}
-            target="_blank"
-            rel="noreferrer"
-          >
-            {ticket.key}
-          </a>
-        ) : (
-          <span key={ticket.key} className="pill attr">
-            {ticket.key}
-          </span>
-        ),
-      )}{' '}
-      <a className="mono" href={entry.url} target="_blank" rel="noreferrer">
-        {entry.sha.slice(0, 7)}
-      </a>
-    </li>
   );
 }

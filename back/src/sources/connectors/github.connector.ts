@@ -15,6 +15,7 @@ import type {
 import type { ConnectorContext, SourceConnector } from './source-connector.interface';
 import { githubQuota, type HeaderBag, type QuotaSink } from '../../api-quota/rate-limit-headers';
 import { applyScope, ageHours } from './scope.util';
+import { repoUrl } from './ref-url';
 
 /** GitHub connector — github.com or GitHub Enterprise via baseUrl. */
 @Injectable()
@@ -28,9 +29,7 @@ export class GitHubConnector implements SourceConnector {
 
   /** Web URL of a repository (github.com or GHE). */
   private repoUrl(ctx: ConnectorContext, repo: string): string {
-    const isDotCom = /(^|\/\/)(www\.)?github\.com/.test(ctx.baseUrl);
-    const root = isDotCom ? 'https://github.com' : ctx.baseUrl.replace(/\/$/, '');
-    return `${root}/${ctx.scope.owner}/${repo}`;
+    return repoUrl({ kind: 'github', baseUrl: ctx.baseUrl, owner: ctx.scope.owner, repo });
   }
 
   async testConnection(ctx: ConnectorContext): Promise<ConnectionTestResult> {

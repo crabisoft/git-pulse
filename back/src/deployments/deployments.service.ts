@@ -18,6 +18,7 @@ import type {
 } from '../sources/connectors/source-connector.interface';
 import { ReaderFactory } from '../ingest/reader.factory';
 import { EnvRulesService } from '../env-rules/env-rules.service';
+import { refUrl } from '../sources/connectors/ref-url';
 import { ReleaseNotesService } from '../release-notes/release-notes.service';
 import { isValidGitRef } from './git-ref';
 import {
@@ -117,7 +118,16 @@ export class DeploymentsService {
     // Nothing to compare against is a fact about the data, not a failure: the
     // first deployment to an environment genuinely has no predecessor.
     if (baseRef === null) {
-      return { deployment: target, repo, head: target.ref, base, baseRef: null, entries: [], authors: 0 };
+      return {
+        deployment: target,
+        repo,
+        head: target.ref,
+        base,
+        baseRef: null,
+        baseRefUrl: null,
+        entries: [],
+        authors: 0,
+      };
     }
 
     const commits = await connector.listCommitsBetween(ctx, repo, baseRef, target.ref);
@@ -133,6 +143,10 @@ export class DeploymentsService {
       head: target.ref,
       base,
       baseRef,
+      baseRefUrl: refUrl(
+        { kind, baseUrl: ctx.baseUrl, owner: ctx.scope.owner, repo },
+        baseRef,
+      ),
       entries,
       authors: new Set(commits.map((c) => c.author)).size,
     };
@@ -167,13 +181,24 @@ export class DeploymentsService {
     return previousDeployment(classified, target)?.ref ?? null;
   }
 
-  /** Resolves every environment name against the source's rules, in one read. */
+  /**
+   * Resolves every environment name against the source's rules, in one read,
+   * and attaches the page each deployed ref can be opened at.
+   *
+   * The ref link is built here rather than stored: it follows from the platform,
+   * the base URL and the repo, and storing what we make of the data is what the
+   * ingestion deliberately does not do. `readSpec` carries the three without
+   * decrypting anything, so a stored source pays no more for it.
+   */
   private async classify(
     sourceId: string,
     deployments: Deployment[],
   ): Promise<ClassifiedDeployment[]> {
     const names = [...new Set(deployments.map((d) => d.environment))];
-    const classified = await this.envRules.classifyMany(sourceId, names);
+    const [classified, spec] = await Promise.all([
+      this.envRules.classifyMany(sourceId, names),
+      this.sources.readSpec(sourceId),
+    ]);
     const byName = new Map(classified.map((env) => [env.name, env]));
     return deployments.map((deployment) => {
       const env = byName.get(deployment.environment);
@@ -181,6 +206,15 @@ export class DeploymentsService {
         ...deployment,
         attributes: env?.attributes ?? {},
         metaEnvironments: env?.metaEnvironments ?? [],
+        refUrl: refUrl(
+          {
+            kind: spec.kind,
+            baseUrl: spec.baseUrl,
+            owner: spec.scope.owner,
+            repo: deployment.repo,
+          },
+          deployment.ref,
+        ),
       };
     });
   }

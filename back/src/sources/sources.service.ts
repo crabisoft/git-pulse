@@ -24,6 +24,17 @@ import { ConnectorFactory } from './connectors/connector.factory';
 import type { CreateSourceDto } from './dto/create-source.dto';
 import type { UpdateSourceDto } from './dto/update-source.dto';
 
+/**
+ * What a caller needs about a source without holding its credentials: where it
+ * is read from, what it tracks, and what its web URLs are built from.
+ */
+export interface SourceSpec {
+  mode: SourceMode;
+  scope: ScopeRules;
+  kind: SourceKind;
+  baseUrl: string;
+}
+
 @Injectable()
 export class SourcesService {
   constructor(
@@ -139,13 +150,18 @@ export class SourcesService {
    * this is asked on every dashboard and DORA request, and a `stored` source
    * needs nothing else — not even its credentials, which is the point.
    */
-  async readSpec(id: string): Promise<{ mode: SourceMode; scope: ScopeRules }> {
+  async readSpec(id: string): Promise<SourceSpec> {
     const source = await this.prisma.source.findUnique({
       where: { id },
-      select: { mode: true, scope: true },
+      select: { mode: true, scope: true, kind: true, baseUrl: true },
     });
     if (!source) throw new CodedException('errors.source.notFound', HttpStatus.NOT_FOUND, { id });
-    return { mode: source.mode as SourceMode, scope: source.scope as unknown as ScopeRules };
+    return {
+      mode: source.mode as SourceMode,
+      scope: source.scope as unknown as ScopeRules,
+      kind: source.kind as SourceKind,
+      baseUrl: source.baseUrl,
+    };
   }
 
   async findOne(id: string): Promise<SourcePublic> {

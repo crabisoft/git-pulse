@@ -273,6 +273,12 @@ export interface ClassifiedDeployment extends Deployment {
   /** Attributes from named capture groups — empty when no rule matches. */
   attributes: Record<string, string>;
   metaEnvironments: string[];
+  /**
+   * The platform's page for the deployed ref. Unlike an environment's address
+   * this is derivable, so it is built rather than read — and the front never
+   * learns which platform it came from.
+   */
+  refUrl: string;
 }
 
 /**
@@ -327,6 +333,8 @@ export interface DeploymentChanges {
    * against, which is a fact about the data and not an error.
    */
   baseRef: string | null;
+  /** The platform's page for `baseRef`, null exactly when that one is. */
+  baseRefUrl: string | null;
   /** Commits reachable from `head` but not from `baseRef`, parsed. */
   entries: ReleaseNoteEntry[];
   /** Distinct authors — a cheap sense of how wide the change is. */
@@ -410,6 +418,9 @@ export interface ReleaseNotes {
   /** The tag the range starts after; null when it starts at the beginning. */
   from: string | null;
   to: string;
+  /** The platform's page for each bound, null exactly when the bound is. */
+  fromUrl: string | null;
+  toUrl: string;
   sections: ReleaseNoteSection[];
   /** Breaking changes, repeated out of their sections to lead the notes. */
   breaking: ReleaseNoteEntry[];

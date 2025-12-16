@@ -4,7 +4,6 @@ import {
   PAGE_LIMIT_MAX,
   type Branch,
   type LlmProviderPublic,
-  type ReleaseNoteEntry,
   type ReleaseNotes,
   type RewriteResult,
   type Tag,
@@ -13,6 +12,8 @@ import { api, apiErrorInfo, isAbort } from '../api';
 import { useCancellableLoad } from '../hooks';
 import { useAuth } from '../auth';
 import { RefSelect } from '../RefSelect';
+import { RefLink } from '../RefLink';
+import { CommitList } from '../CommitList';
 
 /** Languages the rewriting offers, as tags — the UI's own, named in the UI's locale. */
 const LANGUAGES = ['en', 'fr'];
@@ -215,7 +216,13 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
         <section className="panel">
           <div className="panel-head">
             <h2>
-              {notes.repo} — {notes.from ? `${notes.from}…${notes.to}` : notes.to}
+              {notes.repo} —{' '}
+              {notes.from && (
+                <>
+                  <RefLink name={notes.from} url={notes.fromUrl} />…
+                </>
+              )}
+              <RefLink name={notes.to} url={notes.toUrl} />
             </h2>
             <CopyButton text={notes.markdown} />
           </div>
@@ -223,14 +230,14 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
           {notes.breaking.length > 0 && (
             <>
               <h3>{t('releaseNotes.breaking')}</h3>
-              <EntryList entries={notes.breaking} />
+              <CommitList entries={notes.breaking} />
             </>
           )}
           {notes.sections.length === 0 && <p className="muted">{t('releaseNotes.empty')}</p>}
           {notes.sections.map((section) => (
             <div key={section.type}>
               <h3>{section.type}</h3>
-              <EntryList entries={section.entries} />
+              <CommitList entries={section.entries} />
             </div>
           ))}
 
@@ -294,33 +301,6 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
         </section>
       )}
     </>
-  );
-}
-
-function EntryList({ entries }: { entries: ReleaseNoteEntry[] }) {
-  return (
-    <ul className="notes-list">
-      {entries.map((entry) => (
-        <li key={entry.sha}>
-          {entry.scope && <b>{entry.scope}: </b>}
-          {entry.summary}{' '}
-          {entry.tickets.map((ticket) =>
-            ticket.url ? (
-              <a key={ticket.key} className="pill attr" href={ticket.url} target="_blank" rel="noreferrer">
-                {ticket.key}
-              </a>
-            ) : (
-              <span key={ticket.key} className="pill attr">
-                {ticket.key}
-              </span>
-            ),
-          )}{' '}
-          <a className="mono" href={entry.url} target="_blank" rel="noreferrer">
-            {entry.sha.slice(0, 7)}
-          </a>
-        </li>
-      ))}
-    </ul>
   );
 }
 

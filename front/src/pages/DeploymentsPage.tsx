@@ -8,6 +8,7 @@ import { DimensionFilter, PeriodFilter } from '../Filters';
 import { RepoFilter } from '../RepoFilter';
 import { MultiSelect } from '../MultiSelect';
 import { Pagination } from '../Pagination';
+import { RefLink } from '../RefLink';
 
 /**
  * Module constant so resetting on a source change never re-triggers a fetch.
@@ -152,7 +153,9 @@ export function DeploymentsPage({ sourceId, slug }: { sourceId: string; slug: st
                     ))}
                   </div>
                 </td>
-                <td className="mono">{deployment.ref}</td>
+                <td>
+                  <RefLink name={deployment.ref} url={deployment.refUrl} />
+                </td>
                 <td>
                   <span className={`pill status-${deployment.status}`}>
                     {t(`status.${deployment.status}`, deployment.status)}

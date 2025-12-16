@@ -16,6 +16,7 @@ import { LlmService } from '../llm/llm.service';
 import { ReaderFactory } from '../ingest/reader.factory';
 import { parseConventionalCommit, sectionRank } from './conventional-commit';
 import { resolveRange } from './range';
+import { refUrl } from '../sources/connectors/ref-url';
 import { REWRITE_SYSTEM, buildRewritePrompt, readRewritten } from './rewrite';
 import type { RewriteReleaseNotesDto } from './dto/rewrite-release-notes.dto';
 
@@ -115,10 +116,20 @@ export class ReleaseNotesService {
       .filter(({ entry }) => entry.breaking)
       .map(({ entry }) => entry);
 
+    // Built rather than read: what a bound points at is derivable from the
+    // platform and the repo, and the front must not learn which platform.
+    const location = {
+      kind,
+      baseUrl: ctx.baseUrl,
+      owner: ctx.scope.owner,
+      repo: query.repo,
+    };
     return {
       repo: query.repo,
       from,
       to,
+      fromUrl: from === null ? null : refUrl(location, from),
+      toUrl: refUrl(location, to),
       sections,
       breaking,
       markdown: render(query.repo, from, to, sections, breaking),

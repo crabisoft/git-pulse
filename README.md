@@ -443,6 +443,20 @@ extracting an attribute literally named `meta` is entirely plausible.
 > Two implementations of "what does an omitted `to` mean" would drift, and a
 > period is what every number on screen is relative to.
 
+Every ref on the page — the deployed one, and the base it is compared against —
+is a **link to the platform's page for it**. Unlike an environment's address
+this one is derivable, so it is built rather than read: `refUrl` takes the
+platform, the base URL, the owner and the repo, all of which `readSpec` carries
+without decrypting anything. One shape covers a branch, a tag and a commit,
+since both platforms resolve `tree/<ref>` against whichever it turns out to be —
+nothing has to guess what it is holding. The links open in a new tab: a reader
+following one is comparing, not leaving, and losing the filters they set would
+be the wrong trade.
+
+> It is built on the **backend** and travels with the payload. Composing the
+> URL in the UI would put the difference between GitHub and GitLab there, and
+> nothing in the model, the UI or the metrics names a platform.
+
 An environment name is a **link** whenever the platform stated where to reach
 it: GitHub carries it on a deployment status, GitLab on the environment itself.
 It is read and never built — the address of a deployed application follows from

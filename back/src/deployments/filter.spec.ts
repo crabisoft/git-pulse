@@ -11,6 +11,7 @@ function deployment(over: Partial<ClassifiedDeployment> = {}): ClassifiedDeploym
     status: 'success',
     createdAt: '2026-01-10T10:00:00.000Z',
     environmentUrl: null,
+    refUrl: 'https://github.com/acme/extranet-api/tree/main',
     attributes: { type: 'Prod', region: 'eu' },
     metaEnvironments: ['Production'],
     ...over,

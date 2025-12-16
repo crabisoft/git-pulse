@@ -14,6 +14,7 @@ import type {
 import type { ConnectorContext, SourceConnector } from './source-connector.interface';
 import { gitlabQuota, type HeaderBag, type QuotaSink } from '../../api-quota/rate-limit-headers';
 import { applyScope, ageHours } from './scope.util';
+import { repoUrl } from './ref-url';
 
 export type GitlabClient = InstanceType<typeof Gitlab>;
 
@@ -36,7 +37,7 @@ export class GitLabConnector implements SourceConnector {
 
   /** Web URL of a project from its path_with_namespace. */
   private repoUrl(ctx: ConnectorContext, repo: string): string {
-    return `${ctx.baseUrl.replace(/\/$/, '')}/${repo}`;
+    return repoUrl({ kind: 'gitlab', baseUrl: ctx.baseUrl, owner: ctx.scope.owner, repo });
   }
 
   async testConnection(ctx: ConnectorContext): Promise<ConnectionTestResult> {
