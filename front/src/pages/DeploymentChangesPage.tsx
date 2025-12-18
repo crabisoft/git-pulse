@@ -6,6 +6,7 @@ import { api } from '../api';
 import { useCancellableLoad } from '../hooks';
 import { RefLink } from '../RefLink';
 import { CommitList } from '../CommitList';
+import { FilterField } from '../Filters';
 import { RefDialog } from './RefDialog';
 
 /**
@@ -114,9 +115,8 @@ export function DeploymentChangesPage({ sourceId, slug }: { sourceId: string; sl
         </p>
       )}
 
-      <div className="form filters-row">
-        <label>
-          {t('deployments.comparedTo')}
+      <div className="filters-row">
+        <FilterField label={t('deployments.comparedTo')}>
           <select
             // The dialog owns the selection while it is open, so cancelling it
             // snaps back to the base still in effect.
@@ -132,7 +132,7 @@ export function DeploymentChangesPage({ sourceId, slug }: { sourceId: string; sl
             <option value="default">{t('deployments.baseDefault')}</option>
             <option value="ref">{t('deployments.baseRef')}</option>
           </select>
-        </label>
+        </FilterField>
         {base === 'ref' && (
           // Reads the pinned ref back, and reopens the dialog on it — the same
           // shape the custom period uses.

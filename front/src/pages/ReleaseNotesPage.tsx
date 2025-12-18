@@ -14,6 +14,7 @@ import { useAuth } from '../auth';
 import { RefSelect } from '../RefSelect';
 import { RefLink } from '../RefLink';
 import { CommitList } from '../CommitList';
+import { FilterField } from '../Filters';
 
 /** Languages the rewriting offers, as tags — the UI's own, named in the UI's locale. */
 const LANGUAGES = ['en', 'fr'];
@@ -167,9 +168,8 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
         )}
 
         {repos.length > 0 && (
-          <div className="form filters-row">
-            <label>
-              {t('releaseNotes.repo')}
+          <div className="filters-row">
+            <FilterField label={t('releaseNotes.repo')}>
               <select value={repo} onChange={(e) => setRepo(e.target.value)}>
                 {repos.map((name) => (
                   <option key={name} value={name}>
@@ -177,9 +177,8 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
                   </option>
                 ))}
               </select>
-            </label>
-            <label>
-              {t('releaseNotes.from')}
+            </FilterField>
+            <FilterField label={t('releaseNotes.from')}>
               <RefSelect
                 value={from}
                 onChange={setFrom}
@@ -190,9 +189,8 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
                 branches={branches}
                 disabled={refsLoad.loading}
               />
-            </label>
-            <label>
-              {t('releaseNotes.to')}
+            </FilterField>
+            <FilterField label={t('releaseNotes.to')}>
               <RefSelect
                 value={to}
                 onChange={setTo}
@@ -201,7 +199,7 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
                 branches={branches}
                 disabled={refsLoad.loading}
               />
-            </label>
+            </FilterField>
             <button className="btn primary" disabled={!repo || busy} onClick={() => void generate()}>
               {busy && !rewritten ? t('releaseNotes.generating') : t('releaseNotes.generate')}
             </button>
@@ -236,7 +234,10 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
           {notes.sections.length === 0 && <p className="muted">{t('releaseNotes.empty')}</p>}
           {notes.sections.map((section) => (
             <div key={section.type}>
-              <h3>{section.type}</h3>
+              {/* Named when the convention names it — a heading reading `chore`
+                  is a type, not a title. An unknown one keeps its type, which
+                  is the only honest thing to call it. */}
+              <h3>{t(`releaseNotes.section.${section.type}`, section.type)}</h3>
               <CommitList entries={section.entries} />
             </div>
           ))}
@@ -255,9 +256,8 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
           </div>
           <p className="muted subtabs-hint">{t('releaseNotes.rewriteHint')}</p>
 
-          <div className="form filters-row">
-            <label>
-              {t('releaseNotes.provider')}
+          <div className="filters-row">
+            <FilterField label={t('releaseNotes.provider')}>
               <select value={providerId} onChange={(e) => setProviderId(e.target.value)}>
                 {providers.map((provider) => (
                   <option key={provider.id} value={provider.id}>
@@ -265,9 +265,8 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
                   </option>
                 ))}
               </select>
-            </label>
-            <label>
-              {t('releaseNotes.language')}
+            </FilterField>
+            <FilterField label={t('releaseNotes.language')}>
               <select value={language} onChange={(e) => setLanguage(e.target.value)}>
                 <option value="">{t('releaseNotes.languageKeep')}</option>
                 {LANGUAGES.map((tag) => (
@@ -276,7 +275,7 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
                   </option>
                 ))}
               </select>
-            </label>
+            </FilterField>
             <button className="btn primary" disabled={busy} onClick={() => void rewrite()}>
               {busy ? t('releaseNotes.rewriting') : t('releaseNotes.rewrite')}
             </button>

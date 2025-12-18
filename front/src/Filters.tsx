@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import type { DoraPeriod } from '@repo/shared';
@@ -16,6 +16,25 @@ export type PeriodValue = { from?: string; to?: string; windowDays?: number };
 
 /** Value of the option that opens the custom-period dialog. */
 const CUSTOM = 'custom';
+
+/**
+ * One labelled control in a filter bar, for the pages whose filter is a plain
+ * select rather than a widget of its own.
+ *
+ * It exists so those pages stop reaching for `.form`, which stacks its label
+ * above its control: in a row that also holds a button, the stacked fields are
+ * a head taller than everything beside them and nothing lines up. A filter bar
+ * reads left to right — label, value, next filter — and that is the shape the
+ * period and dimension filters already have.
+ */
+export function FilterField({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <label className="filter-field">
+      {label}
+      {children}
+    </label>
+  );
+}
 
 /** Bounds being edited, as the `YYYY-MM-DD` a date input speaks. Empty means open. */
 type Bounds = { from: string; to: string };
