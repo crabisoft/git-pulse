@@ -6,8 +6,10 @@ import {
   PAGE_LIMIT_MAX,
   QUOTA_RESERVE_PCT_MAX,
   QUOTA_RESERVE_PCT_MIN,
+  RELEASE_NOTES_GENERATORS,
   type AppSettings,
   type FailureSource,
+  type ReleaseNotesGenerator,
 } from '@repo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CodedException } from '../common/coded-exception';
@@ -30,6 +32,9 @@ const FALLBACKS: AppSettings = {
   // A tenth of the budget: enough to leave the calls that carry the metrics
   // room to finish, small enough that the enrichment runs on any normal day.
   quotaReservePct: 10,
+  // The renderer that lists every commit. The other one is better on a history
+  // that holds the convention, and nothing here knows whether this one does.
+  releaseNotesGenerator: 'builtin',
 };
 
 const LIMITS = {
@@ -65,6 +70,7 @@ export class SettingsService {
       failureSource: readFailureSource(stored.get('failureSource')),
       incidentLabels: readList(stored.get('incidentLabels')),
       quotaReservePct: readNumber(stored.get('quotaReservePct'), FALLBACKS.quotaReservePct),
+      releaseNotesGenerator: readGenerator(stored.get('releaseNotesGenerator')),
     };
   }
 
@@ -139,6 +145,10 @@ function readList(raw: string | undefined): string[] {
 
 function readFailureSource(raw: string | undefined): FailureSource {
   return raw === 'incidents' || raw === 'both' ? raw : FALLBACKS.failureSource;
+}
+
+function readGenerator(raw: string | undefined): ReleaseNotesGenerator {
+  return RELEASE_NOTES_GENERATORS.find((value) => value === raw) ?? FALLBACKS.releaseNotesGenerator;
 }
 
 /** `AppSetting.value` is a plain string column, so booleans travel as text. */

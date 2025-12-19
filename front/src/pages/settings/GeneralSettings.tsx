@@ -4,6 +4,7 @@ import {
   PAGE_LIMIT_MAX,
   QUOTA_RESERVE_PCT_MAX,
   QUOTA_RESERVE_PCT_MIN,
+  RELEASE_NOTES_GENERATORS,
   type AppSettings,
 } from '@repo/shared';
 import { api, apiErrorInfo } from '../../api';
@@ -147,6 +148,22 @@ export function GeneralSettings({
               onChange={(e) => set('quotaReservePct', Number(e.target.value))}
               required
             />
+          </label>
+          <label>
+            {t('settings.general.releaseNotesGenerator')}{' '}
+            <span className="hint">{t('settings.general.releaseNotesGeneratorHint')}</span>
+            <select
+              value={form.releaseNotesGenerator}
+              onChange={(e) =>
+                set('releaseNotesGenerator', e.target.value as AppSettings['releaseNotesGenerator'])
+              }
+            >
+              {RELEASE_NOTES_GENERATORS.map((value) => (
+                <option key={value} value={value}>
+                  {t(`settings.general.generator.${value}`)}
+                </option>
+              ))}
+            </select>
           </label>
           <label>
             {t('settings.general.collectCron')}{' '}

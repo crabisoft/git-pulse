@@ -395,6 +395,15 @@ export interface Commit {
 export interface ReleaseNoteEntry {
   /** The description, with the Conventional Commits prefix removed. */
   summary: string;
+  /**
+   * The commit message as written, whole — subject and body.
+   *
+   * A list shows the summary above, which is one line and sometimes not even
+   * the subject: a `BREAKING CHANGE:` footer replaces it. This is what the
+   * reader unfolds or hovers to see what the commit actually said, and the only
+   * place the body survives at all — nothing else here keeps it.
+   */
+  message: string;
   /** The `feat(scope):` part, when there is one. */
   scope: string | null;
   breaking: boolean;
@@ -412,6 +421,25 @@ export interface ReleaseNoteSection {
   entries: ReleaseNoteEntry[];
 }
 
+/**
+ * What renders the Markdown of a release note.
+ *
+ * `builtin` reads every commit, whatever convention it follows, and keeps the
+ * tickets the ticket rules found. `conventional-changelog` hands the range to
+ * the package the Conventional Commits ecosystem publishes: named sections,
+ * the customary layout — and its rules, which drop a commit that follows no
+ * convention. It is the right choice exactly when a repo holds the convention.
+ *
+ * The structured sections below are unaffected either way: they are the page's
+ * own reading of the commits, and they list everything.
+ */
+export type ReleaseNotesGenerator = 'builtin' | 'conventional-changelog';
+
+export const RELEASE_NOTES_GENERATORS: readonly ReleaseNotesGenerator[] = [
+  'builtin',
+  'conventional-changelog',
+];
+
 /** What a range of commits amounts to, structured and rendered. */
 export interface ReleaseNotes {
   repo: string;
@@ -425,6 +453,8 @@ export interface ReleaseNotes {
   /** Breaking changes, repeated out of their sections to lead the notes. */
   breaking: ReleaseNoteEntry[];
   markdown: string;
+  /** Which generator produced `markdown` — the sections never depend on it. */
+  generator: ReleaseNotesGenerator;
 }
 
 // ─── AI providers ────────────────────────────────────────────────────
@@ -873,6 +903,8 @@ export interface AppSettings {
    * provider says no.
    */
   quotaReservePct: number;
+  /** Which engine renders the Markdown of a release note. */
+  releaseNotesGenerator: ReleaseNotesGenerator;
 }
 
 /** Bounds of `quotaReservePct`; a reserve of everything would collect nothing. */

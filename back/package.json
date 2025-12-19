@@ -29,6 +29,9 @@
     "bullmq": "^5.34.0",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "conventional-changelog-conventionalcommits": "^7.0.2",
+    "conventional-changelog-writer": "^7.0.1",
+    "conventional-commits-parser": "^5.0.0",
     "ioredis": "^5.4.1",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1"

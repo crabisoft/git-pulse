@@ -14,9 +14,11 @@ import { ConnectorFactory } from '../sources/connectors/connector.factory';
 import { TicketRulesService } from '../ticket-rules/ticket-rules.service';
 import { LlmService } from '../llm/llm.service';
 import { ReaderFactory } from '../ingest/reader.factory';
+import { SettingsService } from '../settings/settings.service';
 import { parseConventionalCommit, sectionRank } from './conventional-commit';
+import { renderChangelog } from './changelog';
 import { resolveRange } from './range';
-import { refUrl } from '../sources/connectors/ref-url';
+import { refUrl, type RepoLocation } from '../sources/connectors/ref-url';
 import { REWRITE_SYSTEM, buildRewritePrompt, readRewritten } from './rewrite';
 import type { RewriteReleaseNotesDto } from './dto/rewrite-release-notes.dto';
 
@@ -39,6 +41,7 @@ export class ReleaseNotesService {
     private readonly ticketRules: TicketRulesService,
     private readonly llm: LlmService,
     private readonly readers: ReaderFactory,
+    private readonly settings: SettingsService,
   ) {}
 
   /**
@@ -118,12 +121,13 @@ export class ReleaseNotesService {
 
     // Built rather than read: what a bound points at is derivable from the
     // platform and the repo, and the front must not learn which platform.
-    const location = {
+    const location: RepoLocation = {
       kind,
       baseUrl: ctx.baseUrl,
       owner: ctx.scope.owner,
       repo: query.repo,
     };
+    const generator = (await this.settings.get()).releaseNotesGenerator;
     return {
       repo: query.repo,
       from,
@@ -132,7 +136,16 @@ export class ReleaseNotesService {
       toUrl: refUrl(location, to),
       sections,
       breaking,
-      markdown: render(query.repo, from, to, sections, breaking),
+      markdown:
+        generator === 'conventional-changelog'
+          ? await renderChangelog(
+              location,
+              from,
+              to,
+              entries.map(({ entry }) => entry),
+            )
+          : render(query.repo, from, to, sections, breaking),
+      generator,
     };
   }
 
@@ -176,6 +189,9 @@ export class ReleaseNotesService {
         type: parsed?.type ?? 'other',
         entry: {
           summary: parsed?.summary ?? firstLine(commit.message),
+          // Carried whole beside the parsed line: the body is where a commit
+          // says why, and no reading above keeps a word of it.
+          message: commit.message,
           scope: parsed?.scope ?? null,
           breaking: parsed?.breaking ?? false,
           sha: commit.sha,

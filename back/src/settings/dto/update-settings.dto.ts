@@ -8,7 +8,11 @@ import {
   IsString,
   MinLength,
 } from 'class-validator';
-import type { FailureSource } from '@repo/shared';
+import {
+  RELEASE_NOTES_GENERATORS,
+  type FailureSource,
+  type ReleaseNotesGenerator,
+} from '@repo/shared';
 
 /** Partial update — only the supplied keys are persisted. */
 export class UpdateSettingsDto {
@@ -50,4 +54,9 @@ export class UpdateSettingsDto {
   @IsOptional()
   @IsInt()
   quotaReservePct?: number;
+
+  /** Which engine renders the Markdown of a release note. */
+  @IsOptional()
+  @IsEnum(RELEASE_NOTES_GENERATORS)
+  releaseNotesGenerator?: ReleaseNotesGenerator;
 }

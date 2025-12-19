@@ -92,7 +92,13 @@
       "publicDashboard": "Public dashboard",
       "publicDashboardHint": "Dashboard and DORA readable without signing in. Off, the whole application asks for an account — the settings always do.",
       "quotaReservePct": "API reserve (%)",
-      "quotaReservePctHint": "share of a budget kept for the essential calls: below it, the collection drops the per-pull-request and per-deployment enrichment"
+      "quotaReservePctHint": "share of a budget kept for the essential calls: below it, the collection drops the per-pull-request and per-deployment enrichment",
+      "releaseNotesGenerator": "Release notes generator",
+      "releaseNotesGeneratorHint": "what renders the Markdown of a release note; the sections shown on the page list every commit either way",
+      "generator": {
+        "builtin": "Built in — every commit, tickets included",
+        "conventional-changelog": "conventional-changelog — the convention's own package"
+      }
     }
   },
   "users": {
@@ -650,6 +656,11 @@
     "breaking": "⚠ Breaking changes",
     "empty": "No change in this range.",
     "markdown": "Markdown",
+    "generator": {
+      "builtin": "built in",
+      "conventional-changelog": "conventional-changelog"
+    },
+    "generatorHint": "This generator lists only the commits that follow the convention, and it does not carry the ticket links the rules found. The sections above hold everything either way. The choice belongs to the settings.",
     "section": {
       "feat": "Features",
       "fix": "Bug fixes",

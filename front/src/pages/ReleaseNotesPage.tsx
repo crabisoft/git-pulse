@@ -243,7 +243,16 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
           ))}
 
           <details className="markdown-source">
-            <summary>{t('releaseNotes.markdown')}</summary>
+            <summary>
+              {t('releaseNotes.markdown')}
+              {' · '}
+              {t(`releaseNotes.generator.${notes.generator}`)}
+            </summary>
+            {/* The sections above list every commit; this generator lists the
+                ones it can parse. Saying so beats leaving the reader to notice. */}
+            {notes.generator === 'conventional-changelog' && (
+              <p className="muted subtabs-hint">{t('releaseNotes.generatorHint')}</p>
+            )}
             <pre className="mono">{notes.markdown}</pre>
           </details>
         </section>

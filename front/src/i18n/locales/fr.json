@@ -92,7 +92,13 @@
       "publicDashboard": "Dashboard public",
       "publicDashboardHint": "Dashboard et DORA consultables sans connexion. Décoché, toute l'application demande un compte — les réglages le demandent de toute façon.",
       "quotaReservePct": "Réserve d'API (%)",
-      "quotaReservePctHint": "part du budget gardée pour les appels essentiels : en dessous, la collecte abandonne l'enrichissement par pull request et par déploiement"
+      "quotaReservePctHint": "part du budget gardée pour les appels essentiels : en dessous, la collecte abandonne l'enrichissement par pull request et par déploiement",
+      "releaseNotesGenerator": "Générateur de notes de version",
+      "releaseNotesGeneratorHint": "ce qui rend le Markdown d'une note de version ; les sections affichées sur la page listent tous les commits dans les deux cas",
+      "generator": {
+        "builtin": "Intégré — tous les commits, tickets compris",
+        "conventional-changelog": "conventional-changelog — le paquet de la convention"
+      }
     }
   },
   "users": {
@@ -650,6 +656,11 @@
     "breaking": "⚠ Changements incompatibles",
     "empty": "Aucun changement dans cette plage.",
     "markdown": "Markdown",
+    "generator": {
+      "builtin": "intégré",
+      "conventional-changelog": "conventional-changelog"
+    },
+    "generatorHint": "Ce générateur ne liste que les commits qui suivent la convention, et il ne reprend pas les liens de ticket trouvés par les règles. Les sections ci-dessus contiennent tout, dans les deux cas. Le choix se fait dans les réglages.",
     "section": {
       "feat": "Fonctionnalités",
       "fix": "Corrections",
