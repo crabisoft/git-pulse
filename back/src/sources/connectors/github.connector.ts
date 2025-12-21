@@ -12,7 +12,11 @@ import type {
   Tag,
   Branch,
 } from '@repo/shared';
-import type { ConnectorContext, SourceConnector } from './source-connector.interface';
+import type {
+  CommitPullRequest,
+  ConnectorContext,
+  SourceConnector,
+} from './source-connector.interface';
 import { githubQuota, type HeaderBag, type QuotaSink } from '../../api-quota/rate-limit-headers';
 import { applyScope, ageHours } from './scope.util';
 import { repoUrl } from './ref-url';
@@ -288,6 +292,56 @@ export class GitHubConnector implements SourceConnector {
     const gh = this.client(ctx);
     const info = await gh.rest.repos.get({ owner: ctx.scope.owner, repo });
     return info.data.default_branch;
+  }
+
+  async commitPullRequests(
+    ctx: ConnectorContext,
+    repo: string,
+    shas: string[],
+  ): Promise<Map<string, CommitPullRequest>> {
+    const gh = this.client(ctx);
+    const requests = new Map<string, CommitPullRequest>();
+    let skipped = 0;
+
+    for (const sha of shas) {
+      // One call per commit, so both guards belong inside the loop: a range of
+      // two hundred commits is two hundred calls, and neither a cancelled
+      // request nor an emptying budget should have to wait for the last one.
+      ctx.signal?.throwIfAborted();
+      if (ctx.allowsOptionalCalls?.() === false) {
+        skipped++;
+        continue;
+      }
+      try {
+        const prs = await gh.rest.repos.listPullRequestsAssociatedWithCommit({
+          owner: ctx.scope.owner,
+          repo,
+          commit_sha: sha,
+          // A page rather than a single result: it is one call either way, and
+          // a commit sitting in an open pull request as well as in the one that
+          // landed it should be read as the change that landed.
+          per_page: 20,
+        });
+        const merged = prs.data.find((pr) => pr.merged_at) ?? prs.data[0];
+        if (merged) {
+          requests.set(sha, {
+            number: merged.number,
+            url: merged.html_url,
+            headRef: merged.head.ref,
+          });
+        }
+      } catch {
+        // A commit the platform will not associate is a commit with no request,
+        // which is a case the caller handles anyway.
+      }
+    }
+
+    if (skipped > 0) {
+      this.logger.warn(
+        `Réserve d'API atteinte : pull request non résolue pour ${skipped} commit(s) de ${repo}`,
+      );
+    }
+    return requests;
   }
 
   private async deploymentStatus(

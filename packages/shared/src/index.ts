@@ -391,6 +391,17 @@ export interface Commit {
   url: string;
 }
 
+/**
+ * The pull/merge request a commit came in on, as a note cites it.
+ *
+ * Number and address only: what a release note needs of a request is a link to
+ * open, and its title is the commit summary sitting right beside it.
+ */
+export interface PullRequestRef {
+  number: number;
+  url: string;
+}
+
 /** One line of a release note, parsed out of a commit. */
 export interface ReleaseNoteEntry {
   /** The description, with the Conventional Commits prefix removed. */
@@ -412,6 +423,13 @@ export interface ReleaseNoteEntry {
   url: string;
   /** Tickets the message mentions, read by the ticket rules. */
   tickets: TicketRef[];
+  /**
+   * The request that brought the commit in, when it could be established —
+   * from the merge commit the platform generated, or from the association it
+   * answers for a sha. Null for a commit pushed straight to a branch, and null
+   * too when the lookup was given up under the API reserve.
+   */
+  pullRequest: PullRequestRef | null;
 }
 
 /** Entries sharing a Conventional Commits type. */

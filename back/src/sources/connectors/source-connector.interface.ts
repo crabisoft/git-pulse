@@ -105,4 +105,30 @@ export interface SourceConnector {
 
   /** The branch a repo defaults to, when no range bound is given. */
   defaultBranch(ctx: ConnectorContext, repo: string): Promise<string>;
+
+  /**
+   * The pull/merge request each of these commits came in on, keyed by sha. A
+   * sha no request claims is simply absent, and so is one whose lookup was
+   * given up or failed — an unknown request reads the same either way, which is
+   * the only honest thing it can mean.
+   *
+   * **Optional work, and the expensive kind**: neither platform answers this in
+   * bulk, so it is one call per commit. Callers hand it only the shas whose
+   * merge commit told them nothing, and it stops as soon as
+   * `allowsOptionalCalls` says the budget is spent — a release note without its
+   * request links is worth far less than the calls that carry the metrics.
+   */
+  commitPullRequests(
+    ctx: ConnectorContext,
+    repo: string,
+    shas: string[],
+  ): Promise<Map<string, CommitPullRequest>>;
+}
+
+/** A request as an association answers it: what to link, and what to extract from. */
+export interface CommitPullRequest {
+  number: number;
+  url: string;
+  /** Source branch — where the ticket references usually are. */
+  headRef: string;
 }

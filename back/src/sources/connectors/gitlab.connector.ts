@@ -11,7 +11,11 @@ import type {
   Tag,
   Branch,
 } from '@repo/shared';
-import type { ConnectorContext, SourceConnector } from './source-connector.interface';
+import type {
+  CommitPullRequest,
+  ConnectorContext,
+  SourceConnector,
+} from './source-connector.interface';
 import { gitlabQuota, type HeaderBag, type QuotaSink } from '../../api-quota/rate-limit-headers';
 import { applyScope, ageHours } from './scope.util';
 import { repoUrl } from './ref-url';
@@ -248,6 +252,52 @@ export class GitLabConnector implements SourceConnector {
     const gl = this.client(ctx);
     const project = await gl.Projects.show(repo);
     return (project.default_branch as string) ?? 'main';
+  }
+
+  async commitPullRequests(
+    ctx: ConnectorContext,
+    repo: string,
+    shas: string[],
+  ): Promise<Map<string, CommitPullRequest>> {
+    const gl = this.client(ctx);
+    const requests = new Map<string, CommitPullRequest>();
+    let skipped = 0;
+
+    for (const sha of shas) {
+      // One call per commit: both guards belong inside the loop, for the same
+      // reason they do on the other platform.
+      ctx.signal?.throwIfAborted();
+      if (ctx.allowsOptionalCalls?.() === false) {
+        skipped++;
+        continue;
+      }
+      try {
+        const mrs = (await gl.Commits.allMergeRequests(repo, sha)) as Array<
+          Record<string, unknown>
+        >;
+        // Merged first: a commit sitting in an open merge request as well as in
+        // the one that landed it should be read as the change that landed.
+        const merged = mrs.find((mr) => mr.state === 'merged') ?? mrs[0];
+        const iid = merged?.iid as number | undefined;
+        if (merged && iid !== undefined) {
+          requests.set(sha, {
+            number: iid,
+            url: merged.web_url as string,
+            headRef: (merged.source_branch as string | undefined) ?? '',
+          });
+        }
+      } catch {
+        // Same as elsewhere: an association the instance will not give is a
+        // commit with no request, which the caller already handles.
+      }
+    }
+
+    if (skipped > 0) {
+      this.logger.warn(
+        `Réserve d'API atteinte : merge request non résolue pour ${skipped} commit(s) de ${repo}`,
+      );
+    }
+    return requests;
   }
 
   /**

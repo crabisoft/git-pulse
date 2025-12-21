@@ -37,6 +37,21 @@ export function repoUrl({ kind, baseUrl, owner, repo }: RepoLocation): string {
  * Unlike an environment's address, this **is** derivable: the platform, the base
  * URL, the owner and the repo are all in hand, so it is built rather than read.
  */
+/**
+ * Web page of a pull request or a merge request, from its number.
+ *
+ * Derivable like a ref's, and built for the same reason: the number is all the
+ * platforms agree on, and a connector that answered a URL for the association
+ * it resolves would still leave the ones read out of a merge commit message
+ * without one. One shape, wherever the number came from.
+ */
+export function requestUrl(location: RepoLocation, number: number): string {
+  const root = repoUrl(location);
+  return location.kind === 'gitlab'
+    ? `${root}/-/merge_requests/${number}`
+    : `${root}/pull/${number}`;
+}
+
 export function refUrl(location: RepoLocation, ref: string): string {
   const root = repoUrl(location);
   // `release/3.0` is one ref, not two path segments — but the slash is a

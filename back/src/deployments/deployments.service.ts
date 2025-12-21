@@ -130,11 +130,13 @@ export class DeploymentsService {
       };
     }
 
+    const location = { kind, baseUrl: ctx.baseUrl, owner: ctx.scope.owner, repo };
     const commits = await connector.listCommitsBetween(ctx, repo, baseRef, target.ref);
     const entries = await this.releaseNotes.describeCommits(
       sourceId,
-      ctx.scope.owner,
-      repo,
+      connector,
+      ctx,
+      location,
       commits,
     );
     return {
@@ -143,10 +145,7 @@ export class DeploymentsService {
       head: target.ref,
       base,
       baseRef,
-      baseRefUrl: refUrl(
-        { kind, baseUrl: ctx.baseUrl, owner: ctx.scope.owner, repo },
-        baseRef,
-      ),
+      baseRefUrl: refUrl(location, baseRef),
       entries,
       authors: new Set(commits.map((c) => c.author)).size,
     };

@@ -28,6 +28,7 @@ function entry(sha: string, message: string): ReleaseNoteEntry {
     author: 'Ada',
     url: `https://example.invalid/${sha}`,
     tickets: [],
+    pullRequest: null,
   };
 }
 

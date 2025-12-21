@@ -16,6 +16,13 @@ export function CommitList({ entries }: { entries: ReleaseNoteEntry[] }) {
           {entry.tickets.map((ticket) => (
             <TicketRef key={ticket.key} label={ticket.key} url={ticket.url ?? null} />
           ))}{' '}
+          {/* The request before the commit: what the change was discussed as comes
+              before what it did, and it is the link most readers actually follow. */}
+          {entry.pullRequest && (
+            <>
+              <RefLink name={`#${entry.pullRequest.number}`} url={entry.pullRequest.url} />{' '}
+            </>
+          )}
           <RefLink name={entry.sha.slice(0, 7)} url={entry.url} />
         </li>
       ))}

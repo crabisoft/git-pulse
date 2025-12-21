@@ -2,6 +2,7 @@ import { Injectable, HttpStatus, Logger } from '@nestjs/common';
 import type {
   Branch,
   Commit,
+  PullRequestRef,
   ReleaseNoteEntry,
   ReleaseNoteSection,
   ReleaseNotes,
@@ -15,10 +16,16 @@ import { TicketRulesService } from '../ticket-rules/ticket-rules.service';
 import { LlmService } from '../llm/llm.service';
 import { ReaderFactory } from '../ingest/reader.factory';
 import { SettingsService } from '../settings/settings.service';
+import type {
+  CommitPullRequest,
+  ConnectorContext,
+  SourceConnector,
+} from '../sources/connectors/source-connector.interface';
 import { parseConventionalCommit, sectionRank } from './conventional-commit';
+import { readMergeCommit } from './merge-commit';
 import { renderChangelog } from './changelog';
 import { resolveRange } from './range';
-import { refUrl, type RepoLocation } from '../sources/connectors/ref-url';
+import { refUrl, requestUrl, type RepoLocation } from '../sources/connectors/ref-url';
 import { REWRITE_SYSTEM, buildRewritePrompt, readRewritten } from './rewrite';
 import type { RewriteReleaseNotesDto } from './dto/rewrite-release-notes.dto';
 
@@ -111,14 +118,6 @@ export class ReleaseNotesService {
     const { from, to } = await resolveRange(query, tags, () =>
       connector.defaultBranch(ctx, query.repo),
     );
-    const commits = await connector.listCommitsBetween(ctx, query.repo, from, to);
-    const entries = await this.toEntries(sourceId, ctx.scope.owner, query.repo, commits);
-
-    const sections = groupByType(entries);
-    const breaking = entries
-      .filter(({ entry }) => entry.breaking)
-      .map(({ entry }) => entry);
-
     // Built rather than read: what a bound points at is derivable from the
     // platform and the repo, and the front must not learn which platform.
     const location: RepoLocation = {
@@ -127,6 +126,14 @@ export class ReleaseNotesService {
       owner: ctx.scope.owner,
       repo: query.repo,
     };
+    const commits = await connector.listCommitsBetween(ctx, query.repo, from, to);
+    const entries = await this.toEntries(sourceId, connector, ctx, location, commits);
+
+    const sections = groupByType(entries);
+    const breaking = entries
+      .filter(({ entry }) => entry.breaking)
+      .map(({ entry }) => entry);
+
     const generator = (await this.settings.get()).releaseNotesGenerator;
     return {
       repo: query.repo,
@@ -150,36 +157,45 @@ export class ReleaseNotesService {
   }
 
   /**
-   * Parses each commit and attaches the tickets its message mentions, dropping
-   * the Conventional Commits type — what a caller wants when it has a range of
-   * its own to describe rather than a release to file.
+   * Parses each commit and attaches the tickets it references, dropping the
+   * Conventional Commits type — what a caller wants when it has a range of its
+   * own to describe rather than a release to file.
    *
    * Public because the deployments page asks the same question of a different
    * range: what a ref carries over another one is the same reading of the same
    * commits, and two readings of a commit message would drift.
+   *
+   * The connector comes from the caller rather than from the factory here: both
+   * callers have already resolved one to list the commits being described, and
+   * the lookup below has to be billed to that same context.
    */
   async describeCommits(
     sourceId: string,
-    owner: string,
-    repo: string,
+    connector: SourceConnector,
+    ctx: ConnectorContext,
+    location: RepoLocation,
     commits: Commit[],
   ): Promise<ReleaseNoteEntry[]> {
-    const entries = await this.toEntries(sourceId, owner, repo, commits);
+    const entries = await this.toEntries(sourceId, connector, ctx, location, commits);
     return entries.map(({ entry }) => entry);
   }
 
-  /** Parses each commit and attaches the tickets its message mentions. */
+  /**
+   * Parses each commit, links the request that brought it in, and attaches the
+   * tickets it references — in its own message, and in that request's branch.
+   */
   private async toEntries(
     sourceId: string,
-    owner: string,
-    repo: string,
+    connector: SourceConnector,
+    ctx: ConnectorContext,
+    location: RepoLocation,
     commits: Commit[],
   ): Promise<Array<{ type: string; entry: ReleaseNoteEntry }>> {
+    const requests = await this.requestsOf(sourceId, connector, ctx, location, commits);
     const tickets = await this.ticketRules.extractMany(
       sourceId,
-      // Release notes have no branch: the message is the only text there is.
-      commits.map((c) => ({ branch: '', title: c.message })),
-      commits.map(() => ({ owner, repo })),
+      commits.map((c, i) => ({ branch: requests[i].branch ?? '', title: c.message })),
+      commits.map(() => ({ owner: ctx.scope.owner, repo: location.repo })),
     );
 
     return commits.map((commit, i) => {
@@ -198,7 +214,57 @@ export class ReleaseNotesService {
           author: commit.author,
           url: commit.url,
           tickets: tickets[i],
+          pullRequest: requests[i].ref,
         },
+      };
+    });
+  }
+
+  /**
+   * The request each commit came in on, positional with `commits`: what to link
+   * it to, and the branch to extract tickets from. Either part may be missing,
+   * and both are for a commit pushed straight to a branch.
+   *
+   * Two sources, cheapest first. A merge commit names its request in its own
+   * message, which costs nothing to read — number and branch on a generated
+   * merge, number alone on a squash, which kept no branch to name. Everything
+   * else has to be asked for, one call per commit.
+   *
+   * What is still worth a call is therefore per commit, not per range: the
+   * number is always wanted, since it is the link; the branch only when a
+   * ticket rule reaches the source, or it would be extracted from for nobody. A
+   * squashed history with no tracker configured thus costs nothing at all.
+   */
+  private async requestsOf(
+    sourceId: string,
+    connector: SourceConnector,
+    ctx: ConnectorContext,
+    location: RepoLocation,
+    commits: Commit[],
+  ): Promise<Array<{ ref: PullRequestRef | null; branch: string | null }>> {
+    const read = commits.map((commit) => readMergeCommit(commit.message, location.kind));
+    const wantsBranch = await this.ticketRules.anyFor(sourceId);
+    const unresolved = commits.filter(
+      (_, i) => read[i].number === null || (wantsBranch && read[i].branch === null),
+    );
+
+    const resolved = unresolved.length
+      ? await connector.commitPullRequests(
+          ctx,
+          location.repo,
+          unresolved.map((commit) => commit.sha),
+        )
+      : new Map<string, CommitPullRequest>();
+
+    return commits.map((commit, i) => {
+      const found = resolved.get(commit.sha);
+      // The message wins on the number it gave: it is the same request either
+      // way, and its URL is derived from the same platform and repo the
+      // association would have answered.
+      const number = read[i].number ?? found?.number ?? null;
+      return {
+        ref: number === null ? null : { number, url: requestUrl(location, number) },
+        branch: read[i].branch ?? found?.headRef ?? null,
       };
     });
   }
@@ -252,9 +318,19 @@ function render(
   return lines.join('\n');
 }
 
+/**
+ * One entry, with what a reader verifies it against: the tickets it references,
+ * the request it was reviewed in, and the commit itself. In that order — what
+ * the change was *for*, then where it was discussed, then what it actually did.
+ */
 function bullet(entry: ReleaseNoteEntry): string {
   const scope = entry.scope ? `**${entry.scope}**: ` : '';
   const tickets = entry.tickets.map((t) => (t.url ? `[${t.key}](${t.url})` : t.key)).join(', ');
-  const refs = [tickets, `[\`${entry.sha.slice(0, 7)}\`](${entry.url})`].filter(Boolean).join(' · ');
+  const request = entry.pullRequest
+    ? `[#${entry.pullRequest.number}](${entry.pullRequest.url})`
+    : '';
+  const refs = [tickets, request, `[\`${entry.sha.slice(0, 7)}\`](${entry.url})`]
+    .filter(Boolean)
+    .join(' · ');
   return `- ${scope}${entry.summary} — ${refs}`;
 }

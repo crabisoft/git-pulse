@@ -89,6 +89,20 @@ export class TicketRulesService {
   }
 
   /**
+   * Whether any rule reaches this source at all.
+   *
+   * Asked before work whose only purpose is to feed the extraction — resolving
+   * the branch a commit came in on, which costs a call per commit. With no rule
+   * attached there is nothing to find in it, and the answer is one count.
+   */
+  async anyFor(sourceId: string): Promise<boolean> {
+    const rules = await this.prisma.ticketRule.count({
+      where: { tracker: { sources: { some: { sourceId } } } },
+    });
+    return rules > 0;
+  }
+
+  /**
    * Extracts the references of several PRs at once — the rules and their
    * trackers are read a single time, since every PR of a source is matched
    * against the same set.

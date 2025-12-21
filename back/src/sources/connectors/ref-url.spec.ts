@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { refUrl, repoUrl, type RepoLocation } from './ref-url';
+import { refUrl, repoUrl, requestUrl, type RepoLocation } from './ref-url';
 
 const GITHUB: RepoLocation = {
   kind: 'github',
@@ -54,5 +54,17 @@ describe('refUrl', () => {
 
   it('escapes what is not a separator', () => {
     expect(refUrl(GITHUB, 'fix/a b')).toBe('https://github.com/acme/extranet-api/tree/fix/a%20b');
+  });
+});
+
+describe('requestUrl', () => {
+  it('names a pull request the way GitHub does', () => {
+    expect(requestUrl(GITHUB, 42)).toBe('https://github.com/acme/extranet-api/pull/42');
+  });
+
+  it('names a merge request the way GitLab does', () => {
+    expect(requestUrl(GITLAB, 42)).toBe(
+      'https://gitlab.example.com/acme/sub/extranet-api/-/merge_requests/42',
+    );
   });
 });
