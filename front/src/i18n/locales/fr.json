@@ -495,7 +495,21 @@
       "mode": "Lecture des données",
       "modeHint": "(décide si le quota d'API suit le trafic ou la collecte)",
       "webhooks": "Accepter les événements (webhooks)",
-      "webhooksHint": "accélère la fraîcheur ; la synchronisation planifiée reste le filet de sécurité"
+      "webhooksHint": "accélère la fraîcheur ; la synchronisation planifiée reste le filet de sécurité",
+      "repos": "Dépôts suivis",
+      "reposHint": "seuls les dépôts cochés sont collectés",
+      "reposOnCreate": "Tous les dépôts de l'organisation sont suivis. La sélection sera modifiable après création.",
+      "reposShow": "Afficher la sélection",
+      "reposOwnerChanged": "Enregistrez d'abord la nouvelle organisation : la liste répondrait encore pour l'ancienne.",
+      "reposLoading": "Lecture…",
+      "reposAll": "Tous les dépôts sont suivis.",
+      "reposAllBut": "Tous les dépôts sauf {{count}} sont suivis.",
+      "reposCount": "{{count}} dépôt(s) suivi(s).",
+      "reposNoneSelected": "Aucun dépôt sélectionné",
+      "reposSelectAll": "Tout suivre",
+      "reposClear": "Tout retirer",
+      "trackNewRepos": "Suivre les nouveaux dépôts",
+      "trackNewReposHint": "un dépôt créé plus tard sur la plateforme est collecté sans avoir à revenir ici"
     },
     "budget": {
       "none": "Aucun plafond déclaré",
@@ -541,6 +555,11 @@
       "action": "Collecter maintenant",
       "running": "Collecte en cours… un premier passage sur un large périmètre prend plusieurs minutes",
       "ok": "Collecte terminée — {{count}} snapshots écrits."
+    },
+    "repoVisibility": {
+      "public": "public",
+      "private": "privé",
+      "internal": "interne"
     }
   },
   "ticketRules": {

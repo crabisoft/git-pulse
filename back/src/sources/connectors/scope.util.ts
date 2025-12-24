@@ -1,11 +1,8 @@
-import type { ScopeRules } from '@repo/shared';
+import { scopeTracks, type ScopeRules } from '@repo/shared';
 
-/** Apply include/exclude rules to a list of discovered repos. */
+/** Keeps the discovered repos the scope covers, in the order they came in. */
 export function applyScope(repos: string[], scope: ScopeRules): string[] {
-  const include = scope.include ?? [];
-  const exclude = new Set(scope.exclude ?? []);
-  const base = include.length > 0 ? repos.filter((r) => include.includes(r)) : repos;
-  return base.filter((r) => !exclude.has(r));
+  return repos.filter((repo) => scopeTracks(scope, repo));
 }
 
 /** Hours elapsed between an ISO date and now. */

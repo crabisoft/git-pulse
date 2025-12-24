@@ -386,6 +386,19 @@ tr.stale td { background: color-mix(in srgb, var(--warn) 9%, transparent); }
 .source-test.err { color: var(--crit); }
 .row-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
+/* Repo selection — the summary line, then the picking once it is opened. */
+.repo-scope { display: flex; align-items: center; gap: 10px; font-size: .85rem; color: var(--muted); }
+.repo-scope .btn { padding: 4px 10px; font-size: .8rem; }
+.repo-scope-editor { display: flex; flex-direction: column; gap: 8px; }
+.repo-scope-label { font-size: .85rem; color: var(--muted); }
+.repo-scope-bulk { display: flex; flex-wrap: wrap; gap: 12px; font-size: .76rem; }
+.repo-scope-group { display: inline-flex; align-items: center; gap: 6px; }
+.repo-scope-group button {
+  padding: 3px 8px; border-radius: 6px; cursor: pointer; font-size: .76rem;
+  border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+}
+.repo-scope-group button:hover { background: var(--surface-2); color: var(--ink); }
+
 /* API quota gauge */
 .quota { margin-top: 8px; max-width: 340px; }
 .quota-head { display: flex; align-items: baseline; gap: 8px; font-size: .76rem; color: var(--muted); }

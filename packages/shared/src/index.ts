@@ -46,12 +46,65 @@ export type AuthKind = 'token' | 'app';
  */
 export type SourceMode = 'live' | 'stored';
 
+/**
+ * How a repository is exposed by its platform. `internal` — visible to the
+ * whole instance, to nobody outside — exists on GitLab and on GitHub
+ * Enterprise, and is neither of the other two: an install that tracks its
+ * private work and not its open source has to be able to say where it falls.
+ */
+export type RepoVisibility = 'public' | 'private' | 'internal';
+
+/** A repository as the platform lists it, before any scope is applied. */
+export interface RepositoryRef {
+  name: string;
+  visibility: RepoVisibility;
+}
+
 export interface ScopeRules {
   /** Root GitHub org or GitLab group to track. */
   owner: string;
-  /** Explicitly included repos/projects (empty = all under the org/group). */
+  /** Explicitly tracked repos/projects. */
   include?: string[];
+  /** Explicitly left out. Wins over everything else, `trackNewRepos` included. */
   exclude?: string[];
+  /**
+   * Whether a repository the owner gains later is tracked without anybody
+   * naming it. Absent means the historical reading — everything, unless an
+   * include list says otherwise — so a scope written before this existed keeps
+   * covering exactly what it covered.
+   */
+  trackNewRepos?: boolean;
+}
+
+/**
+ * Whether a scope covers a repository. The one place the rule is stated: the
+ * backend filters collections with it and the source form ticks its boxes from
+ * it, and the two disagreeing would show a selection that is not the one being
+ * collected.
+ */
+export function scopeTracks(scope: ScopeRules, repo: string): boolean {
+  if (scope.exclude?.includes(repo)) return false;
+  if (scope.include?.includes(repo)) return true;
+  return scope.trackNewRepos ?? (scope.include ?? []).length === 0;
+}
+
+/**
+ * Turns a selection made against a known catalogue back into a scope.
+ *
+ * Only the side that contradicts the default is written down: with new repos
+ * tracked, naming every kept one would say nothing the default does not, and
+ * the list would rot as the org grows. What is stored is therefore the shorter
+ * of the two lists, and re-reading it through `scopeTracks` gives the selection
+ * back unchanged.
+ */
+export function scopeFromSelection(
+  catalogue: readonly string[],
+  selected: ReadonlySet<string>,
+  trackNewRepos: boolean,
+): Pick<ScopeRules, 'include' | 'exclude' | 'trackNewRepos'> {
+  return trackNewRepos
+    ? { include: [], exclude: catalogue.filter((repo) => !selected.has(repo)), trackNewRepos }
+    : { include: catalogue.filter((repo) => selected.has(repo)), exclude: [], trackNewRepos };
 }
 
 /** Public representation of a source — never carries the secret. */

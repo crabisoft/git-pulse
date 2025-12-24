@@ -3,6 +3,7 @@ import type { Deployment, MergedPullRequest, Pipeline, PullRequest, ScopeRules }
 import { SourcesService } from '../sources/sources.service';
 import { ConnectorFactory } from '../sources/connectors/connector.factory';
 import type { ConnectorContext, SourceConnector } from '../sources/connectors/source-connector.interface';
+import { applyScope } from '../sources/connectors/scope.util';
 import type { SourceReader } from './source-reader.interface';
 import { StoreService } from './store.service';
 
@@ -55,8 +56,13 @@ class StoreReader implements SourceReader {
     readonly scope: ScopeRules,
   ) {}
 
-  listRepositories(): Promise<string[]> {
-    return this.store.readRepos(this.sourceId);
+  /**
+   * Filtered again on the way out: the store holds what the last collection put
+   * there, and a selection narrowed since then would otherwise keep showing the
+   * repos it dropped until the next reconciliation prunes them.
+   */
+  async listRepositories(): Promise<string[]> {
+    return applyScope(await this.store.readRepos(this.sourceId), this.scope);
   }
 
   listPullRequests(repos: string[]): Promise<PullRequest[]> {

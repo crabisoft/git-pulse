@@ -6,6 +6,7 @@ import type {
   MergedPullRequest,
   ScopeRules,
   ConnectionTestResult,
+  RepositoryRef,
   Tag,
   Branch,
 } from '@repo/shared';
@@ -69,6 +70,13 @@ export interface SourceConnector {
 
   /** Repos/projects in scope, after include/exclude is applied. */
   listRepositories(ctx: ConnectorContext): Promise<string[]>;
+
+  /**
+   * Every repo the owner exposes, with how it is exposed, before the scope is
+   * applied — what a selection is picked from. The scoped listing above is this
+   * one filtered, so the two can never offer a repo the other refuses.
+   */
+  listAllRepositories(ctx: ConnectorContext): Promise<RepositoryRef[]>;
 
   listPullRequests(ctx: ConnectorContext, repos: string[]): Promise<PullRequest[]>;
 

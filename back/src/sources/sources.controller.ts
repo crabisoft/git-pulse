@@ -57,6 +57,17 @@ export class SourcesController {
   }
 
   /**
+   * The repos the selection is picked from — everything the owner exposes, not
+   * only what the scope keeps. Admin-only like the rest of the editing: it
+   * spends a provider call, and it also tells whoever asks which private
+   * repositories exist.
+   */
+  @Get(':id/repositories')
+  repositories(@Param('id') id: string) {
+    return this.sources.listRepositories(id);
+  }
+
+  /**
    * Issues the webhook secret and returns it — the one and only time it is
    * readable, exactly like a source credential. Calling it again rotates,
    * which is the whole of what recovering from a leak takes. Admin-only, like

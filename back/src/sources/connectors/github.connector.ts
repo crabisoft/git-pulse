@@ -9,6 +9,8 @@ import type {
   MergedPullRequest,
   PipelineStatus,
   ConnectionTestResult,
+  RepoVisibility,
+  RepositoryRef,
   Tag,
   Branch,
 } from '@repo/shared';
@@ -48,16 +50,30 @@ export class GitHubConnector implements SourceConnector {
   }
 
   async listRepositories(ctx: ConnectorContext): Promise<string[]> {
+    const repos = await this.listAllRepositories(ctx);
+    return applyScope(
+      repos.map((r) => r.name),
+      ctx.scope,
+    );
+  }
+
+  async listAllRepositories(ctx: ConnectorContext): Promise<RepositoryRef[]> {
     const gh = this.client(ctx);
     const repos = await gh.paginate(gh.rest.repos.listForOrg, {
       org: ctx.scope.owner,
       per_page: 100,
       type: 'all',
     });
-    return applyScope(
-      repos.map((r) => r.name),
-      ctx.scope,
-    );
+    return repos.map((r) => ({
+      name: r.name,
+      // `visibility` only comes back from an instance that knows the third
+      // value; everywhere else the boolean is the whole answer.
+      visibility: (r.visibility === 'internal'
+        ? 'internal'
+        : r.private
+          ? 'private'
+          : 'public') as RepoVisibility,
+    }));
   }
 
   async listPullRequests(ctx: ConnectorContext, repos: string[]): Promise<PullRequest[]> {

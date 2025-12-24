@@ -8,6 +8,8 @@ import type {
   MergedPullRequest,
   PipelineStatus,
   ConnectionTestResult,
+  RepoVisibility,
+  RepositoryRef,
   Tag,
   Branch,
 } from '@repo/shared';
@@ -55,15 +57,27 @@ export class GitLabConnector implements SourceConnector {
   }
 
   async listRepositories(ctx: ConnectorContext): Promise<string[]> {
+    const projects = await this.listAllRepositories(ctx);
+    return applyScope(
+      projects.map((p) => p.name),
+      ctx.scope,
+    );
+  }
+
+  async listAllRepositories(ctx: ConnectorContext): Promise<RepositoryRef[]> {
     const gl = this.client(ctx);
     const projects = await gl.Groups.allProjects(ctx.scope.owner, {
       includeSubgroups: true,
       perPage: 100,
     });
-    return applyScope(
-      projects.map((p) => p.path_with_namespace as string),
-      ctx.scope,
-    );
+    return projects.map((p) => ({
+      name: p.path_with_namespace as string,
+      // An instance may answer with something newer than the three we know:
+      // anything unrecognised is treated as the closed case, never as public.
+      visibility: (p.visibility === 'public' || p.visibility === 'internal'
+        ? p.visibility
+        : 'private') as RepoVisibility,
+    }));
   }
 
   async listPullRequests(ctx: ConnectorContext, repos: string[]): Promise<PullRequest[]> {

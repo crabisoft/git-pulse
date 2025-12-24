@@ -495,7 +495,21 @@
       "mode": "Data read from",
       "modeHint": "(decides whether the API quota follows the traffic or the collection)",
       "webhooks": "Accept events (webhooks)",
-      "webhooksHint": "speeds up freshness; the scheduled synchronisation stays the safety net"
+      "webhooksHint": "speeds up freshness; the scheduled synchronisation stays the safety net",
+      "repos": "Tracked repositories",
+      "reposHint": "only the ticked repositories are collected",
+      "reposOnCreate": "Every repository of the owner is tracked. The selection becomes editable once the source exists.",
+      "reposShow": "Show the selection",
+      "reposOwnerChanged": "Save the new owner first: the listing would still answer for the previous one.",
+      "reposLoading": "Reading…",
+      "reposAll": "Every repository is tracked.",
+      "reposAllBut": "Every repository but {{count}} is tracked.",
+      "reposCount": "{{count}} repository(ies) tracked.",
+      "reposNoneSelected": "No repository selected",
+      "reposSelectAll": "Track all",
+      "reposClear": "Track none",
+      "trackNewRepos": "Track new repositories",
+      "trackNewReposHint": "a repository created later on the platform is collected without coming back here"
     },
     "budget": {
       "none": "No declared ceiling",
@@ -541,6 +555,11 @@
       "action": "Collect now",
       "running": "Collecting… a first run over a large scope takes minutes",
       "ok": "Collection done — {{count}} snapshots written."
+    },
+    "repoVisibility": {
+      "public": "public",
+      "private": "private",
+      "internal": "internal"
     }
   },
   "ticketRules": {

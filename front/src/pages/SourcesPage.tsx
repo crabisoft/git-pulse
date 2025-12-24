@@ -4,10 +4,15 @@ import {
   INCIDENT_TRACKER_KINDS,
   PAGE_LIMIT_MAX,
   QUOTA_LIMIT_MIN,
+  scopeFromSelection,
+  scopeTracks,
   type ApiBudgetPublic,
   type ApiQuotaPublic,
   type EnvRulePublic,
+  type RepoVisibility,
+  type RepositoryRef,
   type RuleTarget,
+  type ScopeRules,
   type SourceKind,
   type SourceMode,
   type SourcePublic,
@@ -40,6 +45,11 @@ interface FormState {
   /** Accepts provider events. Only offered in `stored` mode. */
   webhooksEnabled: boolean;
   owner: string;
+  /** Repos the scope names, either side of the rule below. */
+  include: string[];
+  exclude: string[];
+  /** Whether a repo the owner gains later is tracked without being picked. */
+  trackNewRepos: boolean;
   secret: string;
   appId: string;
   privateKey: string;
@@ -60,6 +70,11 @@ const EMPTY: FormState = {
   mode: 'live',
   webhooksEnabled: false,
   owner: '',
+  // A new source tracks the whole owner: nothing to pick from before it exists,
+  // and everything selected is what "I have just declared this org" means.
+  include: [],
+  exclude: [],
+  trackNewRepos: true,
   secret: '',
   appId: '',
   privateKey: '',
@@ -78,7 +93,12 @@ function toInput(form: FormState): CreateSourceInput {
     mode: form.mode,
     // Refused by the API in `live` mode, and meaningless there anyway.
     webhooksEnabled: form.mode === 'stored' && form.webhooksEnabled,
-    scope: { owner: form.owner },
+    scope: {
+      owner: form.owner,
+      include: form.include,
+      exclude: form.exclude,
+      trackNewRepos: form.trackNewRepos,
+    },
     envRuleIds: form.envRuleIds,
     trackerIds: form.trackerIds,
     // Empty means none; the API spells that null.
@@ -115,6 +135,11 @@ function toForm(source: SourcePublic): FormState {
     mode: source.mode,
     webhooksEnabled: source.webhooksEnabled,
     owner: source.scope.owner,
+    include: source.scope.include ?? [],
+    exclude: source.scope.exclude ?? [],
+    // Same fallback as the backend's: a scope written before the option existed
+    // covered everything unless it named inclusions.
+    trackNewRepos: source.scope.trackNewRepos ?? (source.scope.include ?? []).length === 0,
     envRuleIds: source.envRuleIds,
     trackerIds: source.trackerIds,
     incidentTrackerId: source.incidentTrackerId ?? '',
@@ -457,6 +482,15 @@ function SourceDialog({
   const [error, setError] = useState<string | null>(null);
   const [trackers, setTrackers] = useState<TrackerPublic[]>([]);
   const [envRules, setEnvRules] = useState<EnvRulePublic[]>([]);
+  /**
+   * The repos to pick from, and the picking. Null until asked for: reading them
+   * costs the source a provider call, and most edits here are about something
+   * else entirely.
+   */
+  const [repos, setRepos] = useState<RepositoryRef[] | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [reposBusy, setReposBusy] = useState(false);
+  const [reposError, setReposError] = useState<string | null>(null);
 
   useEffect(() => {
     // Few by nature, and all of them are selectable here: ask for the cap.
@@ -479,6 +513,73 @@ function SourceDialog({
       },
     );
   }, [t]);
+
+  /**
+   * Reads the catalogue and ticks it against the scope in force. Called on
+   * demand, so the one provider call it costs is one somebody asked for.
+   */
+  async function showRepos() {
+    if (!source) return;
+    setReposBusy(true);
+    setReposError(null);
+    try {
+      const items = await api.sourceRepositories(source.id);
+      const scope: ScopeRules = {
+        owner: form.owner,
+        include: form.include,
+        exclude: form.exclude,
+        trackNewRepos: form.trackNewRepos,
+      };
+      setRepos(items);
+      setSelected(new Set(items.filter((r) => scopeTracks(scope, r.name)).map((r) => r.name)));
+    } catch (err) {
+      const { code, params } = apiErrorInfo(err);
+      setReposError(t(code, params));
+    } finally {
+      setReposBusy(false);
+    }
+  }
+
+  /**
+   * Rewrites the scope from the picking every time either side of it moves.
+   * Held as a selection here and as rules in the form, because that is what the
+   * two ends need — and the shared conversion is the only one that translates.
+   */
+  function changeSelection(next: Set<string>, trackNewRepos = form.trackNewRepos) {
+    setSelected(next);
+    setForm((f) => ({
+      ...f,
+      ...scopeFromSelection((repos ?? []).map((r) => r.name), next, trackNewRepos),
+    }));
+  }
+
+  /**
+   * The catalogue was read for the owner the source was saved with, so a typed
+   * one invalidates it: keeping the boxes ticked would let a selection be made
+   * against repositories this source is about to stop reading.
+   */
+  function changeOwner(owner: string) {
+    setRepos(null);
+    setForm((f) => ({ ...f, owner }));
+  }
+
+  /** Adds or removes every repo of one visibility at once. */
+  function changeVisibility(visibility: RepoVisibility, tracked: boolean) {
+    const next = new Set(selected);
+    for (const repo of repos ?? []) {
+      if (repo.visibility !== visibility) continue;
+      if (tracked) next.add(repo.name);
+      else next.delete(repo.name);
+    }
+    changeSelection(next);
+  }
+
+  /** Visibilities this owner actually exposes — the others have nothing to offer. */
+  const visibilities = useMemo(() => {
+    const counts = new Map<RepoVisibility, number>();
+    for (const repo of repos ?? []) counts.set(repo.visibility, (counts.get(repo.visibility) ?? 0) + 1);
+    return [...counts.entries()].sort(([a], [b]) => a.localeCompare(b));
+  }, [repos]);
 
   const selectedEnvRules = useMemo(() => new Set(form.envRuleIds), [form.envRuleIds]);
   const selectedTrackers = useMemo(() => new Set(form.trackerIds), [form.trackerIds]);
@@ -559,6 +660,18 @@ function SourceDialog({
     }
   }
 
+  const scopeSummary = useMemo(
+    () =>
+      !form.trackNewRepos
+        ? { code: 'sources.form.reposCount', params: { count: form.include.length } }
+        : form.exclude.length === 0
+          ? { code: 'sources.form.reposAll', params: undefined }
+          : { code: 'sources.form.reposAllBut', params: { count: form.exclude.length } },
+    [form.trackNewRepos, form.include, form.exclude],
+  );
+
+  const ownerChanged = source !== null && form.owner !== source.scope.owner;
+
   const title = source ? t('sources.editTitle', { name: source.name }) : t('sources.addTitle');
 
   return (
@@ -595,8 +708,80 @@ function SourceDialog({
         </label>
         <label>
           {form.kind === 'github' ? t('sources.form.org') : t('sources.form.group')}
-          <input value={form.owner} onChange={(e) => set('owner', e.target.value)} required />
+          <input value={form.owner} onChange={(e) => changeOwner(e.target.value)} required />
         </label>
+
+        {/* Nothing to list before the source exists — its credentials are still
+            in this form. A fresh one therefore takes the whole owner, and the
+            picking happens on the next visit here. */}
+        {!source ? (
+          <p className="hint">{t('sources.form.reposOnCreate')}</p>
+        ) : repos === null ? (
+          <div className="repo-scope">
+            <span>{t(scopeSummary.code, scopeSummary.params)}</span>
+            <button
+              className="btn"
+              type="button"
+              onClick={() => void showRepos()}
+              disabled={reposBusy || ownerChanged}
+            >
+              {reposBusy ? t('sources.form.reposLoading') : t('sources.form.reposShow')}
+            </button>
+            {/* Listing would answer for the owner still stored, which is not the
+                one being typed. */}
+            {ownerChanged && (
+              <span className="field-note">{t('sources.form.reposOwnerChanged')}</span>
+            )}
+          </div>
+        ) : (
+          <div className="repo-scope-editor">
+            <span className="repo-scope-label">
+              {t('sources.form.repos')} <span className="hint">{t('sources.form.reposHint')}</span>
+            </span>
+            <MultiSelect
+              block
+              options={repos.map((repo) => ({
+                value: repo.name,
+                label: repo.name,
+                hint: t(`sources.repoVisibility.${repo.visibility}`),
+              }))}
+              selected={selected}
+              onChange={(next) => changeSelection(next)}
+              emptyLabel={t('sources.form.reposNoneSelected')}
+            />
+            {/* One row per visibility the owner exposes: "everything private,
+                nothing public" is a whole selection on its own, and picking it
+                repo by repo on a large org is not one anybody makes. */}
+            <div className="repo-scope-bulk">
+              {visibilities.map(([visibility, count]) => (
+                <span key={visibility} className="repo-scope-group">
+                  <span className="muted">
+                    {t(`sources.repoVisibility.${visibility}`)} ({count})
+                  </span>
+                  <button type="button" onClick={() => changeVisibility(visibility, true)}>
+                    {t('sources.form.reposSelectAll')}
+                  </button>
+                  <button type="button" onClick={() => changeVisibility(visibility, false)}>
+                    {t('sources.form.reposClear')}
+                  </button>
+                </span>
+              ))}
+            </div>
+            <label className="checkbox">
+              <input
+                type="checkbox"
+                checked={form.trackNewRepos}
+                onChange={(e) => changeSelection(selected, e.target.checked)}
+              />
+              <span>
+                {t('sources.form.trackNewRepos')}{' '}
+                <span className="hint">{t('sources.form.trackNewReposHint')}</span>
+              </span>
+            </label>
+          </div>
+        )}
+        {reposError && <div className="banner error">{reposError}</div>}
+
         <label>
           {t('sources.form.auth')}
           <select

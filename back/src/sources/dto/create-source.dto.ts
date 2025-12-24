@@ -25,6 +25,11 @@ export class ScopeDto {
   @IsArray()
   @IsString({ each: true })
   exclude?: string[];
+
+  /** Omitted keeps the historical reading: everything, unless `include` names some. */
+  @IsOptional()
+  @IsBoolean()
+  trackNewRepos?: boolean;
 }
 
 /** GitHub App installation credentials (used when authKind is 'app'). */

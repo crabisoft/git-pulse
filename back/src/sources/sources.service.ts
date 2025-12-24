@@ -9,6 +9,7 @@ import {
   type SourcePublic,
   type ConnectionTestResult,
   type Page,
+  type RepositoryRef,
   type TrackerKind,
   type WebhookSetup,
 } from '@repo/shared';
@@ -297,6 +298,24 @@ export class SourcesService {
     // cascade reaches either.
     await this.quotas.forget({ kind: 'source', id });
     await this.credentials.forget({ type: 'source', id });
+  }
+
+  /**
+   * Every repo the owner exposes, whether the scope covers it or not — what the
+   * selection is picked from.
+   *
+   * Asks the provider even for a `stored` source, which otherwise never calls
+   * one: the store only ever held the repos already selected, and choosing
+   * among repositories nobody fetched is not a thing it can answer. One listing
+   * call, made when an admin opens the selection and not on any dashboard read.
+   */
+  async listRepositories(id: string): Promise<RepositoryRef[]> {
+    const { ctx, kind } = await this.resolveContext(id);
+    const repos = await this.connectors.for(kind).listAllRepositories(ctx);
+    // Same reason as the connection test: someone watching this expects the
+    // gauge beside it to account for the call it just made.
+    await this.quotas.flush();
+    return [...repos].sort((a, b) => a.name.localeCompare(b.name));
   }
 
   /** Tests the connection, decrypting the secret on the fly. */

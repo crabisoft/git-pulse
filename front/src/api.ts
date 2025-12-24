@@ -25,6 +25,7 @@ import type {
   PipelineStatus,
   LlmProviderPublic,
   ReleaseNotes,
+  RepositoryRef,
   RewriteRequest,
   RewriteResult,
   Tag,
@@ -33,6 +34,7 @@ import type {
   MetricSnapshotPublic,
   Page,
   RuleTarget,
+  ScopeRules,
   TicketRef,
   TicketRulePublic,
   TrackerKind,
@@ -178,7 +180,7 @@ export interface CreateSourceInput {
   authKind: 'token' | 'app';
   secret?: string;
   app?: { appId: string; privateKey: string; installationId: string };
-  scope: { owner: string; include?: string[]; exclude?: string[] };
+  scope: ScopeRules;
   /** Where the dashboard reads it from. Omitted means `live`. */
   mode?: SourceMode;
   /** Refused unless the mode is `stored`; turning it off drops the secret. */
@@ -289,6 +291,13 @@ export const api = {
   deleteSource: (id: string) => request<void>(`/sources/${id}`, { method: 'DELETE' }),
   testSource: (id: string) =>
     request<ConnectionTestResult>(`/sources/${id}/test`, { method: 'POST' }),
+  /**
+   * Every repo the owner exposes, scope or no scope — what the source form
+   * ticks its boxes against. Costs one provider call, so it is asked for when
+   * the selection is opened rather than with the source itself.
+   */
+  sourceRepositories: (id: string, signal?: AbortSignal) =>
+    request<RepositoryRef[]>(`/sources/${id}/repositories`, { signal }),
   /**
    * Issues the webhook secret — and rotates it if one existed. The response is
    * the only place the value is ever readable.
