@@ -6,6 +6,7 @@ import { api } from '../api';
 import { useCancellableLoad } from '../hooks';
 import { RefLink } from '../RefLink';
 import { CommitList } from '../CommitList';
+import { PlatformLink } from '../PlatformLink';
 import { FilterField } from '../Filters';
 import { RefDialog } from './RefDialog';
 
@@ -93,11 +94,12 @@ export function DeploymentChangesPage({ sourceId, slug }: { sourceId: string; sl
             {deployment && (
               <>
                 {' → '}
-                <EnvironmentName
-                  name={deployment.environment}
+                <PlatformLink
                   url={deployment.environmentUrl}
-                  openLabel={t('deployments.openEnvironment')}
-                />
+                  title={t('deployments.openEnvironment')}
+                >
+                  {deployment.environment}
+                </PlatformLink>
               </>
             )}
           </h2>
@@ -108,7 +110,10 @@ export function DeploymentChangesPage({ sourceId, slug }: { sourceId: string; sl
         <p className="muted">
           {t('deployments.deployedRef')}{' '}
           <RefLink name={deployment.ref} url={deployment.refUrl} /> ·{' '}
-          {new Date(deployment.createdAt).toLocaleString()} ·{' '}
+          <PlatformLink url={deployment.url} title={t('deployments.openDeployment')}>
+            {new Date(deployment.createdAt).toLocaleString()}
+          </PlatformLink>{' '}
+          ·{' '}
           <span className={`pill status-${deployment.status}`}>
             {t(`status.${deployment.status}`, deployment.status)}
           </span>
@@ -159,24 +164,6 @@ export function DeploymentChangesPage({ sourceId, slug }: { sourceId: string; sl
         />
       )}
     </div>
-  );
-}
-
-/** The environment, linked when the platform stated where to reach it. */
-function EnvironmentName({
-  name,
-  url,
-  openLabel,
-}: {
-  name: string;
-  url: string | null;
-  openLabel: string;
-}) {
-  if (!url) return <>{name}</>;
-  return (
-    <a href={url} target="_blank" rel="noreferrer" title={openLabel}>
-      {name} ↗
-    </a>
   );
 }
 

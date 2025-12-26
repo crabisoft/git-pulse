@@ -71,6 +71,7 @@ function deployment(over: Partial<Deployment> = {}): Deployment {
     status: 'pending',
     createdAt: '2026-07-27T10:00:00Z',
     environmentUrl: null,
+    url: null,
     ...over,
   };
 }
@@ -218,5 +219,15 @@ describe('mergeDeployment', () => {
       mergeDeployment(held, deployment({ environmentUrl: 'https://prod.example' }), SEEN)
         .environmentUrl,
     ).toBe('https://prod.example');
+  });
+
+  it('holds on to where the deployment itself is read, both ways', () => {
+    // The same reasoning as the environment's address, and the same feeds: a
+    // GitHub listing degraded under the reserve reads no status, so no run.
+    const run = 'https://github.com/acme/api/actions/runs/42';
+    const held = mergeDeployment(undefined, deployment({ url: run }), SEEN);
+    expect(mergeDeployment(held, deployment({ url: null }), SEEN).url).toBe(run);
+    const blank = mergeDeployment(undefined, deployment({ url: null }), SEEN);
+    expect(mergeDeployment(blank, deployment({ url: run }), SEEN).url).toBe(run);
   });
 });

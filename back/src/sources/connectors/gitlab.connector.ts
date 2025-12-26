@@ -148,7 +148,18 @@ export class GitLabConnector implements SourceConnector {
       for (const d of deployments) {
         // The environment travels embedded in the listing, so its external URL
         // comes free — when the environment was configured with one at all.
-        const environment = d.environment as { name?: string; external_url?: string } | undefined;
+        const environment = d.environment as
+          | { id?: number; name?: string; external_url?: string }
+          | undefined;
+        // The job that performed it, which is what GitLab's own environment
+        // table links each deployment to. A deployment created through the API
+        // carries none, and then the environment's page is the closest thing
+        // the platform does publish about it.
+        const job = (d.deployable as { web_url?: string } | undefined)?.web_url;
+        const environmentPage =
+          environment?.id === undefined
+            ? null
+            : `${this.repoUrl(ctx, repo)}/-/environments/${environment.id}`;
         out.push({
           id: `gl:${repo}:${d.id}`,
           repo,
@@ -157,6 +168,7 @@ export class GitLabConnector implements SourceConnector {
           status: mapGitLabStatus(d.status as string),
           createdAt: d.created_at as string,
           environmentUrl: environment?.external_url || null,
+          url: job || environmentPage,
         });
       }
     }

@@ -502,6 +502,10 @@ model StoredDeployment {
   /// is the common case, and also what a run degraded under the API reserve
   /// leaves behind on GitHub — the status call carries both.
   environmentUrl String?
+  /// Where the deployment itself is read on the platform — the run on GitHub,
+  /// the job or the environment on GitLab. Null when neither states one, which
+  /// on GitHub includes every run degraded under the reserve.
+  url         String?
   createdAt   DateTime
   seenAt      DateTime
 

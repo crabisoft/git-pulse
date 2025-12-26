@@ -9,6 +9,7 @@ import { RepoFilter } from '../RepoFilter';
 import { MultiSelect } from '../MultiSelect';
 import { Pagination } from '../Pagination';
 import { RefLink } from '../RefLink';
+import { PlatformLink } from '../PlatformLink';
 
 /**
  * Module constant so resetting on a source change never re-triggers a fetch.
@@ -123,23 +124,21 @@ export function DeploymentsPage({ sourceId, slug }: { sourceId: string; slug: st
           <tbody>
             {rows.map((deployment) => (
               <tr key={deployment.id}>
-                <td>{new Date(deployment.createdAt).toLocaleString()}</td>
+                <td>
+                  {/* The date is what identifies a deployment on this page, so
+                      it is what carries the way back to it on the platform. */}
+                  <PlatformLink url={deployment.url} title={t('deployments.openDeployment')}>
+                    {new Date(deployment.createdAt).toLocaleString()}
+                  </PlatformLink>
+                </td>
                 <td>{deployment.repo}</td>
                 <td>
-                  {deployment.environmentUrl ? (
-                    // Read from the platform, never built: an address we
-                    // guessed would be a broken link.
-                    <a
-                      href={deployment.environmentUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      title={t('deployments.openEnvironment')}
-                    >
-                      {deployment.environment} ↗
-                    </a>
-                  ) : (
-                    deployment.environment
-                  )}
+                  <PlatformLink
+                    url={deployment.environmentUrl}
+                    title={t('deployments.openEnvironment')}
+                  >
+                    {deployment.environment}
+                  </PlatformLink>
                   <div className="pills">
                     {Object.entries(deployment.attributes).map(([key, value]) => (
                       <span key={key} className="pill attr">

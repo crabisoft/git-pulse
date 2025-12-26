@@ -139,6 +139,11 @@ function gitHubDeployment(body: Payload): IngestIntent | null {
       createdAt,
       // The same status that carries the state carries the environment's URL.
       environmentUrl: asString(asObject(body.deployment_status)?.environment_url) ?? null,
+      // And the run it came from — `target_url` being the older spelling of it.
+      url:
+        asString(asObject(body.deployment_status)?.log_url) ??
+        asString(asObject(body.deployment_status)?.target_url) ??
+        null,
     },
   };
 }
@@ -230,6 +235,8 @@ function gitLabDeployment(body: Payload): IngestIntent | null {
       // The hook names the environment but not its address, so the merge keeps
       // whatever a listing already stored rather than blanking it.
       environmentUrl: null,
+      // The job that ran it, on the other hand, the hook does name.
+      url: asString(body.deployable_url),
     },
   };
 }

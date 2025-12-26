@@ -736,6 +736,7 @@
     "refNone": "None picked",
     "refType": "Or type one",
     "refTypeHint": "a commit sha, or any ref the platform resolves",
-    "refApply": "Compare"
+    "refApply": "Compare",
+    "openDeployment": "Open the deployment on the platform"
   }
 }

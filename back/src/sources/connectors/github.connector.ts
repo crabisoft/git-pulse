@@ -167,7 +167,7 @@ export class GitHubConnector implements SourceConnector {
         // costs nothing extra — and giving up the call gives up both.
         const state = enrich
           ? await this.deploymentStatus(gh, ctx.scope.owner, repo, d.id)
-          : { status: 'unknown' as PipelineStatus, environmentUrl: null };
+          : { status: 'unknown' as PipelineStatus, environmentUrl: null, url: null };
         out.push({
           id: `gh:${repo}:${d.id}`,
           repo,
@@ -176,6 +176,7 @@ export class GitHubConnector implements SourceConnector {
           status: state.status,
           createdAt: d.created_at,
           environmentUrl: state.environmentUrl,
+          url: state.url,
         });
       }
     }
@@ -365,7 +366,7 @@ export class GitHubConnector implements SourceConnector {
     owner: string,
     repo: string,
     deploymentId: number,
-  ): Promise<{ status: PipelineStatus; environmentUrl: string | null }> {
+  ): Promise<{ status: PipelineStatus; environmentUrl: string | null; url: string | null }> {
     try {
       const statuses = await gh.rest.repos.listDeploymentStatuses({
         owner,
@@ -378,9 +379,14 @@ export class GitHubConnector implements SourceConnector {
         status: mapGitHubDeploymentState(latest?.state),
         // Set by whoever wrote the status, so absent far more often than not.
         environmentUrl: latest?.environment_url || null,
+        // GitHub publishes no page for a deployment, so the closest thing is
+        // what its status points at — the run that performed it, for anything
+        // deployed by Actions. `target_url` is the older spelling of the same
+        // field, still what some third-party deployers write.
+        url: latest?.log_url || latest?.target_url || null,
       };
     } catch {
-      return { status: 'unknown', environmentUrl: null };
+      return { status: 'unknown', environmentUrl: null, url: null };
     }
   }
 

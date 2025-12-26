@@ -82,8 +82,20 @@ describe('toGitHubIntent', () => {
     });
     expect(intent).toMatchObject({
       kind: 'deployment',
-      item: { id: 'gh:api:7', environment: 'prod', status: 'failed' },
+      item: { id: 'gh:api:7', environment: 'prod', status: 'failed', url: null },
     });
+  });
+
+  it('takes the run a deployment status points at, whichever name it uses', () => {
+    const run = 'https://github.com/acme/api/actions/runs/42';
+    for (const status of [{ log_url: run }, { target_url: run }]) {
+      const intent = toGitHubIntent('deployment_status', {
+        repository: GH_REPO,
+        deployment: { id: 7, environment: 'prod', ref: 'main', created_at: '2026-07-27T10:00:00Z' },
+        deployment_status: { state: 'success', ...status },
+      });
+      expect(intent).toMatchObject({ kind: 'deployment', item: { url: run } });
+    }
   });
 
   it('says nothing about an event it does not handle', () => {
@@ -162,10 +174,16 @@ describe('toGitLabIntent', () => {
       ref: 'main',
       status: 'running',
       status_changed_at: '2026-07-27T10:00:00Z',
+      deployable_url: 'https://gitlab.example.com/acme/api/-/jobs/99',
     });
     expect(intent).toMatchObject({
       kind: 'deployment',
-      item: { id: 'gl:acme/api:7', environment: 'prod', status: 'running' },
+      item: {
+        id: 'gl:acme/api:7',
+        environment: 'prod',
+        status: 'running',
+        url: 'https://gitlab.example.com/acme/api/-/jobs/99',
+      },
     });
   });
 

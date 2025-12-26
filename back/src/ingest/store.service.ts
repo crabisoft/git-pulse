@@ -396,6 +396,7 @@ interface DeploymentRecord {
   ref: string;
   status: string;
   environmentUrl: string | null;
+  url: string | null;
   createdAt: Date;
   seenAt: Date;
 }
@@ -489,5 +490,6 @@ function toDeployment(row: DeploymentRecord): Deployment {
     status: row.status as PipelineStatus,
     createdAt: row.createdAt.toISOString(),
     environmentUrl: row.environmentUrl,
+    url: row.url,
   };
 }

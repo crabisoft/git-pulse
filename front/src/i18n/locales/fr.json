@@ -736,6 +736,7 @@
     "refNone": "Aucune choisie",
     "refType": "Ou saisir",
     "refTypeHint": "un sha de commit, ou toute ref que la plateforme résout",
-    "refApply": "Comparer"
+    "refApply": "Comparer",
+    "openDeployment": "Ouvrir le déploiement sur la plateforme"
   }
 }

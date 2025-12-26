@@ -313,6 +313,18 @@ export interface Deployment {
    * environment, and only when one was configured with an external URL.
    */
   environmentUrl: string | null;
+  /**
+   * Where the deployment itself can be read on the platform. Like the address
+   * above it is stated, never guessed — but this one is about the record, not
+   * about what it deployed.
+   *
+   * Neither platform publishes a page for the deployment record itself, so what
+   * comes back is the nearest thing each one does publish: on GitHub the run
+   * its status points at — null when no status names one, and null too when the
+   * status call was given up under the API reserve — and on GitLab the job that
+   * performed it, or the environment it went to when no job did.
+   */
+  url: string | null;
 }
 
 // ─── Deployments ─────────────────────────────────────────────────────
