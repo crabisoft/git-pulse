@@ -509,6 +509,21 @@ a.account-name:hover { color: var(--ink); }
 /* Release notes */
 .notes-list { margin: 4px 0 16px; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
 .notes-list li { line-height: 1.55; }
+/* Unfolds a commit message. Sized like the text it sits in, so a list of
+   summaries keeps its rhythm whether a commit has a body or not. */
+.commit-toggle {
+  padding: 0 4px; border: 0; background: none; cursor: pointer;
+  color: var(--muted); font-size: .8rem; line-height: 1;
+}
+.commit-toggle:hover { color: var(--ink); }
+/* The body as written: its own line breaks are the author's, and the long
+   unbreakable token — a URL, a stack frame — wraps rather than widening the panel. */
+.commit-body {
+  margin: 6px 0 2px; padding: 8px 10px; border-radius: 6px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  font-family: var(--mono); font-size: .78rem; color: var(--muted);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
 .markdown-source { margin-top: 14px; }
 .markdown-source summary { cursor: pointer; color: var(--muted); font-size: .85rem; }
 /* Long commit subjects wrap rather than pushing the panel sideways; only the
