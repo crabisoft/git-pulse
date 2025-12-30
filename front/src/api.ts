@@ -21,7 +21,11 @@ import type {
   DeploymentChanges,
   DeploymentReport,
   DoraReport,
+  JobFailure,
+  JobWarning,
+  JobsSnapshot,
   LlmKind,
+  QueueName,
   PipelineStatus,
   LlmProviderPublic,
   ReleaseNotes,
@@ -142,6 +146,11 @@ export interface DashboardLiveQuery {
   prs?: PageQuery;
   pipelines?: PageQuery;
   environments?: PageQuery;
+}
+
+/** Failed jobs of one queue, or of every queue when none is named. */
+export interface FailedJobsQuery extends PageQuery {
+  queue?: QueueName;
 }
 
 export interface MetricsQuery extends PageQuery {
@@ -365,6 +374,19 @@ export const api = {
     owner?: string;
     repo?: string;
   }) => request<TicketRef[]>('/ticket-rules/preview', { method: 'POST', body: JSON.stringify(sample) }),
+
+  /** Queue counts, schedules and reachability, read at the instant. */
+  jobs: (signal?: AbortSignal) => request<JobsSnapshot>('/jobs', { signal }),
+  /** Failed jobs, newest first, across the queues unless one is named. */
+  failedJobs: (query?: FailedJobsQuery, signal?: AbortSignal) =>
+    request<Page<JobFailure>>(`/jobs/failures${qs({ ...query })}`, { signal }),
+  /** Runs that completed having given up on part of their work. */
+  degradedJobs: (query?: FailedJobsQuery, signal?: AbortSignal) =>
+    request<Page<JobWarning>>(`/jobs/degraded${qs({ ...query })}`, { signal }),
+  retryJob: (queue: QueueName, id: string) =>
+    request<void>(`/jobs/${queue}/${id}/retry`, { method: 'POST' }),
+  discardJob: (queue: QueueName, id: string) =>
+    request<void>(`/jobs/${queue}/${id}`, { method: 'DELETE' }),
 
   /** Every metered bucket, all subjects at once — see the quotas controller. */
   listQuotas: () => request<ApiQuotaPublic[]>('/quotas'),

@@ -1040,3 +1040,111 @@ export interface DashboardLive {
   /** Non-blocking errors collected while fetching. */
   warnings: CodedMessage[];
 }
+
+// ─── Background jobs ─────────────────────────────────────────────────
+
+/**
+ * The queues the install runs. `collection` carries the scheduled
+ * synchronisation and the per-source work it fans out; `ingest` carries what
+ * webhook deliveries ask to be written. Two rather than one so a burst of
+ * events never waits behind a synchronisation that takes minutes.
+ */
+export const QUEUE_NAMES = ['collection', 'ingest'] as const;
+
+export type QueueName = (typeof QUEUE_NAMES)[number];
+
+/** BullMQ's own states, as the background-jobs page reads them. */
+export interface QueueCounts {
+  waiting: number;
+  active: number;
+  completed: number;
+  failed: number;
+  delayed: number;
+}
+
+/**
+ * A job the scheduler re-registers rather than one somebody enqueued. Only the
+ * collection has one, on the cron of the settings.
+ */
+export interface RepeatableJobPublic {
+  name: string;
+  /** Cron pattern it repeats on. */
+  pattern: string;
+  /** ISO date of the next occurrence; null when BullMQ states none. */
+  nextRunAt: string | null;
+}
+
+export interface QueueSummary {
+  name: QueueName;
+  counts: QueueCounts;
+  repeatables: RepeatableJobPublic[];
+  paused: boolean;
+}
+
+/**
+ * What the background-jobs page reads in one call.
+ *
+ * `observedAt` is stamped by the API because none of this is stored: the counts
+ * are a reading of the instant, and a page that polls has to be able to say how
+ * old the one it is showing is.
+ */
+export interface JobsSnapshot {
+  queues: QueueSummary[];
+  observedAt: string;
+  /**
+   * Null when Redis answered, the coded reason when it did not. This is the
+   * one state worth watching for: the API keeps serving stored data while
+   * nothing at all is being collected behind it.
+   */
+  unreachable: CodedMessage | null;
+}
+
+/**
+ * A job that exhausted its attempts.
+ *
+ * `data` travels with it — a source id, an ingestion intent — so a failure can
+ * be read for what it was working on without going back to the container logs.
+ */
+export interface JobFailure {
+  queue: QueueName;
+  id: string;
+  /** Job name within its queue: `collect-source`, `ingest-event`… */
+  name: string;
+  attemptsMade: number;
+  /** What BullMQ recorded of the last throw. */
+  reason: string;
+  /** The last stack trace, when there is one. */
+  stack: string | null;
+  /** ISO date the last attempt ended; null while BullMQ states none. */
+  failedAt: string | null;
+  /** ISO date the job was enqueued. */
+  enqueuedAt: string;
+  data: Record<string, unknown>;
+}
+
+/**
+ * A job that completed, having given up on part of its work.
+ *
+ * The counterpart of `JobFailure`, and the reason the page shows more than a
+ * queue state: a collection catches its best-effort steps so a snapshot is
+ * still written, which completes the job green over a source that has stopped
+ * moving. Nothing failed, so nothing is to be retried — the next run will try
+ * again on its own. It is there to be read.
+ */
+export interface JobWarning {
+  queue: QueueName;
+  id: string;
+  name: string;
+  /** ISO date the run ended; null while BullMQ states none. */
+  finishedAt: string | null;
+  data: Record<string, unknown>;
+  warnings: CodedMessage[];
+}
+
+/**
+ * How many jobs are read back per queue and per state before the lists are
+ * merged and windowed. The counts in the summary state how many there really
+ * are, and this never caps them — it bounds what one page load pulls out of
+ * Redis, nothing else.
+ */
+export const JOB_SCAN_DEPTH = 200;

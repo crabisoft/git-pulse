@@ -56,7 +56,8 @@
       "tickets": "Tickets",
       "trackers": "Trackers",
       "users": "Comptes",
-      "ai": "Fournisseurs IA"
+      "ai": "Fournisseurs IA",
+      "jobs": "Tâches de fond"
     },
     "desc": {
       "general": "Collecte et seuils",
@@ -65,7 +66,8 @@
       "tickets": "Rattachement PR → ticket",
       "trackers": "Jira, Linear, issues",
       "users": "Qui peut se connecter",
-      "ai": "Modèles que l’installation peut appeler"
+      "ai": "Modèles que l’installation peut appeler",
+      "jobs": "Files, planification et échecs"
     },
     "general": {
       "appTitle": "Application",
@@ -293,6 +295,16 @@
     "deployment": {
       "notFound": "Le déploiement {{id}} n’est pas dans cette période.",
       "invalidRef": "Ref inutilisable : {{ref}}"
+    },
+    "jobs": {
+      "unreachable": "Redis ne répond pas : {{error}}",
+      "unknownQueue": "File inconnue : {{name}}",
+      "notFound": "Cette tâche n'est plus conservée : {{id}}",
+      "notFailed": "Cette tâche n'est plus en échec (elle est {{state}}) — quelqu'un l'a déjà relancée."
+    },
+    "collect": {
+      "ingest": "Ingestion échouée, le relevé a été pris sur ce qui était déjà stocké : {{error}}",
+      "dora": "Relevé DORA échoué : {{error}}"
     }
   },
   "empty": {
@@ -740,5 +752,48 @@
     "refTypeHint": "un sha de commit, ou toute ref que la plateforme résout",
     "refApply": "Comparer",
     "openDeployment": "Ouvrir le déploiement sur la plateforme"
+  },
+  "jobs": {
+    "queues": "Files",
+    "queue": "File",
+    "queueName": {
+      "collection": "Collecte",
+      "ingest": "Ingestion des webhooks"
+    },
+    "count": {
+      "waiting": "En attente",
+      "active": "En cours",
+      "delayed": "Différées",
+      "failed": "En échec",
+      "completed": "Terminées"
+    },
+    "schedule": "Planification",
+    "onDemand": "À la demande",
+    "nextRun": "{{pattern}} — prochaine {{at}}",
+    "paused": "En pause",
+    "observedAt": "Lu à {{at}}, rafraîchi toutes les quelques secondes.",
+    "unreachable": "Redis ne répond pas : plus rien n’est collecté en fond. ({{error}})",
+    "job": "Tâche",
+    "subject": "Objet",
+    "attempts": "Tentatives",
+    "failedAt": "Échec",
+    "finishedAt": "Fin",
+    "reason": "Raison",
+    "noReason": "Aucune raison enregistrée",
+    "retry": "Relancer",
+    "retried": "Tâche remise en file.",
+    "discard": "Abandonner",
+    "discarded": "Tâche abandonnée.",
+    "discardConfirm": "Abandonner cette tâche {{name}} ? Ce qu’elle devait écrire ne sera rattrapé que par la prochaine exécution.",
+    "givenUp": "Abandonné",
+    "failures": {
+      "title": "Échecs",
+      "hint": "Tâches qui ont épuisé leurs tentatives. Les plus récentes sont listées ; les compteurs ci-dessus les comptent toutes.",
+      "empty": "Aucune tâche en échec."
+    },
+    "degraded": {
+      "title": "Terminées avec avertissement",
+      "hint": "Exécutions passées en abandonnant une partie de leur travail — rien à relancer, la suivante réessaie."
+    }
   }
 }

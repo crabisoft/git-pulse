@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { SettingsService } from '../settings/settings.service';
+import { JOB_HISTORY } from '../common/job-options';
 
 const JOB_NAME = 'collect-all';
 
@@ -34,11 +35,11 @@ export class CollectionScheduler implements OnModuleInit {
     }
     // No custom jobId: BullMQ forbids it on repeatable jobs and dedupes by the
     // repeat key (name + pattern), so restarts don't stack schedules.
-    await this.queue.add(
-      JOB_NAME,
-      {},
-      { repeat: { pattern }, removeOnComplete: true, removeOnFail: 100 },
-    );
+    //
+    // No retry either, unlike the jobs it fans out: the cron brings this one
+    // back on its own, and a second attempt would enqueue the whole fan-out
+    // twice over.
+    await this.queue.add(JOB_NAME, {}, { repeat: { pattern }, ...JOB_HISTORY });
     this.logger.log(`Collecte planifiée (cron "${pattern}").`);
   }
 }

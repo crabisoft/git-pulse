@@ -5,6 +5,7 @@ import type { AccessLevel } from './access';
 import { AuthController } from './auth.controller';
 import { UsersController } from './users.controller';
 import { SettingsController } from '../settings/settings.controller';
+import { JobsController } from '../jobs/jobs.controller';
 
 /**
  * The level a route ends up with, decorators and default included — read off
@@ -44,5 +45,13 @@ describe('route access', () => {
   it('lets the settings be read wherever the dashboard is, and written by admins only', () => {
     expect(levelOf(SettingsController, 'get')).toBe('viewer');
     expect(levelOf(SettingsController, 'update')).toBe('admin');
+  });
+
+  it('keeps the queues with the admins, reading them included', () => {
+    // A failure carries the payload it was working on and what a platform
+    // answered — more than the dashboard shows a viewer anywhere else.
+    for (const method of ['snapshot', 'failures', 'degraded', 'retry', 'discard']) {
+      expect(levelOf(JobsController, method), method).toBe('admin');
+    }
   });
 });

@@ -537,3 +537,17 @@ pre.mono { background: var(--surface-2); border: 1px solid var(--line); border-r
 .deployment-detail .notes-list { margin-bottom: 4px; }
 .back-link { display: inline-block; margin-bottom: 4px; font-size: .82rem; color: var(--muted); text-decoration: none; }
 .back-link:hover { color: var(--ink); }
+
+/* Background jobs */
+/* A failure reason is one line in the row and the stack is folded behind it:
+   a table that grew a stack trace per row would be unreadable, and the trace is
+   what the one row somebody is looking at needs. */
+.job-reason { max-width: 34ch; }
+.job-reason summary { cursor: pointer; overflow-wrap: anywhere; }
+.job-reason pre {
+  margin: 6px 0 0; padding: 8px 10px; border-radius: 6px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  font-family: var(--mono); font-size: .74rem; color: var(--muted);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.job-warnings { margin: 0; padding-left: 16px; color: var(--warn); }

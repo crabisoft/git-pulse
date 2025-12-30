@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import type { AppSettings, SourcePublic } from '@repo/shared';
 import {
+  ActivityIcon,
   KeyIcon,
   LayersIcon,
   LinkIcon,
@@ -12,6 +13,7 @@ import {
   UsersIcon,
 } from '../icons';
 import { GeneralSettings } from './settings/GeneralSettings';
+import { JobsSettings } from './settings/JobsSettings';
 import { UsersSettings } from './settings/UsersSettings';
 import { SourcesPage } from './SourcesPage';
 import { EnvRulesPage } from './EnvRulesPage';
@@ -26,7 +28,8 @@ export type SettingsSection =
   | 'trackers'
   | 'env'
   | 'tickets'
-  | 'ai';
+  | 'ai'
+  | 'jobs';
 
 const SECTIONS: { key: SettingsSection; icon: ReactNode }[] = [
   { key: 'general', icon: <SlidersIcon /> },
@@ -36,6 +39,9 @@ const SECTIONS: { key: SettingsSection; icon: ReactNode }[] = [
   { key: 'env', icon: <LayersIcon /> },
   { key: 'tickets', icon: <TicketIcon /> },
   { key: 'ai', icon: <KeyIcon /> },
+  // Last, and on its own: everything above configures the install, this one
+  // watches it run.
+  { key: 'jobs', icon: <ActivityIcon /> },
 ];
 
 /**
@@ -55,6 +61,7 @@ export const SECTION_PATHS: Record<SettingsSection, string> = {
   env: '/settings/environments',
   tickets: '/settings/tickets',
   ai: '/settings/ai',
+  jobs: '/settings/jobs',
 };
 
 
@@ -114,6 +121,7 @@ export function SettingsPage({
         {section === 'env' && <EnvRulesPage />}
         {section === 'tickets' && <TicketRulesPage />}
         {section === 'ai' && <LlmProvidersPage />}
+        {section === 'jobs' && <JobsSettings sources={sources} />}
       </div>
     </div>
   );

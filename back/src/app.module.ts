@@ -18,6 +18,7 @@ import { DoraModule } from './dora/dora.module';
 import { DeploymentsModule } from './deployments/deployments.module';
 import { CollectionModule } from './collection/collection.module';
 import { ApiQuotaModule } from './api-quota/api-quota.module';
+import { JobsModule } from './jobs/jobs.module';
 
 @Module({
   imports: [
@@ -42,6 +43,7 @@ import { ApiQuotaModule } from './api-quota/api-quota.module';
     DeploymentsModule,
     CollectionModule,
     ApiQuotaModule,
+    JobsModule,
   ],
 })
 export class AppModule {}

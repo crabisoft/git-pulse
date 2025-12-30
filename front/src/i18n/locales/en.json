@@ -56,7 +56,8 @@
       "tickets": "Tickets",
       "trackers": "Trackers",
       "users": "Accounts",
-      "ai": "AI providers"
+      "ai": "AI providers",
+      "jobs": "Background jobs"
     },
     "desc": {
       "general": "Collection and thresholds",
@@ -65,7 +66,8 @@
       "tickets": "PR → ticket linking",
       "trackers": "Jira, Linear, issues",
       "users": "Who may sign in",
-      "ai": "Models the install may call"
+      "ai": "Models the install may call",
+      "jobs": "Queues, schedules and failures"
     },
     "general": {
       "appTitle": "Application",
@@ -293,6 +295,16 @@
     "deployment": {
       "notFound": "Deployment {{id}} is not in this period.",
       "invalidRef": "Not a usable ref: {{ref}}"
+    },
+    "jobs": {
+      "unreachable": "Redis is not answering: {{error}}",
+      "unknownQueue": "Unknown queue: {{name}}",
+      "notFound": "This job is no longer held: {{id}}",
+      "notFailed": "This job is not failed any more (it is {{state}}) — somebody has already retried it."
+    },
+    "collect": {
+      "ingest": "Ingestion failed, the snapshot was taken off what was already stored: {{error}}",
+      "dora": "DORA snapshot failed: {{error}}"
     }
   },
   "empty": {
@@ -740,5 +752,48 @@
     "refTypeHint": "a commit sha, or any ref the platform resolves",
     "refApply": "Compare",
     "openDeployment": "Open the deployment on the platform"
+  },
+  "jobs": {
+    "queues": "Queues",
+    "queue": "Queue",
+    "queueName": {
+      "collection": "Collection",
+      "ingest": "Webhook ingestion"
+    },
+    "count": {
+      "waiting": "Waiting",
+      "active": "Running",
+      "delayed": "Delayed",
+      "failed": "Failed",
+      "completed": "Completed"
+    },
+    "schedule": "Schedule",
+    "onDemand": "On demand",
+    "nextRun": "{{pattern}} — next {{at}}",
+    "paused": "Paused",
+    "observedAt": "Read at {{at}}, refreshed every few seconds.",
+    "unreachable": "Redis is not answering: nothing is being collected in the background. ({{error}})",
+    "job": "Job",
+    "subject": "Subject",
+    "attempts": "Attempts",
+    "failedAt": "Failed",
+    "finishedAt": "Finished",
+    "reason": "Reason",
+    "noReason": "No reason recorded",
+    "retry": "Retry",
+    "retried": "Job queued again.",
+    "discard": "Discard",
+    "discarded": "Job discarded.",
+    "discardConfirm": "Discard this {{name}} job? What it was going to write will only be caught by the next run.",
+    "givenUp": "Given up on",
+    "failures": {
+      "title": "Failures",
+      "hint": "Jobs that used up their attempts. The most recent are listed; the counts above are the whole of them.",
+      "empty": "No job has failed."
+    },
+    "degraded": {
+      "title": "Completed with warnings",
+      "hint": "Runs that went through having given up on part of their work — nothing to retry, the next run tries again."
+    }
   }
 }

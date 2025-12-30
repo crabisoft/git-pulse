@@ -3,6 +3,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import type { SourceKind } from '@repo/shared';
 import { CodedException } from '../../common/coded-exception';
+import { JOB_DEFAULTS } from '../../common/job-options';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CryptoService } from '../../crypto/crypto.service';
 import { toGitHubIntent, toGitLabIntent, type IngestIntent } from './events';
@@ -66,11 +67,7 @@ export class WebhookService {
     // still right: replaying it would not say any more.
     if (!intent) return 'ignored';
 
-    await this.queue.add(
-      'ingest-event',
-      { sourceId, intent },
-      { removeOnComplete: true, removeOnFail: 100 },
-    );
+    await this.queue.add('ingest-event', { sourceId, intent }, JOB_DEFAULTS);
     return 'accepted';
   }
 

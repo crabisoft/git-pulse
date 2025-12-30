@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type {
+  CodedMessage,
   MetricBucket,
   MetricPoint,
   MetricSeries,
@@ -18,6 +19,19 @@ interface HistoryQuery {
   to?: string;
 }
 
+/**
+ * What one collection did, and what it gave up on.
+ *
+ * The best-effort steps below are caught so a partial failure still snapshots
+ * what is stored — but caught silently, the job that ran them completes green
+ * while the source it was collecting has stopped moving. The warnings are what
+ * the background-jobs page reads to tell the two apart.
+ */
+export interface CollectionOutcome {
+  snapshots: MetricSnapshotPublic[];
+  warnings: CodedMessage[];
+}
+
 @Injectable()
 export class CollectorService {
   private readonly logger = new Logger(CollectorService.name);
@@ -29,6 +43,11 @@ export class CollectorService {
     private readonly sync: SyncService,
   ) {}
 
+  /** What a collection wrote, for the caller that has nowhere to put the rest. */
+  async collectSource(sourceId: string): Promise<MetricSnapshotPublic[]> {
+    return (await this.collect(sourceId)).snapshots;
+  }
+
   /**
    * Fetch a source's data and persist metric snapshots.
    *
@@ -36,11 +55,15 @@ export class CollectorService {
    * store, so ingesting is part of collecting it rather than a schedule of its
    * own — two cadences could only ever disagree about what the numbers describe.
    * A failed ingestion still snapshots what is stored, which is a real reading
-   * of a view that stopped moving, not a hole in the series.
+   * of a view that stopped moving, not a hole in the series. What it gave up on
+   * comes back with it rather than staying in the logs — see CollectionOutcome.
    */
-  async collectSource(sourceId: string): Promise<MetricSnapshotPublic[]> {
+  async collect(sourceId: string): Promise<CollectionOutcome> {
+    const warnings: CodedMessage[] = [];
+
     await this.sync.syncIfStored(sourceId).catch((e) => {
       this.logger.warn(`Ingestion échouée pour ${sourceId} : ${asMessage(e)}`);
+      warnings.push({ code: 'errors.collect.ingest', params: { error: asMessage(e) } });
     });
 
     const live = await this.dashboard.live(sourceId);
@@ -63,9 +86,10 @@ export class CollectorService {
     // here must not drop the summary snapshots above.
     await this.dora.snapshot(sourceId).catch((e) => {
       this.logger.warn(`Snapshot DORA échoué pour ${sourceId} : ${asMessage(e)}`);
+      warnings.push({ code: 'errors.collect.dora', params: { error: asMessage(e) } });
     });
 
-    return created.map(toPublic);
+    return { snapshots: created.map(toPublic), warnings };
   }
 
   /**

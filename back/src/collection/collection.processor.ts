@@ -4,6 +4,7 @@ import { Queue, Job } from 'bullmq';
 import { CollectorService } from './collector.service';
 import { SourcesService } from '../sources/sources.service';
 import { RetentionService } from '../ingest/retention.service';
+import { JOB_DEFAULTS } from '../common/job-options';
 
 /**
  * Worker for the collection queue.
@@ -26,7 +27,9 @@ export class CollectionProcessor extends WorkerHost {
   async process(job: Job): Promise<unknown> {
     if (job.name === 'collect-all') {
       const sourceIds = await this.sources.listIds();
-      await Promise.all(sourceIds.map((sourceId) => this.queue.add('collect-source', { sourceId })));
+      await Promise.all(
+        sourceIds.map((sourceId) => this.queue.add('collect-source', { sourceId }, JOB_DEFAULTS)),
+      );
       // Once per cycle rather than per source: what it removes is bounded by
       // the reporting window, which is one setting for the whole install.
       // Best-effort — a store growing a cycle longer beats a collection that
@@ -40,8 +43,11 @@ export class CollectionProcessor extends WorkerHost {
 
     if (job.name === 'collect-source') {
       const { sourceId } = job.data as { sourceId: string };
-      const snapshots = await this.collector.collectSource(sourceId);
-      return { sourceId, count: snapshots.length };
+      // Returned rather than swallowed: the collector catches its best-effort
+      // steps so a snapshot is still written, which would otherwise complete
+      // this job green over a source whose ingestion failed outright.
+      const { snapshots, warnings } = await this.collector.collect(sourceId);
+      return { sourceId, count: snapshots.length, warnings };
     }
 
     this.logger.warn(`Job inconnu ignoré : ${job.name}`);

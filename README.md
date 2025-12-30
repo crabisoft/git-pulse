@@ -82,9 +82,10 @@ and by Vite in dev.
 | `/settings/trackers` | Ticket trackers (Jira, Linear, issues) |
 | `/settings/tickets` | Ticket rules (PR → ticket linking) |
 | `/settings/ai` | Model providers the install may call |
+| `/settings/jobs` | Background jobs: queue state, schedule, failures |
 
-`/`, `/dashboard`, `/dora`, `/deployments`, `/release-notes` and the
-source-bound settings sections redirect to the first source; `/settings` to
+`/`, `/dashboard`, `/dora`, `/deployments`, `/changelogs`, `/release-notes` and
+the source-bound settings sections redirect to the first source; `/settings` to
 `/settings/general`; everything else to the dashboard.
 
 **Settings is an application-wide module**, and every section in it is global:
@@ -1254,8 +1255,41 @@ button, the outcome is reported.
 > **A first run over a large scope takes minutes**, and walks the whole
 > reporting window repo by repo. Behind a reverse proxy that is long enough to
 > hit a gateway timeout: the browser then reports a network error while the
-> collection carries on server-side. Check `make logs` before starting it again
-> — the failure that matters is logged as `Ingestion échouée pour <id>`.
+> collection carries on server-side. **Settings › Background jobs** shows
+> whether it is still running.
+
+## Background jobs
+
+Two BullMQ queues, one Redis. `collection` carries the repeatable `collect-all`
+— registered on `collectCron` and re-registered whenever the setting changes —
+and the `collect-source` jobs it fans out. `ingest` carries what webhook
+deliveries ask to be written. Kept apart so a burst of events never queues
+behind a synchronisation that takes minutes.
+
+**Settings › Background jobs** reads them back: counts per queue, when the
+schedule next fires, and the failures with the payload they were working on and
+the message the platform answered with. A job can be retried or discarded from
+there. It polls every few seconds — none of it is stored, it is a reading of
+Redis at the instant.
+
+> The one state worth watching for is **Redis not answering**. The API keeps
+> serving stored data perfectly well while nothing at all is being collected
+> behind it, and the page says so where every other screen would look normal.
+
+**Retention is bounded on both ends** (`common/job-options`): the last 200
+completed and 500 failed jobs per queue. Deeper on failures because a success is
+a count and a failure is something somebody has to read. One-shot jobs get three
+attempts with an exponential backoff — what makes them fail is a platform being
+unreachable or a rate limit being hit, and neither clears in a second. The
+repeatable gets none: the cron brings it back on its own, and a second attempt
+would enqueue the whole fan-out twice.
+
+**Completed with warnings** is its own list. A collection catches its
+best-effort steps — the ingestion, the DORA snapshot — so a failure still
+snapshots what is stored rather than leaving a hole in the series. That
+completes the job green over a source that has stopped moving, so what it gave
+up on travels in the job's return value and is listed apart. Nothing to retry:
+the next run tries again.
 
 ## Database migrations
 

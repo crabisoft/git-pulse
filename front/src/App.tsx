@@ -41,6 +41,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   'env',
   'tickets',
   'ai',
+  'jobs',
 ];
 
 /**
