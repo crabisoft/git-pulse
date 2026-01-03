@@ -17,7 +17,9 @@ import type {
   EnvRulePublic,
   ClassifiedEnvironment,
   Branch,
+  ChangelogReport,
   DeploymentBase,
+  DeploymentChangelog,
   DeploymentChanges,
   DeploymentReport,
   DoraReport,
@@ -180,6 +182,22 @@ export interface DeploymentsQuery extends DoraQuery {
   /** Environment names, matched exactly; empty means every one. */
   environments?: string[];
   statuses?: PipelineStatus[];
+}
+
+/**
+ * What narrows the changelog archive.
+ *
+ * No rolling window, unlike every other report: the archive exists to be read
+ * months later, so no period at all means the whole history rather than the
+ * configured one.
+ */
+export interface ChangelogsQuery extends PageQuery {
+  repos?: string[];
+  environments?: string[];
+  /** Free text, matched against the rendered notes and the deployed ref. */
+  search?: string;
+  from?: string;
+  to?: string;
 }
 
 export interface CreateSourceInput {
@@ -469,6 +487,31 @@ export const api = {
           to: query.to,
           windowDays: query.windowDays,
         }),
+      { signal },
+    ),
+
+  /**
+   * The archive of what deployments carried. Reads stored rows and nothing
+   * else, so a history months deep answers as fast as yesterday's.
+   */
+  changelogs: (sourceId: string, query: ChangelogsQuery = {}, signal?: AbortSignal) =>
+    request<ChangelogReport>(
+      `/sources/${sourceId}/changelogs` +
+        qs({
+          repo: query.repos?.length ? query.repos : undefined,
+          environment: query.environments?.length ? query.environments : undefined,
+          search: query.search || undefined,
+          from: query.from,
+          to: query.to,
+          limit: query.limit,
+          offset: query.offset,
+        }),
+      { signal },
+    ),
+  /** One filed changelog, keyed on the deployment it describes. */
+  changelog: (sourceId: string, deploymentId: string, signal?: AbortSignal) =>
+    request<DeploymentChangelog>(
+      `/sources/${sourceId}/changelogs/${encodeURIComponent(deploymentId)}`,
       { signal },
     ),
 

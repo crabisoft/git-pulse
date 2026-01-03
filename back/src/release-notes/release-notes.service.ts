@@ -6,6 +6,7 @@ import type {
   ReleaseNoteEntry,
   ReleaseNoteSection,
   ReleaseNotes,
+  ReleaseNotesGenerator,
   RewriteResult,
   Tag,
 } from '@repo/shared';
@@ -128,32 +129,46 @@ export class ReleaseNotesService {
     };
     const commits = await connector.listCommitsBetween(ctx, query.repo, from, to);
     const entries = await this.toEntries(sourceId, connector, ctx, location, commits);
+    const { markdown, generator } = await this.render(location, from, to, entries);
 
-    const sections = groupByType(entries);
-    const breaking = entries
-      .filter(({ entry }) => entry.breaking)
-      .map(({ entry }) => entry);
-
-    const generator = (await this.settings.get()).releaseNotesGenerator;
     return {
       repo: query.repo,
       from,
       to,
       fromUrl: from === null ? null : refUrl(location, from),
       toUrl: refUrl(location, to),
-      sections,
-      breaking,
-      markdown:
-        generator === 'conventional-changelog'
-          ? await renderChangelog(
-              location,
-              from,
-              to,
-              entries.map(({ entry }) => entry),
-            )
-          : render(query.repo, from, to, sections, breaking),
+      sections: groupByType(entries),
+      breaking: entries.filter((entry) => entry.breaking),
+      markdown,
       generator,
     };
+  }
+
+  /**
+   * A range of entries as Markdown, through the generator the install chose.
+   *
+   * Public for the same reason `describeCommits` is: a deployment is a range
+   * too — one ref against another — and the text describing what went out has
+   * to be the text a release note would have given for the same commits.
+   */
+  async render(
+    location: RepoLocation,
+    from: string | null,
+    to: string,
+    entries: ReleaseNoteEntry[],
+  ): Promise<{ markdown: string; generator: ReleaseNotesGenerator }> {
+    const generator = (await this.settings.get()).releaseNotesGenerator;
+    const markdown =
+      generator === 'conventional-changelog'
+        ? await renderChangelog(location, from, to, entries)
+        : render(
+            location.repo,
+            from,
+            to,
+            groupByType(entries),
+            entries.filter((entry) => entry.breaking),
+          );
+    return { markdown, generator };
   }
 
   /**
@@ -176,8 +191,7 @@ export class ReleaseNotesService {
     location: RepoLocation,
     commits: Commit[],
   ): Promise<ReleaseNoteEntry[]> {
-    const entries = await this.toEntries(sourceId, connector, ctx, location, commits);
-    return entries.map(({ entry }) => entry);
+    return this.toEntries(sourceId, connector, ctx, location, commits);
   }
 
   /**
@@ -190,7 +204,7 @@ export class ReleaseNotesService {
     ctx: ConnectorContext,
     location: RepoLocation,
     commits: Commit[],
-  ): Promise<Array<{ type: string; entry: ReleaseNoteEntry }>> {
+  ): Promise<ReleaseNoteEntry[]> {
     const requests = await this.requestsOf(sourceId, connector, ctx, location, commits);
     const tickets = await this.ticketRules.extractMany(
       sourceId,
@@ -201,21 +215,17 @@ export class ReleaseNotesService {
     return commits.map((commit, i) => {
       const parsed = parseConventionalCommit(commit.message);
       return {
-        // A history following no convention still has to be listed.
-        type: parsed?.type ?? 'other',
-        entry: {
-          summary: parsed?.summary ?? firstLine(commit.message),
-          // Carried whole beside the parsed line: the body is where a commit
-          // says why, and no reading above keeps a word of it.
-          message: commit.message,
-          scope: parsed?.scope ?? null,
-          breaking: parsed?.breaking ?? false,
-          sha: commit.sha,
-          author: commit.author,
-          url: commit.url,
-          tickets: tickets[i],
-          pullRequest: requests[i].ref,
-        },
+        summary: parsed?.summary ?? firstLine(commit.message),
+        // Carried whole beside the parsed line: the body is where a commit
+        // says why, and no reading above keeps a word of it.
+        message: commit.message,
+        scope: parsed?.scope ?? null,
+        breaking: parsed?.breaking ?? false,
+        sha: commit.sha,
+        author: commit.author,
+        url: commit.url,
+        tickets: tickets[i],
+        pullRequest: requests[i].ref,
       };
     });
   }
@@ -274,11 +284,19 @@ function firstLine(message: string): string {
   return message.split('\n')[0].trim();
 }
 
-function groupByType(
-  entries: Array<{ type: string; entry: ReleaseNoteEntry }>,
-): ReleaseNoteSection[] {
+/**
+ * Entries in sections, by Conventional Commits type.
+ *
+ * The type is read back off the message rather than carried alongside the
+ * entry: the message is kept whole precisely so nothing above has to be the
+ * only reading of it, and a section this disagreed with the summary about would
+ * be a bug nobody could see.
+ */
+function groupByType(entries: ReleaseNoteEntry[]): ReleaseNoteSection[] {
   const byType = new Map<string, ReleaseNoteEntry[]>();
-  for (const { type, entry } of entries) {
+  for (const entry of entries) {
+    // A history following no convention still has to be listed.
+    const type = parseConventionalCommit(entry.message)?.type ?? 'other';
     const bucket = byType.get(type);
     if (bucket) bucket.push(entry);
     else byType.set(type, [entry]);
@@ -334,3 +352,4 @@ function bullet(entry: ReleaseNoteEntry): string {
     .join(' · ');
   return `- ${scope}${entry.summary} — ${refs}`;
 }
+

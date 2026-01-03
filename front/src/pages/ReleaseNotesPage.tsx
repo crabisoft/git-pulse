@@ -15,6 +15,7 @@ import { RefSelect } from '../RefSelect';
 import { RefLink } from '../RefLink';
 import { CommitList } from '../CommitList';
 import { FilterField } from '../Filters';
+import { CopyButton } from '../CopyButton';
 
 /** Languages the rewriting offers, as tags — the UI's own, named in the UI's locale. */
 const LANGUAGES = ['en', 'fr'];
@@ -309,32 +310,5 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
         </section>
       )}
     </>
-  );
-}
-
-/**
- * Copies to the clipboard and says so for a moment. Pasting the notes into a
- * release page is what most of them are generated for.
- */
-function CopyButton({ text }: { text: string }) {
-  const { t } = useTranslation();
-  const [copied, setCopied] = useState(false);
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // A clipboard the browser refuses is not worth a banner: the Markdown is
-      // on screen and selectable either way.
-      setCopied(false);
-    }
-  }
-
-  return (
-    <button className="btn" onClick={() => void copy()}>
-      {copied ? t('releaseNotes.copied') : t('releaseNotes.copy')}
-    </button>
   );
 }

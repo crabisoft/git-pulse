@@ -7,7 +7,8 @@
     "dora": "DORA",
     "settings": "Paramètres",
     "releaseNotes": "Notes de version",
-    "deployments": "Déploiements"
+    "deployments": "Déploiements",
+    "changelogs": "Historique"
   },
   "auth": {
     "signInTitle": "Connexion",
@@ -218,7 +219,9 @@
     "selectedCount": "{{count}} sur {{total}}",
     "noMatch": "Aucun résultat",
     "expandCommit": "Afficher le message complet du commit",
-    "collapseCommit": "Masquer le message complet du commit"
+    "collapseCommit": "Masquer le message complet du commit",
+    "copy": "Copier",
+    "copied": "Copié"
   },
   "pagination": {
     "range": "{{first}}–{{last}} sur {{total}}",
@@ -294,7 +297,8 @@
     },
     "deployment": {
       "notFound": "Le déploiement {{id}} n’est pas dans cette période.",
-      "invalidRef": "Ref inutilisable : {{ref}}"
+      "invalidRef": "Ref inutilisable : {{ref}}",
+      "contentsLost": "Ce que {{repo}} @ {{ref}} a emporté ne peut plus être établi : la plateforme avait déjà lâché ses refs au moment de l'archivage ({{when}}). Le déploiement lui-même reste dans l'historique."
     },
     "jobs": {
       "unreachable": "Redis ne répond pas : {{error}}",
@@ -304,7 +308,12 @@
     },
     "collect": {
       "ingest": "Ingestion échouée, le relevé a été pris sur ce qui était déjà stocké : {{error}}",
-      "dora": "Relevé DORA échoué : {{error}}"
+      "dora": "Relevé DORA échoué : {{error}}",
+      "changelogs": "Archivage des changelogs de déploiement échoué : {{error}}",
+      "changelogsPartial": "{{count}} déploiement(s) n'ont pas pu être archivés — leur contenu sera perdu dès qu'ils sortiront du magasin."
+    },
+    "changelog": {
+      "notFound": "Aucun changelog n'a été archivé pour le déploiement {{id}}."
     }
   },
   "empty": {
@@ -708,8 +717,6 @@
       "chore": "Tâches diverses",
       "other": "Hors convention"
     },
-    "copy": "Copier",
-    "copied": "Copié",
     "rewriteTitle": "Reformuler avec l’IA",
     "rewriteHint": "Le Markdown ci-dessus est la seule chose envoyée au fournisseur. Les notes générées restent affichées, pour vérifier que rien n’a été ajouté.",
     "provider": "Fournisseur",
@@ -795,5 +802,23 @@
       "title": "Terminées avec avertissement",
       "hint": "Exécutions passées en abandonnant une partie de leur travail — rien à relancer, la suivante réessaie."
     }
+  },
+  "changelogs": {
+    "title": "Historique des déploiements",
+    "hint": "Ce que chaque déploiement a emporté, consigné au moment où il a eu lieu. Les environnements sont détruits et les branches supprimées ; ceci est conservé et reste lisible des mois plus tard.",
+    "search": "Recherche",
+    "searchHint": "un mot d'un commit, une réf…",
+    "since": "Du",
+    "until": "Au",
+    "contents": "Contenu",
+    "read": "Lire",
+    "hide": "Masquer",
+    "empty": "Aucun changelog archivé ne correspond à ces filtres.",
+    "neverRun": "Rien d'archivé pour l'instant. Les déploiements sont consignés par la collecte : les premières entrées apparaîtront après son prochain passage.",
+    "noBase": "Premier déploiement sur cet environnement : il a tout emporté, et rien ne le précédait pour servir de point de comparaison.",
+    "archivedAt": "Archivé le {{when}}",
+    "lastArchived": "Dernier archivage le {{when}}",
+    "unreadable": "Contenu perdu",
+    "unreadableHint": "Consigné sans contenu : la plateforme ne résolvait plus les refs quand l'archiveur a atteint ce déploiement. Qu'il ait eu lieu, sur cette réf, à cette date, est ce qu'il en reste."
   }
 }

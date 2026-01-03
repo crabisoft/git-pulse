@@ -4,12 +4,11 @@ import { Link } from 'react-router-dom';
 import type { ClassifiedDeployment, DeploymentReport } from '@repo/shared';
 import { api, type DeploymentsQuery, type PageQuery } from '../api';
 import { FILTER_DEBOUNCE_MS, useCancellableLoad, useDebounced } from '../hooks';
-import { DimensionFilter, PeriodFilter } from '../Filters';
+import { ChoiceFilter, DimensionFilter, PeriodFilter } from '../Filters';
 import { RepoFilter } from '../RepoFilter';
-import { MultiSelect } from '../MultiSelect';
 import { Pagination } from '../Pagination';
-import { RefLink } from '../RefLink';
 import { PlatformLink } from '../PlatformLink';
+import { RefLink } from '../RefLink';
 
 /**
  * Module constant so resetting on a source change never re-triggers a fetch.
@@ -201,50 +200,4 @@ function changesLink(
   if (query.to) params.set('to', query.to);
   if (query.windowDays !== undefined) params.set('windowDays', String(query.windowDays));
   return `/deployments/${slug}/changes?${params}`;
-}
-
-/**
- * A multiple choice over a closed vocabulary. The same control the repo filter
- * uses, because environments and statuses ask the user exactly the same thing —
- * and an empty selection means "every one", which is also what the API reads
- * from an omitted parameter.
- */
-function ChoiceFilter({
-  label,
-  anyLabel,
-  options,
-  value,
-  onChange,
-  disabled,
-  translateOption,
-}: {
-  label: string;
-  anyLabel: string;
-  options: readonly string[];
-  value: readonly string[];
-  onChange: (next: string[]) => void;
-  disabled?: boolean;
-  translateOption?: (option: string) => string;
-}) {
-  const items = useMemo(
-    () =>
-      options.map((option) => ({
-        value: option,
-        label: translateOption ? translateOption(option) : option,
-      })),
-    [options, translateOption],
-  );
-
-  return (
-    <div className="repo-filter">
-      <span className="repo-filter-label">{label}</span>
-      <MultiSelect
-        options={items}
-        selected={new Set(value)}
-        onChange={(next) => onChange([...next].sort())}
-        emptyLabel={anyLabel}
-        disabled={disabled}
-      />
-    </div>
-  );
 }

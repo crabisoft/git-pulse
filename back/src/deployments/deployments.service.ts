@@ -3,12 +3,16 @@ import type {
   ClassifiedDeployment,
   Deployment,
   DeploymentBase,
+  DeploymentChangelog,
   DeploymentChanges,
   DeploymentReport,
+  DoraPeriod,
 } from '@repo/shared';
 import { CodedException } from '../common/coded-exception';
 import { paginate, type PageWindow } from '../common/pagination';
 import { resolvePeriod, within, type PeriodQuery } from '../common/period';
+import { ChangelogStore } from '../changelogs/changelog.store';
+import type { SourceReader } from '../ingest/source-reader.interface';
 import { SettingsService } from '../settings/settings.service';
 import { SourcesService } from '../sources/sources.service';
 import { ConnectorFactory } from '../sources/connectors/connector.factory';
@@ -44,6 +48,7 @@ export class DeploymentsService {
     private readonly envRules: EnvRulesService,
     private readonly releaseNotes: ReleaseNotesService,
     private readonly settings: SettingsService,
+    private readonly changelogs: ChangelogStore,
   ) {}
 
   /**
@@ -63,9 +68,12 @@ export class DeploymentsService {
     const reader = await this.readers.for(sourceId, signal);
 
     const allRepos = await reader.listRepositories();
-    const scoped = scopeRepos(allRepos, query.repos);
-    const raw = (await reader.listDeployments(scoped)).filter((d) => within(d.createdAt, period));
-    const classified = await this.classify(sourceId, raw);
+    const classified = await this.classifiedIn(
+      sourceId,
+      reader,
+      scopeRepos(allRepos, query.repos),
+      period,
+    );
 
     // Vocabularies before the filters, so narrowing one never empties another.
     const vocabulary = vocabularies(classified);
@@ -86,6 +94,12 @@ export class DeploymentsService {
    * bases answer a different question, and neither is a better default in
    * general — deploying `main` makes the `default` comparison empty, and a
    * first deployment has no `previous` to compare against.
+   *
+   * The archive answers first, and only about the comparison it filed. What it
+   * holds is the reading taken while the refs still existed, and on an
+   * environment that has since been torn down it is the only reading anyone
+   * will ever get — recomputing over a deleted branch answers nothing. A caller
+   * asking for another base is asking about the platform, and goes there.
    */
   async changes(
     sourceId: string,
@@ -97,20 +111,56 @@ export class DeploymentsService {
     query: PeriodQuery,
     signal?: AbortSignal,
   ): Promise<DeploymentChanges> {
+    if (base === 'previous') {
+      const filed = await this.changelogs.find(sourceId, deploymentId);
+      if (filed) return this.fromArchive(sourceId, filed);
+    }
+
     const period = resolvePeriod(query, (await this.settings.get()).doraWindowDays);
     const reader = await this.readers.for(sourceId, signal);
-
     // Scoped to the one repo: the deployment and its predecessor are both in
     // there, and listing the whole scope to find two rows would be wasteful.
-    const raw = (await reader.listDeployments([repo])).filter((d) => within(d.createdAt, period));
-    const classified = await this.classify(sourceId, raw);
+    const classified = await this.classifiedIn(sourceId, reader, [repo], period);
     const target = classified.find((d) => d.id === deploymentId);
     if (!target) {
       throw new CodedException('errors.deployment.notFound', HttpStatus.NOT_FOUND, {
         id: deploymentId,
       });
     }
+    return this.contentsOf(sourceId, target, classified, base, customRef, signal);
+  }
 
+  /**
+   * Every deployment of a period, classified, before any filter applies.
+   *
+   * Public for the archiver: what it files is decided over the whole window at
+   * once, and each deployment's predecessor is another row of the same set.
+   */
+  async classified(
+    sourceId: string,
+    period: DoraPeriod,
+    signal?: AbortSignal,
+  ): Promise<ClassifiedDeployment[]> {
+    const reader = await this.readers.for(sourceId, signal);
+    return this.classifiedIn(sourceId, reader, await reader.listRepositories(), period);
+  }
+
+  /**
+   * What one deployment carried, its base resolved among `classified`.
+   *
+   * Takes the list rather than loading one: the caller that walks a window of
+   * deployments already holds every predecessor it is going to need, and a
+   * listing per row would be a listing per row.
+   */
+  async contentsOf(
+    sourceId: string,
+    target: ClassifiedDeployment,
+    classified: ClassifiedDeployment[],
+    base: DeploymentBase = 'previous',
+    customRef?: string,
+    signal?: AbortSignal,
+  ): Promise<DeploymentChanges> {
+    const repo = target.repo;
     const { ctx, kind } = await this.sources.resolveContext(sourceId, signal);
     const connector = this.connectors.for(kind);
     const baseRef = await this.resolveBase(connector, ctx, repo, base, customRef, classified, target);
@@ -127,6 +177,10 @@ export class DeploymentsService {
         baseRefUrl: null,
         entries: [],
         authors: 0,
+        // Left empty rather than rendered: an empty range reads "no change in
+        // this range", which is the opposite of what a first deployment did.
+        markdown: '',
+        archivedAt: null,
       };
     }
 
@@ -139,6 +193,7 @@ export class DeploymentsService {
       location,
       commits,
     );
+    const { markdown } = await this.releaseNotes.render(location, baseRef, target.ref, entries);
     return {
       deployment: target,
       repo,
@@ -147,7 +202,64 @@ export class DeploymentsService {
       baseRef,
       baseRefUrl: refUrl(location, baseRef),
       entries,
-      authors: new Set(commits.map((c) => c.author)).size,
+      // Counted off the entries and not off the commits that were listed: a
+      // squash is expanded into the commits it was made of, so the two no
+      // longer describe the same set — and the number sits beside the list.
+      authors: new Set(entries.map((entry) => entry.author)).size,
+      markdown,
+      archivedAt: null,
+    };
+  }
+
+  /**
+   * A filed changelog, read back as the question it answered.
+   *
+   * The environment goes through today's rules — those are configuration, and a
+   * rule corrected since must apply to what it describes. Nothing else is
+   * recomputed, the links least of all: they were built when the source still
+   * pointed where it did, and a source re-scoped since would otherwise grow
+   * links into a repo that no longer holds these commits.
+   */
+  private async fromArchive(
+    sourceId: string,
+    log: DeploymentChangelog,
+  ): Promise<DeploymentChanges> {
+    // A record filed without contents answers the question, in the negative:
+    // the platform had already dropped the refs when the archiver got there, so
+    // nothing will produce this comparison again. Reported as gone rather than
+    // returned empty — an empty payload reads as "this carried nothing", which
+    // is the one thing we know it did not mean.
+    if (log.unreadable) {
+      throw new CodedException('errors.deployment.contentsLost', HttpStatus.GONE, {
+        repo: log.repo,
+        ref: log.ref,
+        when: log.archivedAt,
+      });
+    }
+    const [env] = await this.envRules.classifyMany(sourceId, [log.environment]);
+    return {
+      deployment: {
+        id: log.deploymentId,
+        repo: log.repo,
+        environment: log.environment,
+        ref: log.ref,
+        status: log.status,
+        createdAt: log.deployedAt,
+        environmentUrl: log.environmentUrl,
+        url: log.deploymentUrl,
+        attributes: env?.attributes ?? {},
+        metaEnvironments: env?.metaEnvironments ?? [],
+        refUrl: log.refUrl,
+      },
+      repo: log.repo,
+      head: log.ref,
+      base: log.base,
+      baseRef: log.baseRef,
+      baseRefUrl: log.baseRefUrl,
+      entries: log.entries,
+      authors: log.authors,
+      markdown: log.markdown,
+      archivedAt: log.archivedAt,
     };
   }
 
@@ -178,6 +290,17 @@ export class DeploymentsService {
     }
     if (base === 'default') return connector.defaultBranch(ctx, repo);
     return previousDeployment(classified, target)?.ref ?? null;
+  }
+
+  /** The period's deployments over the given repos, classified. */
+  private async classifiedIn(
+    sourceId: string,
+    reader: SourceReader,
+    repos: string[],
+    period: DoraPeriod,
+  ): Promise<ClassifiedDeployment[]> {
+    const raw = (await reader.listDeployments(repos)).filter((d) => within(d.createdAt, period));
+    return this.classify(sourceId, raw);
   }
 
   /**

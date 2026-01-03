@@ -71,6 +71,7 @@ and by Vite in dev.
 | `/dora/:slug/:metric` | One metric: its trend, then the events behind it |
 | `/deployments/:slug` | Deployments, filtered |
 | `/deployments/:slug/changes` | One deployment: the commits it carried |
+| `/changelogs/:slug` | The archive: what every deployment carried, months back |
 | `/release-notes/:slug` | Notes for a range of commits, and their AI rewriting |
 | `/login` | Sign in — or create the first admin on a fresh install |
 | `/account` | Your own name and password |
@@ -527,6 +528,98 @@ stretch of time — and a link reproduces exactly what its sender was reading.
 > it, since `generatePath` carries no search string. A page reached without an
 > `id` therefore redirects back to the list rather than reporting a deployment
 > it cannot find — which also covers a hand-edited link.
+
+### Keeping it — the changelog archive
+
+Everything above is computed on demand, which works for exactly as long as the
+platform can still answer. It usually cannot for very long: **a deployment is
+the most perishable thing this install reports on.** Its environment gets torn
+down, the branch it deployed is deleted on merge, its record ages out of the
+provider's API — and the ingestion's own retention drops the row a week past the
+reporting window. Ask in September what went to a review environment in March
+and there is nothing left to compare.
+
+So what a deployment carried is **written down while it can still be read**, in
+`DeploymentChangelog`. It is the one table here that is not a mirror of the
+platform: everything else can be rebuilt from the provider if it were lost, and
+this cannot. The retention sweep therefore does not touch it, and nothing else
+purges it either.
+
+**Filed by the collection, not by a reader.** The archiver runs at the end of
+each `collect-source`, after the ingestion and the DORA snapshot: by the time
+somebody asks about March, March is unreadable. It walks the deployments of the
+reporting window, keeps the successful ones it has not filed yet, oldest first,
+and compares each against `previous` — the same comparison the detail page
+makes, through the same service, so the archive and the page never drift.
+
+| Bound | Value | Why |
+|---|---|---|
+| Batch | 25 deployments per run | A first run over a busy month would otherwise spend a source's whole rate-limit budget at once |
+| Reserve | the same `quotaReservePct` the enrichment respects | Checked *between* deployments, so a budget going scarce halfway stops the run where it is |
+| Order | oldest first | Over the cap, the oldest are the ones closest to falling out of the store — and closest to being uncomputable for ever |
+
+Nothing is lost to either bound: the deployments stay in the store, and the next
+cycle picks up where this one stopped.
+
+**When the platform has already dropped the refs.** A branch deleted on merge, a
+tag moved, a commit pruned — and the compare endpoint answers 404 for a
+deployment that really did happen. Both connectors translate that into
+`errors.compare.unresolvable` (or `unknownRef`, without a lower bound) rather
+than letting the client's error through: raw, it surfaced as `errors.internal`
+and a 500, which says the install is broken when what is broken is nothing.
+
+The archiver then **files the deployment without contents** (`unreadable`),
+instead of retrying it. A 404 on a compare does not become false later, and one
+deployment retried every cycle would hold the batch against the ones that can
+still be read. What is filed is still true and still unobtainable elsewhere:
+this went out, on this ref, at this time — and what it carried is no longer
+knowable by anyone. The detail route answers `410 Gone` for it, because an empty
+payload would read as "this carried nothing", the one thing it did not mean.
+
+> Only that code is filed as unreadable. A network blip or a 5xx leaves the
+> deployment unfiled and it comes back round on the next cycle — the two are not
+> the same failure, and treating them alike would either lose the transient ones
+> or retry the permanent ones for ever.
+
+**Successful deployments only.** A failed one carried nothing to the
+environment, and it is also what the next success is compared against: filing
+failures would make every one of them look empty and every success look twice as
+large.
+
+**Written once.** A record is never overwritten. The whole value of the table is
+that it says what was true *then*, and a second pass finding the branch deleted
+would replace a full changelog with an empty one.
+
+What is stored is the answer, not the means of recomputing it: the structured
+entries **and** the rendered Markdown, the counts, the generator that produced
+the text, and the platform links — stored rather than derived, because a source
+re-scoped or moved since would otherwise grow links into a repo that no longer
+holds these commits. Only the environment classification is resolved fresh on
+read: rules are configuration, and a rule corrected today must apply to what it
+describes.
+
+`GET …/deployments/:deploymentId/changes` **consults the archive first**, and
+only for the comparison it filed (`base=previous`). A reader asking for another
+base is asking about the platform, and goes to the platform. An archived answer
+says so — `archivedAt` on the payload, a pill on the page — because a reader
+comparing two of these has to know which is a recollection and which is a
+reading.
+
+| Route | Answers |
+|---|---|
+| `GET …/changelogs` | The archive, newest first: repo, environment and free-text filters, optional bounds, paginated |
+| `GET …/changelogs/:deploymentId` | One filed record, contents included |
+
+The list route carries **summaries only** — no entries, no Markdown. A page of a
+hundred releases would otherwise carry every commit message of each, which is
+most of the payload and none of what the table shows; the commit and author
+counts are columns for that reason. The history page fetches the contents of the
+one release somebody opens.
+
+> Unlike every other report here, the archive has **no rolling window**: absent
+> bounds mean the whole history rather than the configured period. Reading it
+> months later is the entire point, and it makes no platform call to do so — a
+> history years deep answers as fast as yesterday's.
 
 ## Metric trends
 

@@ -7,7 +7,8 @@
     "dora": "DORA",
     "settings": "Settings",
     "releaseNotes": "Release notes",
-    "deployments": "Deployments"
+    "deployments": "Deployments",
+    "changelogs": "History"
   },
   "auth": {
     "signInTitle": "Sign in",
@@ -218,7 +219,9 @@
     "selectedCount": "{{count}} of {{total}}",
     "noMatch": "No match",
     "expandCommit": "Show the full commit message",
-    "collapseCommit": "Hide the full commit message"
+    "collapseCommit": "Hide the full commit message",
+    "copy": "Copy",
+    "copied": "Copied"
   },
   "pagination": {
     "range": "{{first}}–{{last}} of {{total}}",
@@ -294,7 +297,8 @@
     },
     "deployment": {
       "notFound": "Deployment {{id}} is not in this period.",
-      "invalidRef": "Not a usable ref: {{ref}}"
+      "invalidRef": "Not a usable ref: {{ref}}",
+      "contentsLost": "What {{repo}} @ {{ref}} carried can no longer be established: the platform had already dropped its refs when it was archived ({{when}}). The deployment itself is kept in the history."
     },
     "jobs": {
       "unreachable": "Redis is not answering: {{error}}",
@@ -304,7 +308,12 @@
     },
     "collect": {
       "ingest": "Ingestion failed, the snapshot was taken off what was already stored: {{error}}",
-      "dora": "DORA snapshot failed: {{error}}"
+      "dora": "DORA snapshot failed: {{error}}",
+      "changelogs": "Deployment changelogs could not be archived: {{error}}",
+      "changelogsPartial": "{{count}} deployment(s) could not be archived — their contents will be lost once they age out of the store."
+    },
+    "changelog": {
+      "notFound": "No changelog was archived for deployment {{id}}."
     }
   },
   "empty": {
@@ -708,8 +717,6 @@
       "chore": "Chores",
       "other": "Following no convention"
     },
-    "copy": "Copy",
-    "copied": "Copied",
     "rewriteTitle": "Rewrite with AI",
     "rewriteHint": "The Markdown above is the only thing sent to the vendor. The generated notes stay on screen, so you can check nothing was added.",
     "provider": "Provider",
@@ -795,5 +802,23 @@
       "title": "Completed with warnings",
       "hint": "Runs that went through having given up on part of their work — nothing to retry, the next run tries again."
     }
+  },
+  "changelogs": {
+    "title": "Deployment history",
+    "hint": "What each deployment carried, written down as it happened. Environments get torn down and branches deleted; this is kept, and stays readable months later.",
+    "search": "Search",
+    "searchHint": "a word from a commit, a ref…",
+    "since": "From",
+    "until": "To",
+    "contents": "Contents",
+    "read": "Read",
+    "hide": "Hide",
+    "empty": "No archived changelog matches these filters.",
+    "neverRun": "Nothing archived yet. Deployments are filed by the collection, so the first entries appear after its next run.",
+    "noBase": "First deployment to this environment: it carried everything, and there was nothing before it to compare against.",
+    "archivedAt": "Archived on {{when}}",
+    "lastArchived": "Last archived on {{when}}",
+    "unreadable": "Contents lost",
+    "unreadableHint": "Filed without contents: the platform no longer resolved the refs when the archiver reached this deployment. That it went out, on this ref, at this time, is what remains of it."
   }
 }

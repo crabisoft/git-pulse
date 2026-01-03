@@ -60,6 +60,7 @@ model Source {
   pullRequests StoredPullRequest[]
   pipelines    StoredPipeline[]
   deployments  StoredDeployment[]
+  changelogs   DeploymentChangelog[]
   syncStates   SyncState[]
 }
 
@@ -512,6 +513,70 @@ model StoredDeployment {
   @@unique([sourceId, externalId])
   @@index([sourceId, createdAt])
   @@index([sourceId, environment, createdAt])
+}
+
+/// What a deployment carried, written down while it could still be read.
+///
+/// Everything else in this file is a mirror of what the platform holds, kept
+/// only as long as the reporting window and rebuilt from the provider if it
+/// were lost. This one is the opposite: an environment is torn down, its branch
+/// deleted, the deployment record aged out of the API — and the comparison that
+/// produced these lines can never be made again. So it is written whole, and
+/// the retention sweep does not touch it.
+///
+/// Held per source and keyed on the provider's own deployment id: the row in
+/// StoredDeployment is purged with the window, and nothing else survives it.
+model DeploymentChangelog {
+  id             String   @id @default(uuid())
+  source         Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId       String
+  /// Identity on the provider side, as the connectors build it — the handle
+  /// that outlives the deployment row itself.
+  deploymentId   String
+  repo           String
+  environment    String
+  /// The deployed ref, and what it was compared against. Null when nothing
+  /// preceded it: a first deployment to an environment carries everything, and
+  /// saying so is the honest record.
+  ref            String
+  baseRef        String?
+  /// DeploymentBase — which question the comparison answered.
+  base           String
+  /// The platform's pages, stored rather than derived: a link is only useful if
+  /// it still points where it did, and the source it was built from may since
+  /// have been re-scoped, moved, or pointed at another host.
+  refUrl         String
+  baseRefUrl     String?
+  deploymentUrl  String?
+  environmentUrl String?
+  /// PipelineStatus as of the archiving.
+  status         String
+  /// ReleaseNoteEntry[] — the structured reading, kept beside the rendered text
+  /// because rendering it again (another generator, a rewrite, a translation)
+  /// must not need the platform back.
+  entries        Json
+  markdown       String
+  /// Distinct authors over the range, and how many commits it held. Counted
+  /// into columns because the history page lists them without reading the two
+  /// heavy fields above — a page of a hundred releases would otherwise carry
+  /// every commit message of each.
+  authors        Int
+  commits        Int
+  /// Filed without contents: the platform would not resolve the refs when the
+  /// archiver got to it — a branch deleted on merge, a commit pruned. Recorded
+  /// rather than retried, because a 404 on a compare does not become false
+  /// again, and a deployment retried for ever would hold the batch against the
+  /// ones that can still be read. What it says is true and worth keeping: this
+  /// went out, and what it carried is no longer knowable.
+  unreadable     Boolean  @default(false)
+  /// ReleaseNotesGenerator that produced `markdown`.
+  generator      String
+  deployedAt     DateTime
+  archivedAt     DateTime @default(now())
+
+  @@unique([sourceId, deploymentId])
+  @@index([sourceId, deployedAt])
+  @@index([sourceId, repo, environment, deployedAt])
 }
 
 /// Which vendor's API a provider talks to. It decides the request shape and the

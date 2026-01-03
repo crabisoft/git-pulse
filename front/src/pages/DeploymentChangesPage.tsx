@@ -4,9 +4,10 @@ import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import type { DeploymentBase, DeploymentChanges } from '@repo/shared';
 import { api } from '../api';
 import { useCancellableLoad } from '../hooks';
+import { PlatformLink } from '../PlatformLink';
 import { RefLink } from '../RefLink';
 import { CommitList } from '../CommitList';
-import { PlatformLink } from '../PlatformLink';
+import { CopyButton } from '../CopyButton';
 import { FilterField } from '../Filters';
 import { RefDialog } from './RefDialog';
 
@@ -181,17 +182,32 @@ function Changes({ changes }: { changes: DeploymentChanges }) {
       <p className="muted">
         {t('deployments.against')}{' '}
         <RefLink name={changes.baseRef} url={changes.baseRefUrl} />
+        {/* Said rather than shown silently: this comparison was made when the
+            refs still existed, and nothing here could make it again today. */}
+        {changes.archivedAt && (
+          <>
+            {' · '}
+            <span className="pill">
+              {t('changelogs.archivedAt', {
+                when: new Date(changes.archivedAt).toLocaleString(),
+              })}
+            </span>
+          </>
+        )}
       </p>
       {changes.entries.length === 0 ? (
         <p className="muted">{t('deployments.noChange')}</p>
       ) : (
         <>
-          <p className="muted">
-            {t('deployments.summary', {
-              count: changes.entries.length,
-              authors: changes.authors,
-            })}
-          </p>
+          <div className="panel-head">
+            <p className="muted">
+              {t('deployments.summary', {
+                count: changes.entries.length,
+                authors: changes.authors,
+              })}
+            </p>
+            <CopyButton text={changes.markdown} />
+          </div>
           <CommitList entries={changes.entries} />
         </>
       )}

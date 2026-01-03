@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DashboardService } from '../dashboard/dashboard.service';
 import { DoraService } from '../dora/dora.service';
 import { SyncService } from '../ingest/sync.service';
+import { ChangelogsService } from '../changelogs/changelogs.service';
 import { toPage, type PageWindow } from '../common/pagination';
 
 interface HistoryQuery {
@@ -41,6 +42,7 @@ export class CollectorService {
     private readonly dashboard: DashboardService,
     private readonly dora: DoraService,
     private readonly sync: SyncService,
+    private readonly changelogs: ChangelogsService,
   ) {}
 
   /** What a collection wrote, for the caller that has nowhere to put the rest. */
@@ -88,6 +90,21 @@ export class CollectorService {
       this.logger.warn(`Snapshot DORA échoué pour ${sourceId} : ${asMessage(e)}`);
       warnings.push({ code: 'errors.collect.dora', params: { error: asMessage(e) } });
     });
+
+    // Last, and best-effort like the rest — but the only step here whose work
+    // cannot be made up later: a deployment nobody filed before its environment
+    // was torn down is a changelog no future run can produce.
+    const archive = await this.changelogs.archive(sourceId).catch((e) => {
+      this.logger.warn(`Archivage des changelogs échoué pour ${sourceId} : ${asMessage(e)}`);
+      warnings.push({ code: 'errors.collect.changelogs', params: { error: asMessage(e) } });
+      return null;
+    });
+    if (archive && archive.failed > 0) {
+      warnings.push({
+        code: 'errors.collect.changelogsPartial',
+        params: { count: String(archive.failed) },
+      });
+    }
 
     return { snapshots: created.map(toPublic), warnings };
   }

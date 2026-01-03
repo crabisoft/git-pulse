@@ -8,6 +8,7 @@ import { SourcesModule } from '../sources/sources.module';
 import { IngestModule } from '../ingest/ingest.module';
 import { DashboardModule } from '../dashboard/dashboard.module';
 import { DoraModule } from '../dora/dora.module';
+import { ChangelogsModule } from '../changelogs/changelogs.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { DoraModule } from '../dora/dora.module';
     IngestModule,
     DashboardModule,
     DoraModule,
+    ChangelogsModule,
   ],
   controllers: [CollectionController],
   providers: [CollectorService, CollectionProcessor, CollectionScheduler],

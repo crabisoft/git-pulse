@@ -16,6 +16,7 @@ import { ReleaseNotesModule } from './release-notes/release-notes.module';
 import { LlmModule } from './llm/llm.module';
 import { DoraModule } from './dora/dora.module';
 import { DeploymentsModule } from './deployments/deployments.module';
+import { ChangelogsModule } from './changelogs/changelogs.module';
 import { CollectionModule } from './collection/collection.module';
 import { ApiQuotaModule } from './api-quota/api-quota.module';
 import { JobsModule } from './jobs/jobs.module';
@@ -41,6 +42,7 @@ import { JobsModule } from './jobs/jobs.module';
     ReleaseNotesModule,
     DoraModule,
     DeploymentsModule,
+    ChangelogsModule,
     CollectionModule,
     ApiQuotaModule,
     JobsModule,

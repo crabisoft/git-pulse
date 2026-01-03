@@ -1,9 +1,10 @@
-import { useState, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import type { TFunction } from 'i18next';
 import { useTranslation } from 'react-i18next';
 import type { DoraPeriod } from '@repo/shared';
 import { windowLabel, windowOptions } from './doraWindow';
 import { Modal } from './Modal';
+import { MultiSelect } from './MultiSelect';
 
 /**
  * The filter controls shared by every page that reports over a period and a set
@@ -259,6 +260,52 @@ export function DimensionFilter({
           {t('dora.dimension.clear')}
         </button>
       )}
+    </div>
+  );
+}
+
+/**
+ * A multiple choice over a closed vocabulary. The same control the repo filter
+ * uses, because environments and statuses ask the user exactly the same thing —
+ * and an empty selection means "every one", which is also what the API reads
+ * from an omitted parameter.
+ */
+export function ChoiceFilter({
+  label,
+  anyLabel,
+  options,
+  value,
+  onChange,
+  disabled,
+  translateOption,
+}: {
+  label: string;
+  anyLabel: string;
+  options: readonly string[];
+  value: readonly string[];
+  onChange: (next: string[]) => void;
+  disabled?: boolean;
+  translateOption?: (option: string) => string;
+}) {
+  const items = useMemo(
+    () =>
+      options.map((option) => ({
+        value: option,
+        label: translateOption ? translateOption(option) : option,
+      })),
+    [options, translateOption],
+  );
+
+  return (
+    <div className="repo-filter">
+      <span className="repo-filter-label">{label}</span>
+      <MultiSelect
+        options={items}
+        selected={new Set(value)}
+        onChange={(next) => onChange([...next].sort())}
+        emptyLabel={anyLabel}
+        disabled={disabled}
+      />
     </div>
   );
 }

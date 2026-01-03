@@ -404,6 +404,123 @@ export interface DeploymentChanges {
   entries: ReleaseNoteEntry[];
   /** Distinct authors — a cheap sense of how wide the change is. */
   authors: number;
+  /** The same entries rendered, through the configured generator. */
+  markdown: string;
+  /**
+   * When this was written to the archive, or null when it was just computed.
+   *
+   * Not decoration: an archived answer is the one that was true at the time,
+   * and it is the only one still available once the branch is deleted or the
+   * deployment aged out of the provider's API. A reader comparing two of these
+   * has to know which is a recollection and which is a reading.
+   */
+  archivedAt: string | null;
+}
+
+// ─── Deployment changelogs ───────────────────────────────────────────
+
+/**
+ * What a deployment was, as it was written down at the time.
+ *
+ * Deployments are the most perishable thing this install reports on: the
+ * environment is torn down, its branch deleted, the record aged out of the API,
+ * and the comparison that produced these lines can never be made again. So the
+ * archive keeps the answer rather than the means of computing it — every field
+ * below stands on its own, including the links.
+ */
+export interface DeploymentChangelogSummary {
+  id: string;
+  /** The deployment's identity on the provider — what the archive is keyed on. */
+  deploymentId: string;
+  repo: string;
+  environment: string;
+  /** The deployed ref, and the ref it was compared against. */
+  ref: string;
+  baseRef: string | null;
+  base: DeploymentBase;
+  refUrl: string;
+  baseRefUrl: string | null;
+  /** The platform's page for the deployment, and the address it went to. */
+  deploymentUrl: string | null;
+  environmentUrl: string | null;
+  status: PipelineStatus;
+  /** Distinct authors over the range, and how many commits it held. */
+  authors: number;
+  commits: number;
+  /**
+   * Filed without contents, the platform having refused to resolve the refs by
+   * the time the archiver got there — a branch deleted on merge, a commit
+   * pruned. The record still says something true and unobtainable elsewhere:
+   * this went out, on this ref, at this time, and what it carried is no longer
+   * knowable by anyone.
+   */
+  unreadable: boolean;
+  generator: ReleaseNotesGenerator;
+  deployedAt: string;
+  archivedAt: string;
+}
+
+/**
+ * The same record with what it says, rather than what it is about.
+ *
+ * Split from the summary because the history page lists hundreds of these and
+ * reads one: carrying every commit message of every release to draw a table of
+ * dates would be most of the payload, and none of what the table shows.
+ */
+export interface DeploymentChangelog extends DeploymentChangelogSummary {
+  entries: ReleaseNoteEntry[];
+  markdown: string;
+}
+
+/** What narrows the archive. Every field is optional; all of them narrow. */
+export interface ChangelogFilters {
+  repos?: string[];
+  environments?: string[];
+  /** Matched against the commit summaries and the deployed ref. */
+  search?: string;
+}
+
+/**
+ * The archive endpoint payload.
+ *
+ * The vocabularies come from the archive itself rather than from the
+ * deployments listing: a repo that stopped deploying six months ago is exactly
+ * what somebody reading this page is looking for, and the listing no longer
+ * knows it existed.
+ */
+export interface ChangelogReport {
+  changelogs: Page<DeploymentChangelogSummary>;
+  repos: string[];
+  environments: string[];
+  /** When the archiver last wrote for this source, null before its first run. */
+  lastArchivedAt: string | null;
+}
+
+/** What one archiving run did, as the collection job reports it. */
+export interface ChangelogArchiveOutcome {
+  /** Deployments the run wrote a changelog for. */
+  archived: number;
+  /** Already filed, so nothing was spent on them. */
+  known: number;
+  /**
+   * Left for the next run — the per-run cap, or a rate-limit budget down to its
+   * reserve. Nothing is lost by it: the deployments stay in the store, and the
+   * next cycle picks them up where this one stopped.
+   */
+  deferred: number;
+  /**
+   * Deployments the platform would not resolve the refs of, filed as having no
+   * readable contents. Not retried: a compare that answers 404 does not answer
+   * otherwise later, and one retried every cycle would hold the batch against
+   * the deployments that can still be read.
+   */
+  unreadable: number;
+  /**
+   * Deployments that failed for any other reason — a network blip, a 5xx. Left
+   * unfiled and retried on the next run, and lost for good once they fall out
+   * of the store, which is what makes them worth reporting rather than logging.
+   */
+  failed: number;
 }
 
 /** A merged PR/MR with the timestamps needed to derive lead time. */

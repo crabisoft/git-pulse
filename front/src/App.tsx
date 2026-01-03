@@ -20,6 +20,7 @@ import { DoraPage } from './pages/DoraPage';
 import { ReleaseNotesPage } from './pages/ReleaseNotesPage';
 import { DeploymentsPage } from './pages/DeploymentsPage';
 import { DeploymentChangesPage } from './pages/DeploymentChangesPage';
+import { ChangelogsPage } from './pages/ChangelogsPage';
 import { LoginPage } from './pages/LoginPage';
 import { AccountPage } from './pages/AccountPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
@@ -58,6 +59,7 @@ const SOURCE_ROUTES = [
   '/dora/:slug',
   '/deployments/:slug/changes',
   '/deployments/:slug',
+  '/changelogs/:slug',
   '/release-notes/:slug',
 ];
 
@@ -190,6 +192,12 @@ function AppShell() {
             {t('nav.deployments')}
           </Link>
           <Link
+            className={module === 'changelogs' ? 'tab active' : 'tab'}
+            to={withSource('/changelogs')}
+          >
+            {t('nav.changelogs')}
+          </Link>
+          <Link
             className={module === 'release-notes' ? 'tab active' : 'tab'}
             to={withSource('/release-notes')}
           >
@@ -316,6 +324,22 @@ function AppShell() {
                     slug={source.slug}
                   />
                 )}
+              </SourcePage>
+            }
+          />
+
+          {/* Its own section rather than a tab of the deployments page: what it
+              lists outlives the window that page reports over, and most of it
+              describes environments that no longer exist. */}
+          <Route
+            path="/changelogs"
+            element={<FirstSource base="/changelogs" sources={sources} loaded={loaded} />}
+          />
+          <Route
+            path="/changelogs/:slug"
+            element={
+              <SourcePage sources={sources} loaded={loaded} base="/changelogs">
+                {(source) => <ChangelogsPage key={source.id} sourceId={source.id} />}
               </SourcePage>
             }
           />

@@ -39,6 +39,11 @@ export interface PruneOutcome {
  * Open pull requests are the exception, and deliberately: one opened two years
  * ago and never merged is not stale data, it is the very thing the stale-PR
  * tile exists to show.
+ *
+ * `DeploymentChangelog` is not swept here either, and for a stronger reason:
+ * every table below can be refetched from the provider if it were dropped, and
+ * that one cannot — it is what a deployment carried, written down because the
+ * environment it went to no longer exists to be asked.
  */
 @Injectable()
 export class RetentionService {
