@@ -216,10 +216,10 @@
     "help": "Help",
     "selectAll": "Select all",
     "clear": "Clear",
-    "selectedCount": "{{count}} of {{total}}",
-    "noMatch": "No match",
     "expandCommit": "Show the full commit message",
     "collapseCommit": "Hide the full commit message",
+    "selectedCount": "{{count}} of {{total}}",
+    "noMatch": "No match",
     "copy": "Copy",
     "copied": "Copied"
   },
@@ -257,6 +257,18 @@
     },
     "dora": {
       "invalidRange": "Invalid period: the start date ({{from}}) is after the end date ({{to}})."
+    },
+    "jobs": {
+      "unreachable": "Redis is not answering: {{error}}",
+      "unknownQueue": "Unknown queue: {{name}}",
+      "notFound": "This job is no longer held: {{id}}",
+      "notFailed": "This job is not failed any more (it is {{state}}) — somebody has already retried it."
+    },
+    "collect": {
+      "ingest": "Ingestion failed, the snapshot was taken off what was already stored: {{error}}",
+      "dora": "DORA snapshot failed: {{error}}",
+      "changelogs": "Deployment changelogs could not be archived: {{error}}",
+      "changelogsPartial": "{{count}} deployment(s) could not be archived — their contents will be lost once they age out of the store."
     },
     "ticketRule": {
       "notFound": "Ticket rule not found.",
@@ -300,20 +312,12 @@
       "invalidRef": "Not a usable ref: {{ref}}",
       "contentsLost": "What {{repo}} @ {{ref}} carried can no longer be established: the platform had already dropped its refs when it was archived ({{when}}). The deployment itself is kept in the history."
     },
-    "jobs": {
-      "unreachable": "Redis is not answering: {{error}}",
-      "unknownQueue": "Unknown queue: {{name}}",
-      "notFound": "This job is no longer held: {{id}}",
-      "notFailed": "This job is not failed any more (it is {{state}}) — somebody has already retried it."
-    },
-    "collect": {
-      "ingest": "Ingestion failed, the snapshot was taken off what was already stored: {{error}}",
-      "dora": "DORA snapshot failed: {{error}}",
-      "changelogs": "Deployment changelogs could not be archived: {{error}}",
-      "changelogsPartial": "{{count}} deployment(s) could not be archived — their contents will be lost once they age out of the store."
-    },
     "changelog": {
       "notFound": "No changelog was archived for deployment {{id}}."
+    },
+    "compare": {
+      "unresolvable": "The platform no longer resolves this comparison in {{repo}} ({{from}}…{{to}}): a deleted branch, a moved tag or a pruned commit. Nothing can read this history again — which is what the archived changelogs are kept for.",
+      "unknownRef": "The platform does not resolve {{ref}} in {{repo}} any more: a deleted branch, a moved tag or a pruned commit."
     }
   },
   "empty": {
@@ -490,6 +494,20 @@
       "baseUrlHint": "(self-hosted / Enterprise supported)",
       "org": "Organization",
       "group": "Group",
+      "repos": "Tracked repositories",
+      "reposHint": "only the ticked repositories are collected",
+      "reposOnCreate": "Every repository of the owner is tracked. The selection becomes editable once the source exists.",
+      "reposShow": "Show the selection",
+      "reposOwnerChanged": "Save the new owner first: the listing would still answer for the previous one.",
+      "reposLoading": "Reading…",
+      "reposAll": "Every repository is tracked.",
+      "reposAllBut": "Every repository but {{count}} is tracked.",
+      "reposCount": "{{count}} repository(ies) tracked.",
+      "reposNoneSelected": "No repository selected",
+      "reposSelectAll": "Track all",
+      "reposClear": "Track none",
+      "trackNewRepos": "Track new repositories",
+      "trackNewReposHint": "a repository created later on the platform is collected without coming back here",
       "auth": "Authentication",
       "authToken": "Shared token",
       "authApp": "GitHub App",
@@ -518,21 +536,12 @@
       "mode": "Data read from",
       "modeHint": "(decides whether the API quota follows the traffic or the collection)",
       "webhooks": "Accept events (webhooks)",
-      "webhooksHint": "speeds up freshness; the scheduled synchronisation stays the safety net",
-      "repos": "Tracked repositories",
-      "reposHint": "only the ticked repositories are collected",
-      "reposOnCreate": "Every repository of the owner is tracked. The selection becomes editable once the source exists.",
-      "reposShow": "Show the selection",
-      "reposOwnerChanged": "Save the new owner first: the listing would still answer for the previous one.",
-      "reposLoading": "Reading…",
-      "reposAll": "Every repository is tracked.",
-      "reposAllBut": "Every repository but {{count}} is tracked.",
-      "reposCount": "{{count}} repository(ies) tracked.",
-      "reposNoneSelected": "No repository selected",
-      "reposSelectAll": "Track all",
-      "reposClear": "Track none",
-      "trackNewRepos": "Track new repositories",
-      "trackNewReposHint": "a repository created later on the platform is collected without coming back here"
+      "webhooksHint": "speeds up freshness; the scheduled synchronisation stays the safety net"
+    },
+    "repoVisibility": {
+      "public": "public",
+      "private": "private",
+      "internal": "internal"
     },
     "budget": {
       "none": "No declared ceiling",
@@ -578,11 +587,6 @@
       "action": "Collect now",
       "running": "Collecting… a first run over a large scope takes minutes",
       "ok": "Collection done — {{count}} snapshots written."
-    },
-    "repoVisibility": {
-      "public": "public",
-      "private": "private",
-      "internal": "internal"
     }
   },
   "ticketRules": {
@@ -751,14 +755,14 @@
     "summary": "{{count}} commits · {{authors}} authors",
     "backToList": "Back to deployments",
     "openEnvironment": "Open the environment",
+    "openDeployment": "Open the deployment on the platform",
     "baseRef": "A tag, branch or commit…",
     "refTitle": "Compare against",
     "refPick": "Pick a ref",
     "refNone": "None picked",
     "refType": "Or type one",
     "refTypeHint": "a commit sha, or any ref the platform resolves",
-    "refApply": "Compare",
-    "openDeployment": "Open the deployment on the platform"
+    "refApply": "Compare"
   },
   "jobs": {
     "queues": "Queues",

@@ -30,6 +30,20 @@ import { refUrl, requestUrl, type RepoLocation } from '../sources/connectors/ref
 import { REWRITE_SYSTEM, buildRewritePrompt, readRewritten } from './rewrite';
 import type { RewriteReleaseNotesDto } from './dto/rewrite-release-notes.dto';
 
+/**
+ * A commit with the request it came in on — what an expansion rewrites.
+ *
+ * The two travel together because expanding replaces one commit with several,
+ * and each of those came in on the request its squash named: two positional
+ * arrays would have to be kept in step through an operation whose whole purpose
+ * is to change how many there are.
+ */
+interface Landed {
+  commit: Commit;
+  ref: PullRequestRef | null;
+  branch: string | null;
+}
+
 /** What to summarise: a repo, and the range within it. */
 export interface ReleaseNotesQuery {
   repo: string;
@@ -206,13 +220,19 @@ export class ReleaseNotesService {
     commits: Commit[],
   ): Promise<ReleaseNoteEntry[]> {
     const requests = await this.requestsOf(sourceId, connector, ctx, location, commits);
+    const landed = await this.expandSquashes(
+      connector,
+      ctx,
+      location,
+      commits.map((commit, i) => ({ commit, ...requests[i] })),
+    );
     const tickets = await this.ticketRules.extractMany(
       sourceId,
-      commits.map((c, i) => ({ branch: requests[i].branch ?? '', title: c.message })),
-      commits.map(() => ({ owner: ctx.scope.owner, repo: location.repo })),
+      landed.map(({ commit, branch }) => ({ branch: branch ?? '', title: commit.message })),
+      landed.map(() => ({ owner: ctx.scope.owner, repo: location.repo })),
     );
 
-    return commits.map((commit, i) => {
+    return landed.map(({ commit, ref }, i) => {
       const parsed = parseConventionalCommit(commit.message);
       return {
         summary: parsed?.summary ?? firstLine(commit.message),
@@ -225,9 +245,70 @@ export class ReleaseNotesService {
         author: commit.author,
         url: commit.url,
         tickets: tickets[i],
-        pullRequest: requests[i].ref,
+        pullRequest: ref,
       };
     });
+  }
+
+  /**
+   * Replaces each squashed commit with the commits it was made of.
+   *
+   * Squashing is what makes a range under-report: it collapses a branch into a
+   * single commit, so the work that went into it is nowhere in the history the
+   * range walks. It survives only on the request, which both platforms keep
+   * answering for long after the branch is deleted.
+   *
+   * A merge commit is deliberately left alone: the commits it brought in *are*
+   * in the range, being reachable from the head that was compared, so fetching
+   * them would pay a call for what is already in hand — and then have to
+   * recognise them as duplicates.
+   *
+   * What counts as a squash is a one-parent commit **whose own message names a
+   * request**, which is the shape the platform writes. Deliberately not "any
+   * commit we found a request for": the association answers for every commit of
+   * every request, so that reading would expand the whole range, spend a call
+   * per request and arrive back where it started.
+   */
+  private async expandSquashes(
+    connector: SourceConnector,
+    ctx: ConnectorContext,
+    location: RepoLocation,
+    landed: Landed[],
+  ): Promise<Landed[]> {
+    const squashed = landed.filter(
+      ({ commit }) =>
+        commit.parents === 1 && readMergeCommit(commit.message, location.kind).number !== null,
+    );
+    if (squashed.length === 0) return landed;
+
+    const numbers = [...new Set(squashed.map(({ ref }) => ref?.number).filter(isNumber))];
+    const byRequest = await connector.pullRequestCommits(ctx, location.repo, numbers);
+    if (byRequest.size === 0) return landed;
+
+    const squashes = new Set(squashed.map(({ commit }) => commit.sha));
+    const seen = new Set(landed.map(({ commit }) => commit.sha));
+    const out: Landed[] = [];
+    for (const entry of landed) {
+      const children = squashes.has(entry.commit.sha)
+        ? byRequest.get(entry.ref?.number ?? -1)
+        : undefined;
+      // Only what the range does not already hold: a commit listed twice would
+      // be counted twice, by the summary as much as by a reader.
+      const fresh = children?.filter(({ sha }) => !seen.has(sha)) ?? [];
+      if (fresh.length === 0) {
+        // Nothing came back, or nothing new did — which includes a request the
+        // reserve made us give up on. The commit stands as it was written.
+        out.push(entry);
+        continue;
+      }
+      for (const commit of fresh) {
+        seen.add(commit.sha);
+        // The children inherit the request their squash named: they came in on
+        // it, and resolving it again per commit would be a call each.
+        out.push({ commit, ref: entry.ref, branch: entry.branch });
+      }
+    }
+    return out;
   }
 
   /**
@@ -353,3 +434,7 @@ function bullet(entry: ReleaseNoteEntry): string {
   return `- ${scope}${entry.summary} — ${refs}`;
 }
 
+/** Narrows away the requests a commit never named. */
+function isNumber(value: number | undefined): value is number {
+  return value !== undefined;
+}

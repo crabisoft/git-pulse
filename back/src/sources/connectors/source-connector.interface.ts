@@ -131,6 +131,25 @@ export interface SourceConnector {
     repo: string,
     shas: string[],
   ): Promise<Map<string, CommitPullRequest>>;
+
+  /**
+   * The commits each request was made of, by request number.
+   *
+   * What a squashed history has instead of the commits themselves: squashing
+   * replaces a branch with a single commit, so the work that went into it is
+   * nowhere in the range a release note walks — it survives only on the request,
+   * which both platforms keep answering for long after the branch is deleted.
+   *
+   * One call per request, so the same rule as the association above: callers
+   * hand it only the requests worth expanding, and it stops as soon as
+   * `allowsOptionalCalls` says the budget is spent. A request it gives up on is
+   * simply absent from the map, and the caller keeps the commit it had.
+   */
+  pullRequestCommits(
+    ctx: ConnectorContext,
+    repo: string,
+    numbers: number[],
+  ): Promise<Map<number, Commit[]>>;
 }
 
 /** A request as an association answers it: what to link, and what to extract from. */

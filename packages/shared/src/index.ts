@@ -571,6 +571,18 @@ export interface Commit {
   author: string;
   authoredAt: string;
   url: string;
+  /**
+   * How many parents it has — one for an ordinary commit, two or more for a
+   * merge.
+   *
+   * Carried because it is what tells a merge from a squash, and the two want
+   * opposite treatment: a merge's branch commits are already in the range,
+   * being reachable from the head it was compared to, while a squash's are
+   * nowhere in it and have to be fetched from the request. Guessing from the
+   * message instead would read `fix: thing (#42)` as a squash and a fork's
+   * `Merge branch 'main'` as a request.
+   */
+  parents: number;
 }
 
 /**

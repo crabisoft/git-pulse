@@ -216,10 +216,10 @@
     "help": "Aide",
     "selectAll": "Tout sélectionner",
     "clear": "Effacer",
-    "selectedCount": "{{count}} sur {{total}}",
-    "noMatch": "Aucun résultat",
     "expandCommit": "Afficher le message complet du commit",
     "collapseCommit": "Masquer le message complet du commit",
+    "selectedCount": "{{count}} sur {{total}}",
+    "noMatch": "Aucun résultat",
     "copy": "Copier",
     "copied": "Copié"
   },
@@ -257,6 +257,18 @@
     },
     "dora": {
       "invalidRange": "Période invalide : la date de début ({{from}}) est postérieure à la date de fin ({{to}})."
+    },
+    "jobs": {
+      "unreachable": "Redis ne répond pas : {{error}}",
+      "unknownQueue": "File inconnue : {{name}}",
+      "notFound": "Cette tâche n'est plus conservée : {{id}}",
+      "notFailed": "Cette tâche n'est plus en échec (elle est {{state}}) — quelqu'un l'a déjà relancée."
+    },
+    "collect": {
+      "ingest": "Ingestion échouée, le relevé a été pris sur ce qui était déjà stocké : {{error}}",
+      "dora": "Relevé DORA échoué : {{error}}",
+      "changelogs": "Archivage des changelogs de déploiement échoué : {{error}}",
+      "changelogsPartial": "{{count}} déploiement(s) n'ont pas pu être archivés — leur contenu sera perdu dès qu'ils sortiront du magasin."
     },
     "ticketRule": {
       "notFound": "Règle de ticket introuvable.",
@@ -300,20 +312,12 @@
       "invalidRef": "Ref inutilisable : {{ref}}",
       "contentsLost": "Ce que {{repo}} @ {{ref}} a emporté ne peut plus être établi : la plateforme avait déjà lâché ses refs au moment de l'archivage ({{when}}). Le déploiement lui-même reste dans l'historique."
     },
-    "jobs": {
-      "unreachable": "Redis ne répond pas : {{error}}",
-      "unknownQueue": "File inconnue : {{name}}",
-      "notFound": "Cette tâche n'est plus conservée : {{id}}",
-      "notFailed": "Cette tâche n'est plus en échec (elle est {{state}}) — quelqu'un l'a déjà relancée."
-    },
-    "collect": {
-      "ingest": "Ingestion échouée, le relevé a été pris sur ce qui était déjà stocké : {{error}}",
-      "dora": "Relevé DORA échoué : {{error}}",
-      "changelogs": "Archivage des changelogs de déploiement échoué : {{error}}",
-      "changelogsPartial": "{{count}} déploiement(s) n'ont pas pu être archivés — leur contenu sera perdu dès qu'ils sortiront du magasin."
-    },
     "changelog": {
       "notFound": "Aucun changelog n'a été archivé pour le déploiement {{id}}."
+    },
+    "compare": {
+      "unresolvable": "La plateforme ne résout plus cette comparaison dans {{repo}} ({{from}}…{{to}}) : branche supprimée, tag déplacé ou commit purgé. Plus rien ne peut relire cet historique — c'est précisément ce que conservent les changelogs archivés.",
+      "unknownRef": "La plateforme ne résout plus {{ref}} dans {{repo}} : branche supprimée, tag déplacé ou commit purgé."
     }
   },
   "empty": {
@@ -490,6 +494,20 @@
       "baseUrlHint": "(self-hosted / Enterprise supporté)",
       "org": "Organisation",
       "group": "Groupe",
+      "repos": "Dépôts suivis",
+      "reposHint": "seuls les dépôts cochés sont collectés",
+      "reposOnCreate": "Tous les dépôts de l'organisation sont suivis. La sélection sera modifiable après création.",
+      "reposShow": "Afficher la sélection",
+      "reposOwnerChanged": "Enregistrez d'abord la nouvelle organisation : la liste répondrait encore pour l'ancienne.",
+      "reposLoading": "Lecture…",
+      "reposAll": "Tous les dépôts sont suivis.",
+      "reposAllBut": "Tous les dépôts sauf {{count}} sont suivis.",
+      "reposCount": "{{count}} dépôt(s) suivi(s).",
+      "reposNoneSelected": "Aucun dépôt sélectionné",
+      "reposSelectAll": "Tout suivre",
+      "reposClear": "Tout retirer",
+      "trackNewRepos": "Suivre les nouveaux dépôts",
+      "trackNewReposHint": "un dépôt créé plus tard sur la plateforme est collecté sans avoir à revenir ici",
       "auth": "Authentification",
       "authToken": "Token partagé",
       "authApp": "GitHub App",
@@ -518,21 +536,12 @@
       "mode": "Lecture des données",
       "modeHint": "(décide si le quota d'API suit le trafic ou la collecte)",
       "webhooks": "Accepter les événements (webhooks)",
-      "webhooksHint": "accélère la fraîcheur ; la synchronisation planifiée reste le filet de sécurité",
-      "repos": "Dépôts suivis",
-      "reposHint": "seuls les dépôts cochés sont collectés",
-      "reposOnCreate": "Tous les dépôts de l'organisation sont suivis. La sélection sera modifiable après création.",
-      "reposShow": "Afficher la sélection",
-      "reposOwnerChanged": "Enregistrez d'abord la nouvelle organisation : la liste répondrait encore pour l'ancienne.",
-      "reposLoading": "Lecture…",
-      "reposAll": "Tous les dépôts sont suivis.",
-      "reposAllBut": "Tous les dépôts sauf {{count}} sont suivis.",
-      "reposCount": "{{count}} dépôt(s) suivi(s).",
-      "reposNoneSelected": "Aucun dépôt sélectionné",
-      "reposSelectAll": "Tout suivre",
-      "reposClear": "Tout retirer",
-      "trackNewRepos": "Suivre les nouveaux dépôts",
-      "trackNewReposHint": "un dépôt créé plus tard sur la plateforme est collecté sans avoir à revenir ici"
+      "webhooksHint": "accélère la fraîcheur ; la synchronisation planifiée reste le filet de sécurité"
+    },
+    "repoVisibility": {
+      "public": "public",
+      "private": "privé",
+      "internal": "interne"
     },
     "budget": {
       "none": "Aucun plafond déclaré",
@@ -578,11 +587,6 @@
       "action": "Collecter maintenant",
       "running": "Collecte en cours… un premier passage sur un large périmètre prend plusieurs minutes",
       "ok": "Collecte terminée — {{count}} snapshots écrits."
-    },
-    "repoVisibility": {
-      "public": "public",
-      "private": "privé",
-      "internal": "interne"
     }
   },
   "ticketRules": {
@@ -751,14 +755,14 @@
     "summary": "{{count}} commits · {{authors}} auteurs",
     "backToList": "Retour aux déploiements",
     "openEnvironment": "Ouvrir l’environnement",
+    "openDeployment": "Ouvrir le déploiement sur la plateforme",
     "baseRef": "Un tag, une branche ou un commit…",
     "refTitle": "Comparer à",
     "refPick": "Choisir une ref",
     "refNone": "Aucune choisie",
     "refType": "Ou saisir",
     "refTypeHint": "un sha de commit, ou toute ref que la plateforme résout",
-    "refApply": "Comparer",
-    "openDeployment": "Ouvrir le déploiement sur la plateforme"
+    "refApply": "Comparer"
   },
   "jobs": {
     "queues": "Files",

@@ -21,6 +21,7 @@ import type {
 import { gitlabQuota, type HeaderBag, type QuotaSink } from '../../api-quota/rate-limit-headers';
 import { applyScope, ageHours } from './scope.util';
 import { repoUrl } from './ref-url';
+import { isNotFound, unresolvableRange } from './compare';
 
 export type GitlabClient = InstanceType<typeof Gitlab>;
 
@@ -265,13 +266,19 @@ export class GitLabConnector implements SourceConnector {
 
     // Same split as the other connector: a compare when both bounds exist,
     // otherwise the log, since there is nothing to compare a first release to.
-    if (from) {
-      const diff = await gl.Repositories.compare(repo, from, to);
-      const commits = (diff.commits ?? []) as Array<Record<string, unknown>>;
-      return commits.map((c) => toCommit(c, baseUrl, repo));
+    // And the same 404 on a ref the instance no longer resolves.
+    try {
+      if (from) {
+        const diff = await gl.Repositories.compare(repo, from, to);
+        const commits = (diff.commits ?? []) as Array<Record<string, unknown>>;
+        return commits.map((c) => toCommit(c, baseUrl, repo));
+      }
+      const log = await gl.Commits.all(repo, { refName: to, perPage: 100 });
+      return (log as Array<Record<string, unknown>>).map((c) => toCommit(c, baseUrl, repo));
+    } catch (e) {
+      if (isNotFound(e)) throw unresolvableRange(repo, from, to);
+      throw e;
     }
-    const log = await gl.Commits.all(repo, { refName: to, perPage: 100 });
-    return (log as Array<Record<string, unknown>>).map((c) => toCommit(c, baseUrl, repo));
   }
 
   async defaultBranch(ctx: ConnectorContext, repo: string): Promise<string> {
@@ -324,6 +331,44 @@ export class GitLabConnector implements SourceConnector {
       );
     }
     return requests;
+  }
+
+  async pullRequestCommits(
+    ctx: ConnectorContext,
+    repo: string,
+    numbers: number[],
+  ): Promise<Map<number, Commit[]>> {
+    const gl = this.client(ctx);
+    const baseUrl = ctx.baseUrl.replace(/\/$/, '');
+    const commits = new Map<number, Commit[]>();
+    let skipped = 0;
+
+    for (const number of numbers) {
+      ctx.signal?.throwIfAborted();
+      if (ctx.allowsOptionalCalls?.() === false) {
+        skipped++;
+        continue;
+      }
+      try {
+        const listed = (await gl.MergeRequests.allCommits(repo, number, {
+          perPage: 100,
+        })) as unknown as Array<Record<string, unknown>>;
+        commits.set(
+          number,
+          listed.map((c) => toCommit(c, baseUrl, repo)),
+        );
+      } catch {
+        // Same as elsewhere: a request the instance will not detail leaves the
+        // commit that named it exactly as it was.
+      }
+    }
+
+    if (skipped > 0) {
+      this.logger.warn(
+        `Réserve d'API atteinte : commits non lus pour ${skipped} merge request(s) de ${repo}`,
+      );
+    }
+    return commits;
   }
 
   /**
@@ -453,6 +498,9 @@ function toCommit(c: Record<string, unknown>, baseUrl: string, repo: string): Co
     author: (c.author_name as string) ?? 'unknown',
     authoredAt: (c.authored_date as string) ?? (c.created_at as string) ?? new Date(0).toISOString(),
     url: (c.web_url as string) ?? `${baseUrl}/${repo}/-/commit/${sha}`,
+    // One when the listing omits them — see the GitHub mapper for why that way
+    // round.
+    parents: (c.parent_ids as string[] | undefined)?.length ?? 1,
   };
 }
 

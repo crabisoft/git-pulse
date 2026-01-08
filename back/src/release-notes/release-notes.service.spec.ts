@@ -17,13 +17,14 @@ const GITHUB: RepoLocation = {
   repo: 'widget',
 };
 
-function commit(sha: string, message: string): Commit {
+function commit(sha: string, message: string, parents = 1): Commit {
   return {
     sha,
     message,
     author: 'Ada',
     authoredAt: '2026-07-01T10:00:00Z',
     url: `https://github.com/acme/widget/commit/${sha}`,
+    parents,
   };
 }
 
@@ -35,14 +36,19 @@ function request(number: number, headRef: string): CommitPullRequest {
  * The service with only what `describeCommits` reaches: the rules, and the
  * connector it is handed. Everything else belongs to `generate`.
  */
-function service(hasRules = true, resolved = new Map<string, CommitPullRequest>()) {
+function service(
+  hasRules = true,
+  resolved = new Map<string, CommitPullRequest>(),
+  requestCommits = new Map<number, Commit[]>(),
+) {
   const extractMany = vi.fn().mockImplementation((_id, texts: unknown[]) => texts.map(() => []));
   const commitPullRequests = vi.fn().mockResolvedValue(resolved);
+  const pullRequestCommits = vi.fn().mockResolvedValue(requestCommits);
   const rules = {
     extractMany,
     anyFor: vi.fn().mockResolvedValue(hasRules),
   } as unknown as TicketRulesService;
-  const connector = { commitPullRequests } as unknown as SourceConnector;
+  const connector = { commitPullRequests, pullRequestCommits } as unknown as SourceConnector;
   const notes = new ReleaseNotesService(
     null as never,
     null as never,
@@ -51,7 +57,7 @@ function service(hasRules = true, resolved = new Map<string, CommitPullRequest>(
     null as never,
     null as never,
   );
-  return { notes, connector, extractMany, commitPullRequests };
+  return { notes, connector, extractMany, commitPullRequests, pullRequestCommits };
 }
 
 /** The (branch, title) pairs the extraction was actually run over. */
@@ -64,7 +70,7 @@ describe('describeCommits', () => {
     const { notes, connector, extractMany, commitPullRequests } = service();
 
     const [entry] = await notes.describeCommits('src-1', connector, CTX, GITHUB, [
-      commit('aaa', 'Merge pull request #42 from acme/ABC-1-login'),
+      commit('aaa', 'Merge pull request #42 from acme/ABC-1-login', 2),
     ]);
 
     expect(entry.pullRequest).toEqual({
@@ -90,7 +96,7 @@ describe('describeCommits', () => {
     );
 
     const [entry] = await notes.describeCommits('src-1', connector, CTX, gitlab, [
-      commit('aaa', message),
+      commit('aaa', message, 2),
     ]);
 
     expect(entry.pullRequest?.url).toBe('https://gitlab.acme.io/group/widget/-/merge_requests/42');
@@ -104,7 +110,7 @@ describe('describeCommits', () => {
     );
 
     const entries = await notes.describeCommits('src-1', connector, CTX, GITHUB, [
-      commit('aaa', 'Merge pull request #42 from acme/ABC-1-login'),
+      commit('aaa', 'Merge pull request #42 from acme/ABC-1-login', 2),
       commit('bbb', 'fix: stop dropping the cursor'),
     ]);
 
@@ -130,6 +136,65 @@ describe('describeCommits', () => {
     expect(texts(extractMany)).toEqual([
       { branch: 'ABC-1-login', title: 'feat(sources): collect on demand (#42)' },
     ]);
+  });
+
+  it('expands a squash into the commits it was made of', async () => {
+    // Squashing collapses a branch into one commit, so its work is nowhere in
+    // the range: the request is the only place it survives.
+    const { notes, connector, pullRequestCommits } = service(
+      true,
+      new Map([['ccc', request(42, 'ABC-1-login')]]),
+      new Map([[42, [commit('d1', 'feat: the form'), commit('d2', 'test: the form')]]]),
+    );
+
+    const entries = await notes.describeCommits('src-1', connector, CTX, GITHUB, [
+      commit('ccc', 'feat(sources): collect on demand (#42)'),
+    ]);
+
+    expect(pullRequestCommits).toHaveBeenCalledWith(CTX, 'widget', [42]);
+    expect(entries.map((e) => e.sha)).toEqual(['d1', 'd2']);
+    // The children came in on the request their squash named, so they carry it
+    // without a lookup of their own.
+    expect(entries.every((e) => e.pullRequest?.number === 42)).toBe(true);
+  });
+
+  it('leaves a merge commit alone — what it brought in is already in the range', async () => {
+    const { notes, connector, pullRequestCommits } = service(
+      true,
+      new Map([['bbb', request(42, 'ABC-1-login')]]),
+    );
+
+    const entries = await notes.describeCommits('src-1', connector, CTX, GITHUB, [
+      commit('aaa', 'Merge pull request #42 from acme/ABC-1-login', 2),
+      commit('bbb', 'feat: the form'),
+    ]);
+
+    expect(pullRequestCommits).not.toHaveBeenCalled();
+    expect(entries.map((e) => e.sha)).toEqual(['aaa', 'bbb']);
+  });
+
+  it('keeps the squash when the request answers nothing — the reserve, or a deleted repo', async () => {
+    const { notes, connector } = service(true, new Map([['ccc', request(42, 'ABC-1-login')]]));
+
+    const entries = await notes.describeCommits('src-1', connector, CTX, GITHUB, [
+      commit('ccc', 'feat(sources): collect on demand (#42)'),
+    ]);
+
+    expect(entries.map((e) => e.sha)).toEqual(['ccc']);
+  });
+
+  it('never lists a commit twice when a request answers with one the range holds', async () => {
+    const { notes, connector } = service(
+      true,
+      new Map([['ccc', request(42, 'ABC-1-login')]]),
+      new Map([[42, [commit('ccc', 'feat(sources): collect on demand (#42)')]]]),
+    );
+
+    const entries = await notes.describeCommits('src-1', connector, CTX, GITHUB, [
+      commit('ccc', 'feat(sources): collect on demand (#42)'),
+    ]);
+
+    expect(entries.map((e) => e.sha)).toEqual(['ccc']);
   });
 
   it('asks nothing of a squash when no rule reaches the source', async () => {

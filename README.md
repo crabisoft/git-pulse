@@ -1137,6 +1137,62 @@ Ticket references are read from commit messages by the **same rules** as branch
 names and PR titles, so a release note links its tickets without any further
 configuration.
 
+### Reading a whole range, squashes included
+
+Two things used to make a range under-report, both silently.
+
+**A comparison is paginated.** GitHub's compare endpoint returns its `commits`
+array a page at a time; read in one call, a range of a hundred commits came back
+as its first page and said nothing about the rest. It is now read to
+`total_commits`, which the same payload gives — and when the platform's own cap
+of 250 commits per comparison is hit, that is logged rather than passed off as a
+complete list.
+
+**A squash has no commits to read.** Squashing collapses a branch into a single
+commit, so the work that went into it is nowhere in the history the range walks:
+no amount of paging finds it. It survives only on the request, which both
+platforms keep answering for long after the branch is deleted — so a squash is
+**replaced by the commits it was made of** (`pullRequestCommits`).
+
+What counts as a squash is a **one-parent commit whose own message names a
+request**, which is the shape the platform writes. Two things it deliberately is
+not:
+
+- *A merge commit.* Two parents, and what it brought in is already in the range,
+  being reachable from the head that was compared. Expanding it would pay a call
+  for commits already in hand and then have to recognise them as duplicates.
+- *Any commit we happened to find a request for.* The association endpoint
+  answers for **every** commit of every request, so that reading would expand the
+  whole range, spend a call per request and arrive back where it started.
+
+That is why `Commit` carries `parents`: guessing from the message alone reads
+`fix: thing (#42)` as a squash and a developer's `Merge branch 'main'` as a
+request.
+
+| | Calls | Effect |
+|---|---|---|
+| Merge commit | none | Already whole |
+| Squash | one per request, paginated | The branch's commits, in place of the one that replaced them |
+| Everything else | none | Unchanged |
+
+The cost is one call per squashed request, which is the same fan-out shape the
+enrichment has — so it sits behind `allowsOptionalCalls` and stops at the
+reserve. A request given up on, or one the platform will not detail, leaves the
+squash exactly as it was written: the range is never made worse by the attempt.
+Children inherit the request their squash named rather than resolving one each,
+and a commit the range already holds is never added twice.
+
+> **GitLab squashes are not expanded.** The signal is the message, and GitLab's
+> squashed commit message is whatever the project configured — usually the MR
+> title, with nothing naming the request. Recognising them needs the association
+> plus the MR's `squash` flag; the connector method is implemented and waiting
+> for that day.
+
+A deployment's contents go through the same reading, so what a release note says
+and what the deployments page says about the same commits stay one answer.
+`authors` is therefore counted off the entries and not off the listed commits —
+after an expansion the two no longer describe the same set.
+
 ### Rewriting them with a model
 
 Generated notes read like a commit log, because that is what they are. **Settings

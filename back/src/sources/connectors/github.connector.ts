@@ -22,6 +22,17 @@ import type {
 import { githubQuota, type HeaderBag, type QuotaSink } from '../../api-quota/rate-limit-headers';
 import { applyScope, ageHours } from './scope.util';
 import { repoUrl } from './ref-url';
+import { isNotFound, unresolvableRange } from './compare';
+
+/**
+ * Most commits GitHub will report for one comparison, whatever is asked of it.
+ * Stated here because it is a documented ceiling of the endpoint, not a page
+ * size: past it, the range has to be read another way or not at all.
+ */
+const COMPARE_CAP = 250;
+
+/** A commit as the compare endpoint shapes it — what `toCommit` reads. */
+type CompareCommit = Parameters<typeof toCommit>[0];
 
 /** GitHub connector — github.com or GitHub Enterprise via baseUrl. */
 @Injectable()
@@ -288,21 +299,73 @@ export class GitHubConnector implements SourceConnector {
     // With both bounds the compare endpoint answers in one call and knows what
     // "reachable from one but not the other" means; without a lower bound there
     // is nothing to compare against, so the log is walked instead.
-    if (from) {
-      const diff = await gh.rest.repos.compareCommitsWithBasehead({
+    //
+    // Either call answers 404 for a ref the platform no longer resolves, which
+    // is the ordinary fate of a deployed branch — see `unresolvableRange`.
+    try {
+      if (from) {
+        return (await this.compare(gh, owner, repo, from, to)).map((c) => toCommit(c, repo));
+      }
+      const log = await gh.paginate(gh.rest.repos.listCommits, {
+        owner,
+        repo,
+        sha: to,
+        per_page: 100,
+      });
+      return log.map((c) => toCommit(c, repo));
+    } catch (e) {
+      if (isNotFound(e)) throw unresolvableRange(repo, from, to);
+      throw e;
+    }
+  }
+
+  /**
+   * Every commit of a comparison, and not just its first page.
+   *
+   * The `commits` array is paginated like any listing — a page of it is not the
+   * range, it is the oldest handful of the range. Read in one call, a release of
+   * a hundred commits came back as thirty, and the ones it dropped were dropped
+   * without a word: the payload says nothing about being a page.
+   *
+   * `total_commits` is what makes that visible, and it is also the ceiling this
+   * loop stops at. GitHub caps a comparison at 250 commits whatever is asked of
+   * it; past that the range genuinely cannot be read this way, and a warning
+   * beats a list that looks whole.
+   */
+  private async compare(
+    gh: Octokit,
+    owner: string,
+    repo: string,
+    from: string,
+    to: string,
+  ): Promise<CompareCommit[]> {
+    const read = (page: number) =>
+      gh.rest.repos.compareCommitsWithBasehead({
         owner,
         repo,
         basehead: `${from}...${to}`,
+        per_page: 100,
+        page,
       });
-      return diff.data.commits.map((c) => toCommit(c, repo));
+
+    const first = await read(1);
+    const total = first.data.total_commits;
+    const commits = [...first.data.commits];
+    for (let page = 2; commits.length < total; page++) {
+      const next = await read(page);
+      // A page the platform stops filling is the end of what it will give,
+      // whatever it said the total was — without this the loop would not end.
+      if (next.data.commits.length === 0) break;
+      commits.push(...next.data.commits);
     }
-    const log = await gh.paginate(gh.rest.repos.listCommits, {
-      owner,
-      repo,
-      sha: to,
-      per_page: 100,
-    });
-    return log.map((c) => toCommit(c, repo));
+
+    if (commits.length < total) {
+      this.logger.warn(
+        `Comparaison ${from}...${to} tronquée dans ${repo} : ${commits.length} commit(s) lus sur ${total} ` +
+          `(GitHub plafonne une comparaison à ${COMPARE_CAP}).`,
+      );
+    }
+    return commits;
   }
 
   async defaultBranch(ctx: ConnectorContext, repo: string): Promise<string> {
@@ -359,6 +422,48 @@ export class GitHubConnector implements SourceConnector {
       );
     }
     return requests;
+  }
+
+  async pullRequestCommits(
+    ctx: ConnectorContext,
+    repo: string,
+    numbers: number[],
+  ): Promise<Map<number, Commit[]>> {
+    const gh = this.client(ctx);
+    const commits = new Map<number, Commit[]>();
+    let skipped = 0;
+
+    for (const number of numbers) {
+      // One call per request, so both guards belong inside the loop — the same
+      // reasoning as the association above.
+      ctx.signal?.throwIfAborted();
+      if (ctx.allowsOptionalCalls?.() === false) {
+        skipped++;
+        continue;
+      }
+      try {
+        const listed = await gh.paginate(gh.rest.pulls.listCommits, {
+          owner: ctx.scope.owner,
+          repo,
+          pull_number: number,
+          per_page: 100,
+        });
+        commits.set(
+          number,
+          listed.map((c) => toCommit(c, repo)),
+        );
+      } catch {
+        // A request the platform will not detail leaves the commit that named
+        // it exactly as it was, which is a case the caller handles anyway.
+      }
+    }
+
+    if (skipped > 0) {
+      this.logger.warn(
+        `Réserve d'API atteinte : commits non lus pour ${skipped} pull request(s) de ${repo}`,
+      );
+    }
+    return commits;
   }
 
   private async deploymentStatus(
@@ -494,6 +599,7 @@ function toCommit(
     html_url: string;
     commit: { message: string; author?: { name?: string | null; date?: string | null } | null };
     author?: { login?: string } | null;
+    parents?: unknown[];
   },
   _repo: string,
 ): Commit {
@@ -503,6 +609,10 @@ function toCommit(
     author: c.author?.login ?? c.commit.author?.name ?? 'unknown',
     authoredAt: c.commit.author?.date ?? new Date(0).toISOString(),
     url: c.html_url,
+    // One when the payload says nothing: an endpoint that omits the parents is
+    // read as an ordinary commit, which costs a wasted lookup at worst — where
+    // reading it as a merge would silently drop a request's commits.
+    parents: c.parents?.length ?? 1,
   };
 }
 
