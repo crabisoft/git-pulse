@@ -12,7 +12,7 @@ import {
 } from 'recharts';
 import type { DoraMetric, DoraResult, MetricSeries } from '@repo/shared';
 import { api } from '../api';
-import { dimKey, formatDate, formatValue, humanizeDuration, SampleDetails, SampleStatus } from '../doraFormat';
+import { formatDate, formatValue, humanizeDuration, SampleDetails, SampleStatus } from '../doraFormat';
 import { fromSearchParams, toSearchParams } from '../doraQuery';
 import { FILTER_DEBOUNCE_MS, useCancellableLoad, useDebounced } from '../hooks';
 import { HelpTip } from '../HelpTip';
@@ -23,11 +23,15 @@ import type { PageQuery } from '../api';
 const PAGE_SIZE = 10;
 
 /**
- * One metric, one dimension combination: how it moved, then what it is made of.
+ * One metric under the filters the list was showing: how it moved, then what it
+ * is made of.
  *
- * The trend comes from the historised snapshots, the events from the report the
- * list was showing — two different reads, which is why the page fetches both
- * rather than being handed a row.
+ * The filters travel in the URL rather than being re-picked on arrival — a
+ * value computed over another period or another slice is a different number,
+ * and a detail that disagreed with the block it was opened from would be worse
+ * than no detail. The trend comes from the historised snapshots and the events
+ * from the report, which is why the page fetches both rather than being handed
+ * a row.
  */
 export function DoraMetricPage({ sourceId, slug }: { sourceId: string; slug: string }) {
   const { t } = useTranslation();
@@ -45,21 +49,18 @@ export function DoraMetricPage({ sourceId, slug }: { sourceId: string; slug: str
     async (signal: AbortSignal) => {
       if (!metric) return;
       const [live, series] = await Promise.all([
-        // The whole report, then the one row asked for: a value depends on the
-        // period and the repo scope, so it cannot be recomputed in isolation.
-        api.dora(sourceId, { ...settled, limit: 200, dimensions: {} }, signal),
+        // The same report the list was showing, filters included: a value
+        // depends on the period and the scope, so it cannot be recomputed in
+        // isolation — and the report already folds it over the filter.
+        api.dora(sourceId, settled, signal),
         api.metricSeries(
           sourceId,
           { metric, dimensions: settled.dimensions, from: settled.from, to: settled.to },
           signal,
         ),
       ]);
-      const wanted = dimKey(settled.dimensions ?? {});
       setReport({
-        result:
-          live.results.items.find(
-            (r) => r.metric === metric && dimKey(r.dimensions) === wanted,
-          ) ?? null,
+        result: live.results.find((r) => r.metric === metric) ?? null,
         series,
       });
     },

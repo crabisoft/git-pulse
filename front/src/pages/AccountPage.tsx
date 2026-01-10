@@ -1,8 +1,16 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { PASSWORD_MIN_LENGTH, type UserPublic } from '@repo/shared';
+import {
+  DISPLAY_MODES,
+  OVERVIEW_DIRECTIONS,
+  PASSWORD_MIN_LENGTH,
+  type DisplayMode,
+  type OverviewDirection,
+  type UserPublic,
+} from '@repo/shared';
 import { api, apiErrorInfo } from '../api';
 import { useAuth } from '../auth';
+import { isAvailable } from '../display';
 
 /**
  * What an account can do about itself without an admin. Deliberately thin: the
@@ -18,6 +26,30 @@ export function AccountPage({ user }: { user: UserPublic }) {
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  /** Only a failure is worth a line: a success repaints the application. */
+  const [displayMsg, setDisplayMsg] = useState<string | null>(null);
+
+  /**
+   * Saves one presentation choice. Null is a value here and not an omission:
+   * it hands the choice back to the installation default, which is the only
+   * way to stop overriding it once one has.
+   */
+  async function applyDisplay(input: {
+    displayDirection?: OverviewDirection | null;
+    displayMode?: DisplayMode | null;
+  }) {
+    setBusy(true);
+    setDisplayMsg(null);
+    try {
+      await api.updateMe(input);
+      await refresh();
+    } catch (err) {
+      const { code, params } = apiErrorInfo(err);
+      setDisplayMsg(t(code, params));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -111,6 +143,54 @@ export function AccountPage({ user }: { user: UserPublic }) {
               {busy ? t('common.saving') : t('common.save')}
             </button>
           </div>
+        </form>
+      </section>
+
+      <section className="panel">
+        <h3 className="form-section">{t('account.displayTitle')}</h3>
+        <p className="hint">{t('account.displayHint')}</p>
+        {/* Its own form, applied on the spot: unlike a name or a password,
+            what these change is visible the instant they are picked, so
+            holding them behind a Save button would only add a step. */}
+        <form className="form">
+          <label>
+            {t('account.displayDirection')}
+            <select
+              value={user.display.direction ?? ''}
+              disabled={busy}
+              onChange={(e) =>
+                void applyDisplay({
+                  displayDirection: (e.target.value || null) as OverviewDirection | null,
+                })
+              }
+            >
+              <option value="">{t('account.followInstall')}</option>
+              {OVERVIEW_DIRECTIONS.map((value) => (
+                <option key={value} value={value} disabled={!isAvailable(value)}>
+                  {t(`display.direction.${value}`)}
+                  {isAvailable(value) ? '' : ` — ${t('display.soon')}`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {t('account.displayMode')}
+            <select
+              value={user.display.mode ?? ''}
+              disabled={busy}
+              onChange={(e) =>
+                void applyDisplay({ displayMode: (e.target.value || null) as DisplayMode | null })
+              }
+            >
+              <option value="">{t('account.followInstall')}</option>
+              {DISPLAY_MODES.map((value) => (
+                <option key={value} value={value}>
+                  {t(`display.mode.${value}`)}
+                </option>
+              ))}
+            </select>
+          </label>
+          {displayMsg && <div className="banner error">{displayMsg}</div>}
         </form>
       </section>
     </div>

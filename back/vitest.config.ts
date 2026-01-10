@@ -7,5 +7,6 @@ export default defineConfig({
     // database, no Nest container to boot.
     environment: 'node',
     include: ['src/**/*.spec.ts'],
+    setupFiles: ['./test-setup.ts'],
   },
 });

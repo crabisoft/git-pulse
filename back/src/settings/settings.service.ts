@@ -6,9 +6,13 @@ import {
   PAGE_LIMIT_MAX,
   QUOTA_RESERVE_PCT_MAX,
   QUOTA_RESERVE_PCT_MIN,
+  DISPLAY_MODES,
+  OVERVIEW_DIRECTIONS,
   RELEASE_NOTES_GENERATORS,
   type AppSettings,
+  type DisplayMode,
   type FailureSource,
+  type OverviewDirection,
   type ReleaseNotesGenerator,
 } from '@repo/shared';
 import { PrismaService } from '../prisma/prisma.service';
@@ -35,6 +39,12 @@ const FALLBACKS: AppSettings = {
   // The renderer that lists every commit. The other one is better on a history
   // that holds the convention, and nothing here knows whether this one does.
   releaseNotesGenerator: 'builtin',
+  // The board: it is the one that reads from across a room, which is where an
+  // overview left open all day actually gets read.
+  overviewDirection: 'control',
+  // Nobody's eyes are guessed at. The operating system already knows whether
+  // this desk is a dark one.
+  displayMode: 'system',
 };
 
 const LIMITS = {
@@ -71,6 +81,12 @@ export class SettingsService {
       incidentLabels: readList(stored.get('incidentLabels')),
       quotaReservePct: readNumber(stored.get('quotaReservePct'), FALLBACKS.quotaReservePct),
       releaseNotesGenerator: readGenerator(stored.get('releaseNotesGenerator')),
+      overviewDirection: readOneOf(
+        stored.get('overviewDirection'),
+        OVERVIEW_DIRECTIONS,
+        FALLBACKS.overviewDirection,
+      ),
+      displayMode: readOneOf(stored.get('displayMode'), DISPLAY_MODES, FALLBACKS.displayMode),
     };
   }
 
@@ -149,6 +165,19 @@ function readFailureSource(raw: string | undefined): FailureSource {
 
 function readGenerator(raw: string | undefined): ReleaseNotesGenerator {
   return RELEASE_NOTES_GENERATORS.find((value) => value === raw) ?? FALLBACKS.releaseNotesGenerator;
+}
+
+/**
+ * A stored value that has to be one of a closed list. A row left behind by an
+ * older version reads as the fallback rather than reaching the front, where it
+ * would resolve to no stylesheet at all.
+ */
+function readOneOf<T extends string>(
+  raw: string | undefined,
+  allowed: readonly T[],
+  fallback: T,
+): T {
+  return allowed.find((value) => value === raw) ?? fallback;
 }
 
 /** `AppSetting.value` is a plain string column, so booleans travel as text. */

@@ -16,5 +16,8 @@ import { JobsController } from './jobs.controller';
   ],
   controllers: [JobsController],
   providers: [JobsService],
+  // Exported for the overview, which reports whether the collection is running
+  // at all — the one thing that makes every other figure on that page suspect.
+  exports: [JobsService],
 })
 export class JobsModule {}

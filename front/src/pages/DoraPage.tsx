@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import {
@@ -7,14 +7,15 @@ import {
   type DoraMetric,
   type MetricSnapshotPublic,
 } from '@repo/shared';
-import { api, type DoraQuery, type PageQuery } from '../api';
-import { dimKey, formatValue } from '../doraFormat';
+import { api, type DoraQuery } from '../api';
+import { formatValue } from '../doraFormat';
 import { toSearchParams } from '../doraQuery';
-import { FILTER_DEBOUNCE_MS, useCancellableLoad, useDebounced } from '../hooks';
+import { useCancellableLoad } from '../hooks';
+import { doraCodec, useUrlQuery } from '../urlQuery';
 import { HelpTip } from '../HelpTip';
-import { Pagination } from '../Pagination';
 import { RepoFilter } from '../RepoFilter';
 import { DimensionFilter, PeriodFilter } from '../Filters';
+import { Sparkline } from '../Sparkline';
 
 const METRIC_ORDER: DoraMetric[] = [
   'deployment_frequency',
@@ -26,12 +27,6 @@ const METRIC_ORDER: DoraMetric[] = [
   'review_time',
   'deploy_time',
 ];
-
-/**
- * Module constant so resetting on source change never re-triggers a fetch.
- * Empty everywhere means: rolling window from the settings, every repo, no slice.
- */
-const EMPTY_QUERY: DoraQuery = { repos: [], dimensions: {} };
 
 /**
  * Sparklines only need the tail of the series. Snapshots come back in ascending
@@ -51,16 +46,24 @@ async function loadRecentHistory(
   return tail.items;
 }
 
+/**
+ * One block per metric, over whatever the filters ask for.
+ *
+ * The blocks used to break down by dimension combination — a row for
+ * `{type: prod, client: acme}`, another for `{type: prod, client: globex}` —
+ * which turned the page into a cross product nobody read past the first screen
+ * of. The filter bar does that job now: narrow it and the blocks answer about
+ * the narrowed scope. Opening one carries the filters along, so the detail
+ * describes the same number the block did.
+ */
 export function DoraPage({ sourceId, slug }: { sourceId: string; slug: string }) {
   const { t } = useTranslation();
   const [report, setReport] = useState<DoraReport | null>(null);
-  const [query, setQuery] = useState<DoraQuery>(EMPTY_QUERY);
   const [history, setHistory] = useState<MetricSnapshotPublic[]>([]);
-
-
-  // Every filter goes through the debounce: a burst of clicks — repos ticked one
-  // at a time, pages stepped through — settles into a single request.
-  const settled = useDebounced(query, FILTER_DEBOUNCE_MS);
+  // The filters live in the address: they survive a back, and a link carries
+  // them to whoever it is sent to. Debounced on the way there, so a burst of
+  // clicks is one request and one history entry.
+  const { query, setQuery, settled } = useUrlQuery(doraCodec);
   const load = useCallback(
     async (signal: AbortSignal) => {
       const [live, hist] = await Promise.all([
@@ -74,26 +77,22 @@ export function DoraPage({ sourceId, slug }: { sourceId: string; slug: string })
   );
   const { reload, loading, error } = useCancellableLoad(load);
 
-  // Back to the defaults when switching source.
-  useEffect(() => {
-    setQuery(EMPTY_QUERY);
-  }, [sourceId]);
+  const filter = (partial: Partial<DoraQuery>) => setQuery((q) => ({ ...q, ...partial }));
 
-  /** Any new filter invalidates the offset, but keeps the chosen page size. */
-  const filter = (partial: Partial<DoraQuery>) =>
-    setQuery((q) => ({ ...q, ...partial, offset: 0 }));
-
-  const setPage = (page: PageQuery) => setQuery((q) => ({ ...q, ...page }));
-
-  const results = report?.results.items ?? null;
+  const results = report?.results ?? null;
   const selectedRepos = useMemo(() => new Set(query.repos), [query.repos]);
+  /** What every block opens: the filters in effect, unaltered. */
+  const search = toSearchParams(settled).toString();
 
-  const historyByKey = new Map<string, number[]>();
-  for (const s of history) {
-    const key = `${s.metric}|${dimKey(s.dimensions)}`;
-    const bucket = historyByKey.get(key);
-    if (bucket) bucket.push(s.value);
-    else historyByKey.set(key, [s.value]);
+  // The sparkline history is folded like the report is — every snapshot whose
+  // combination satisfies the filter feeds the metric's line, rather than only
+  // the one stored against that exact combination.
+  const historyByMetric = new Map<string, number[]>();
+  for (const snapshot of history) {
+    if (!matchesFilter(snapshot.dimensions, settled.dimensions ?? {})) continue;
+    const bucket = historyByMetric.get(snapshot.metric);
+    if (bucket) bucket.push(snapshot.value);
+    else historyByMetric.set(snapshot.metric, [snapshot.value]);
   }
 
   return (
@@ -138,86 +137,52 @@ export function DoraPage({ sourceId, slug }: { sourceId: string; slug: string })
       {results && results.length > 0 && (
         <div className="dora-grid">
           {METRIC_ORDER.map((metric) => {
-            const rows = results.filter((r) => r.metric === metric);
-            if (rows.length === 0) return null;
+            // A metric nothing was computed for has no block at all: the
+            // filters narrow what is visible as well as what each block says.
+            const result = results.find((r) => r.metric === metric);
+            if (!result) return null;
             return (
-              <section key={metric} className="panel">
+              // The card is not itself the anchor: the help button lives in
+              // it, and a button inside a link is both invalid and unclickable
+              // — every press would navigate instead of opening the tip. The
+              // link below covers the card from underneath instead.
+              <section key={metric} className="panel metric-card">
                 <h3 className="with-help">
                   {t(`dora.metric.${metric}`)}
                   <HelpTip text={t(`dora.help.${metric}`)} />
                 </h3>
-                <div className="dora-rows">
-                  {rows.map((r, i) => (
-                    <Link
-                      key={i}
-                      className="dora-row"
-                      to={`/dora/${slug}/${r.metric}?${toSearchParams({
-                        ...query,
-                        dimensions: r.dimensions,
-                      })}`}
-                      title={t('dora.detail.open')}
-                    >
-                      {/* The sample count sits with the dimensions: the right
-                          column has to stay narrow enough to leave the pills
-                          room in a grid cell barely 330px wide. */}
-                      <div className="dora-main">
-                        <div className="dora-dims">
-                          {Object.keys(r.dimensions).length === 0 ? (
-                            <span className="muted">{t('dora.global')}</span>
-                          ) : (
-                            Object.entries(r.dimensions).map(([k, v]) => (
-                              <span key={k} className="pill attr">
-                                <b>{k}</b>={v}
-                              </span>
-                            ))
-                          )}
-                        </div>
-                        <span className="dora-sample">{t('dora.sample', { count: r.sampleSize })}</span>
-                      </div>
-                      <div className="dora-right">
-                        <Sparkline values={historyByKey.get(`${metric}|${dimKey(r.dimensions)}`) ?? []} />
-                        <span className="dora-value">{formatValue(r)}</span>
-                        <span className="dora-caret" aria-hidden="true">
-                          ›
-                        </span>
-                      </div>
-                    </Link>
-                  ))}
+                <div className="metric-card-body">
+                  <span className="dora-value">{formatValue(result)}</span>
+                  <Sparkline values={historyByMetric.get(metric) ?? []} />
+                  <Link
+                    className="metric-card-link"
+                    to={`/dora/${slug}/${metric}?${search}`}
+                    aria-label={t('dora.detail.openMetric', {
+                      metric: t(`dora.metric.${metric}`),
+                    })}
+                  >
+                    <span className="dora-caret" aria-hidden="true">
+                      ›
+                    </span>
+                  </Link>
                 </div>
+                <span className="dora-sample">
+                  {t('dora.sample', { count: result.sampleSize })}
+                </span>
               </section>
             );
           })}
         </div>
       )}
 
-      {report && (
-        <Pagination
-          info={report.results.page}
-          value={{ limit: query.limit, offset: query.offset }}
-          onChange={setPage}
-          disabled={loading}
-        />
-      )}
-
     </div>
   );
 }
 
-
-function Sparkline({ values }: { values: number[] }) {
-  if (values.length < 2) return <span className="spark-empty">—</span>;
-  const w = 84;
-  const h = 22;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
-  const points = values
-    .map((v, i) => `${(i / (values.length - 1)) * w},${h - ((v - min) / range) * h}`)
-    .join(' ');
-  return (
-    <svg className="spark" width={w} height={h} viewBox={`0 0 ${w} ${h}`} aria-hidden="true">
-      <polyline points={points} fill="none" stroke="currentColor" strokeWidth="1.5" />
-    </svg>
-  );
+/** Every pair of the filter must be present for a snapshot to contribute. */
+function matchesFilter(
+  dimensions: Record<string, string>,
+  filter: Record<string, string>,
+): boolean {
+  return Object.entries(filter).every(([key, value]) => dimensions[key] === value);
 }
-

@@ -1,15 +1,20 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  DISPLAY_MODES,
+  OVERVIEW_DIRECTIONS,
   PAGE_LIMIT_MAX,
   QUOTA_RESERVE_PCT_MAX,
   QUOTA_RESERVE_PCT_MIN,
   RELEASE_NOTES_GENERATORS,
   type AppSettings,
+  type DisplayMode,
+  type OverviewDirection,
 } from '@repo/shared';
 import { api, apiErrorInfo } from '../../api';
 import { windowLabel, windowOptions } from '../../doraWindow';
 import { SUPPORTED_LANGUAGES, LANGUAGE_LABELS } from '../../i18n';
+import { isAvailable } from '../../display';
 
 /** Typed as a list end to end; comma separation is only how it is edited. */
 function toLabels(raw: string): string[] {
@@ -30,6 +35,8 @@ export function GeneralSettings({
   const [form, setForm] = useState<AppSettings | null>(settings);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
+  /** Only a failure is worth a line: a success repaints the whole application. */
+  const [uiMsg, setUiMsg] = useState<string | null>(null);
 
   useEffect(() => setForm(settings), [settings]);
 
@@ -37,6 +44,20 @@ export function GeneralSettings({
 
   const set = <K extends keyof AppSettings>(k: K, v: AppSettings[K]) =>
     setForm((f) => (f ? { ...f, [k]: v } : f));
+
+  /** Saves one presentation key and lets the shell repaint from the answer. */
+  async function applyNow(partial: Partial<AppSettings>) {
+    setBusy(true);
+    setUiMsg(null);
+    try {
+      onChange(await api.updateSettings(partial));
+    } catch (err) {
+      const { code, params } = apiErrorInfo(err);
+      setUiMsg(t(code, params));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -188,6 +209,10 @@ export function GeneralSettings({
 
       <section className="panel">
         <h2>{t('settings.general.uiTitle')}</h2>
+        {/* Applied as they are picked, like the language above: what each one
+            changes is the screen you are looking at, so the effect is the
+            confirmation. A Save button would only ask you to agree with what
+            you can already see. */}
         <form className="form">
           <label>
             {t('language.label')}{' '}
@@ -203,6 +228,38 @@ export function GeneralSettings({
               ))}
             </select>
           </label>
+          <label>
+            {t('settings.general.overviewDirection')}{' '}
+            <span className="hint">{t('settings.general.overviewDirectionHint')}</span>
+            <select
+              value={form.overviewDirection}
+              disabled={busy}
+              onChange={(e) => void applyNow({ overviewDirection: e.target.value as OverviewDirection })}
+            >
+              {OVERVIEW_DIRECTIONS.map((value) => (
+                <option key={value} value={value} disabled={!isAvailable(value)}>
+                  {t(`display.direction.${value}`)}
+                  {isAvailable(value) ? '' : ` — ${t('display.soon')}`}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            {t('settings.general.displayMode')}{' '}
+            <span className="hint">{t('settings.general.displayModeHint')}</span>
+            <select
+              value={form.displayMode}
+              disabled={busy}
+              onChange={(e) => void applyNow({ displayMode: e.target.value as DisplayMode })}
+            >
+              {DISPLAY_MODES.map((value) => (
+                <option key={value} value={value}>
+                  {t(`display.mode.${value}`)}
+                </option>
+              ))}
+            </select>
+          </label>
+          {uiMsg && <div className="banner error">{uiMsg}</div>}
         </form>
       </section>
     </div>

@@ -1,7 +1,6 @@
 import { Transform, Type } from 'class-transformer';
 import { IsArray, IsInt, IsISO8601, IsOptional, IsString, Matches, Max, Min } from 'class-validator';
 import { DORA_WINDOW_MAX, DORA_WINDOW_MIN } from '@repo/shared';
-import { PaginationQueryDto } from '../../common/pagination';
 
 /** Accepts `?repos=a&repos=b` as well as `?repos=a,b`. */
 function toList({ value }: { value: unknown }): string[] | undefined {
@@ -12,8 +11,8 @@ function toList({ value }: { value: unknown }): string[] | undefined {
     .filter(Boolean);
 }
 
-/** Reporting period, scope and slicing, plus the page window. */
-export class DoraQueryDto extends PaginationQueryDto {
+/** Reporting period, scope and slicing. */
+export class DoraQueryDto {
   @IsOptional()
   @IsISO8601()
   from?: string;

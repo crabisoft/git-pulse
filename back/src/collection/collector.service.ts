@@ -1,13 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type {
-  CodedMessage,
-  MetricBucket,
-  MetricPoint,
-  MetricSeries,
-  MetricSnapshotPublic,
-  Page,
-} from '@repo/shared';
+import type { CodedMessage, MetricSeries, MetricSnapshotPublic, Page } from '@repo/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { foldTrend, unitOf } from '../dora/trend';
 import { DashboardService } from '../dashboard/dashboard.service';
 import { DoraService } from '../dora/dora.service';
 import { SyncService } from '../ingest/sync.service';
@@ -110,13 +104,19 @@ export class CollectorService {
   }
 
   /**
-   * A metric's history for one dimension combination, bucketed for a chart.
+   * A metric's history over a filter, bucketed for a chart.
    *
-   * The collection runs every few minutes, so a year of raw snapshots is tens
-   * of thousands of rows — more than any page window carries and more than a
-   * plot can say anything with. Each bucket keeps its **last** snapshot rather
-   * than an average: a DORA value is already an aggregate over a rolling
-   * window, so the latest reading is the state at the end of the period, where
+   * Snapshots are stored per dimension **combination** — `{type, client, app}`
+   * all at once — while a reader filters on a subset of them, often on nothing
+   * at all. Matching the stored record exactly would therefore find nothing the
+   * moment a filter is on, and nothing at all once a classification rule
+   * changes the shape of the combinations; the chart went silent and the page
+   * looked like it had ignored the filter.
+   *
+   * So every combination that satisfies the filter is folded together, the same
+   * way the current value is. Within a day and within one combination the last
+   * snapshot wins: a DORA value is already an aggregate over a rolling window,
+   * so the reading at the end of the day is what that day means, where
    * averaging aggregates would blur two different things together.
    */
   async series(
@@ -126,18 +126,47 @@ export class CollectorService {
       dimensions: Record<string, string>;
       from?: string;
       to?: string;
-      bucket?: MetricBucket;
     },
   ): Promise<MetricSeries> {
-    const bucket = q.bucket ?? 'day';
+    const rows = await this.snapshotsMatching({
+      sourceId,
+      metric: q.metric,
+      dimensions: q.dimensions,
+      from: q.from,
+      to: q.to,
+    });
+
+    return {
+      metric: q.metric,
+      dimensions: q.dimensions,
+      // Days: the collection runs every few minutes, so a year of raw
+      // snapshots is tens of thousands of rows no plot can say anything with.
+      bucket: 'day',
+      points: foldTrend(rows, unitOf(q.metric)),
+      snapshotCount: rows.length,
+    };
+  }
+
+  /**
+   * Snapshots of one metric whose combination satisfies a partial filter.
+   *
+   * "Everything that is prod, whatever the client" is a containment question,
+   * not an equality one: a combination is not a subset of the filter that
+   * selects it. The test runs here rather than in the database — a jsonb subset
+   * predicate is awkward to express through Prisma, and the rows are already
+   * bounded by the metric and the period.
+   */
+  async snapshotsMatching(q: {
+    sourceId: string;
+    metric: string;
+    dimensions: Record<string, string>;
+    from?: string;
+    to?: string;
+  }): Promise<Array<{ value: number; dimensions: Record<string, string>; capturedAt: Date }>> {
     const rows = await this.prisma.metricSnapshot.findMany({
       where: {
-        sourceId,
+        sourceId: q.sourceId,
         metric: q.metric,
-        // Exact match on the whole object: a slice is a combination, not a
-        // subset. jsonb equality ignores key order, so the stored record and
-        // the requested one need not agree on it.
-        dimensions: { equals: q.dimensions },
         ...(q.from || q.to
           ? {
               capturedAt: {
@@ -148,23 +177,18 @@ export class CollectorService {
           : {}),
       },
       orderBy: { capturedAt: 'asc' },
-      select: { value: true, capturedAt: true },
+      select: { value: true, dimensions: true, capturedAt: true },
     });
 
-    const byBucket = new Map<string, MetricPoint>();
-    for (const row of rows) {
-      const at = startOf(row.capturedAt, bucket);
-      // Ordered ascending, so the last write per bucket is the latest reading.
-      byBucket.set(at, { at, value: row.value });
-    }
-
-    return {
-      metric: q.metric,
-      dimensions: q.dimensions,
-      bucket,
-      points: [...byBucket.values()],
-      snapshotCount: rows.length,
-    };
+    return rows
+      .map((row) => ({
+        value: row.value,
+        dimensions: (row.dimensions ?? {}) as Record<string, string>,
+        capturedAt: row.capturedAt,
+      }))
+      .filter((row) =>
+        Object.entries(q.dimensions).every(([key, value]) => row.dimensions[key] === value),
+      );
   }
 
   /** Time-series read for trends (optionally filtered by metric / range). */
@@ -221,15 +245,3 @@ function toPublic(r: {
 }
 
 /** Start of the bucket a moment falls in, in UTC. */
-function startOf(at: Date, bucket: MetricBucket): string {
-  const d = new Date(at);
-  d.setUTCMilliseconds(0);
-  d.setUTCSeconds(0);
-  d.setUTCMinutes(0);
-  if (bucket === 'hour') return d.toISOString();
-  d.setUTCHours(0);
-  if (bucket === 'day') return d.toISOString();
-  // Weeks start on Monday, as the ISO calendar has them.
-  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
-  return d.toISOString();
-}

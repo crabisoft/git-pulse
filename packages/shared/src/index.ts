@@ -848,6 +848,58 @@ export interface DoraSample {
   details?: Record<string, string>;
 }
 
+/**
+ * Where a reading sits on the scale the DORA report publishes.
+ *
+ * Ordered worst to best, which is the order the bands are drawn in.
+ */
+export type DoraTier = 'low' | 'medium' | 'high' | 'elite';
+
+export const DORA_TIERS: readonly DoraTier[] = ['low', 'medium', 'high', 'elite'];
+
+/**
+ * Band edges, best-first, in the unit the metric is computed in — seconds for
+ * durations, a 0..1 ratio for the failure rate, deployments **per day** for the
+ * frequency (the metric counts them over a window, so the window length has to
+ * be divided out before this is read).
+ *
+ * Three numbers per metric: below the first is `elite`, below the second
+ * `high`, below the third `medium`, and anything else `low`. The frequency
+ * reads the other way round — more is better — which `doraTier` handles.
+ *
+ * The published report is not a clean set of cuts: it leaves a gap between
+ * "less than one hour" and "between one day and one week" for lead time, and
+ * some years collapse three failure-rate bands into one. The edges here close
+ * those gaps upward, which is the reading that does not flatter.
+ */
+export const DORA_TIER_THRESHOLDS: Record<string, [number, number, number]> = {
+  // Per day: daily or better, then weekly, then monthly.
+  deployment_frequency: [1, 1 / 7, 1 / 30],
+  // One hour, one week, one month.
+  lead_time: [3_600, 604_800, 2_592_000],
+  // 15 %, 30 %, 45 %.
+  change_failure_rate: [0.15, 0.3, 0.45],
+  // One hour, one day, one week.
+  mttr: [3_600, 86_400, 604_800],
+};
+
+/**
+ * The band a value falls in, or null for a metric the report says nothing
+ * about — the breakdown metrics have no published scale, and inventing one
+ * would dress a guess as a standard.
+ */
+export function doraTier(metric: DoraMetric, value: number): DoraTier | null {
+  const edges = DORA_TIER_THRESHOLDS[metric];
+  if (!edges) return null;
+  // Frequency is the one metric where a bigger number is a better one.
+  const better = metric === 'deployment_frequency';
+  const beats = (edge: number) => (better ? value >= edge : value < edge);
+  if (beats(edges[0])) return 'elite';
+  if (beats(edges[1])) return 'high';
+  if (beats(edges[2])) return 'medium';
+  return 'low';
+}
+
 /** A computed DORA metric for one dimension combination. */
 export interface DoraResult {
   metric: DoraMetric;
@@ -891,7 +943,13 @@ export interface DoraPeriod {
  * narrowing a filter never empties the list you pick from.
  */
 export interface DoraReport {
-  results: Page<DoraResult>;
+  /**
+   * One reading per metric, folded over whatever the filter asked for. Not a
+   * page: there are as many entries as there are metrics, and the breakdown
+   * the filter narrows is stated by the filter bar rather than repeated on
+   * every row.
+   */
+  results: DoraResult[];
   /** Every repo in the source scope, filter applied or not. */
   repos: string[];
   /** Dimension key → observed values, over the repo-scoped results. */
@@ -1044,6 +1102,8 @@ export interface UserPublic {
   role: UserRole;
   createdAt: string;
   updatedAt: string;
+  /** What this account chose for itself; nulls fall back to the settings. */
+  display: DisplayPreference;
 }
 
 /**
@@ -1117,6 +1177,13 @@ export interface AppSettings {
   quotaReservePct: number;
   /** Which engine renders the Markdown of a release note. */
   releaseNotesGenerator: ReleaseNotesGenerator;
+  /**
+   * How the overview presents itself, for everyone who has not chosen
+   * otherwise. This is the wall screen's setting as much as the newcomer's.
+   */
+  overviewDirection: OverviewDirection;
+  /** Light or dark for everyone who has not chosen otherwise. */
+  displayMode: DisplayMode;
 }
 
 /** Bounds of `quotaReservePct`; a reserve of everything would collect nothing. */
@@ -1140,7 +1207,23 @@ export interface DashboardEnvironment {
   deployments: number;
   lastDeployAt: string;
   lastStatus: PipelineStatus;
+  /**
+   * The ref the last deployment carried — what is running there right now.
+   * "Which version is live for that client" is the question an environment is
+   * looked up for, and the date alone never answered it.
+   */
+  ref: string;
+  /**
+   * Statuses of the most recent deployments, oldest first and capped at
+   * ENVIRONMENT_RECENT_MAX. Read as a whole rather than one by one: a run of
+   * failures and an isolated one are the same `lastStatus`, and not the same
+   * situation at all.
+   */
+  recent: PipelineStatus[];
 }
+
+/** How many deployments an environment reports the outcome of. */
+export const ENVIRONMENT_RECENT_MAX = 11;
 
 export interface DashboardLive {
   sourceId: string;
@@ -1168,6 +1251,136 @@ export interface DashboardLive {
   syncedAt: string | null;
   /** Non-blocking errors collected while fetching. */
   warnings: CodedMessage[];
+}
+
+// ─── Overview ────────────────────────────────────────────────────────
+
+/**
+ * A metric as the overview reads it: the value, where it is going, and whether
+ * that direction is good news. `improving` is not derivable from the sign of
+ * `delta` — a rising deployment frequency is progress, a rising restore time
+ * is not — and the front should not have to hold that table.
+ */
+export interface OverviewFlow {
+  metric: DoraMetric;
+  /** count for frequency, seconds for durations, 0..1 ratio for CFR. */
+  value: number;
+  unit: 'count' | 'seconds' | 'ratio';
+  sampleSize: number;
+  /** Bucketed history behind the sparkline, oldest first. Empty until snapshots exist. */
+  trend: number[];
+  /**
+   * Change against the window immediately before this one, as a signed ratio.
+   * Null when that window holds nothing to compare against — a young install
+   * has no past, which is not the same as no change.
+   */
+  delta: number | null;
+  /** Null exactly when `delta` is. */
+  improving: boolean | null;
+}
+
+/** What is in the way right now, as counted over the filtered scope. */
+export interface OverviewFriction {
+  openPrs: number;
+  stalePrs: number;
+  failedPipelines: number;
+  runningPipelines: number;
+  /** Median time from opening to merge, in seconds; null when nothing merged. */
+  reviewTimeSec: number | null;
+}
+
+/** Whether what the page shows can be trusted, and for how long it has been so. */
+export interface OverviewHealth {
+  mode: SourceMode;
+  syncedAt: string | null;
+  /** Age of the stored view in seconds; null in live mode, where there is none. */
+  staleForSec: number | null;
+  /**
+   * `unreachable` is the one worth watching: the API keeps serving stored data
+   * while nothing at all is being collected behind it.
+   *
+   * Null for a caller without an account. How the collection is doing is
+   * operational detail, and the background-jobs section is kept to the admins
+   * for the same reason — an overview that may be public must not be the way
+   * around that.
+   */
+  queues: 'ok' | 'degraded' | 'unreachable' | null;
+  /**
+   * Share of the API budget still available, 0..1. Null when nothing was
+   * observed, and null for a caller without an account — see `queues`.
+   */
+  quotaLeft: number | null;
+}
+
+/** A deployment on the shared 24-hour axis. */
+export interface OverviewEvent {
+  at: string;
+  environment: string;
+  repo: string;
+  ref: string;
+  status: PipelineStatus;
+  /** The environment's attributes, so a lane can be drawn per dimension. */
+  attributes: Record<string, string>;
+}
+
+/**
+ * What the overview reads in one call.
+ *
+ * The environments come back flat and unpaginated: the page groups and pivots
+ * them on whichever dimension the reader picked, and a window would cut the
+ * pivot in half. The vocabularies are computed **before** filtering, like
+ * `DeploymentReport` does — narrowing one dimension must never empty the list
+ * the next one is picked from.
+ */
+export interface OverviewReport {
+  sourceId: string;
+  environments: DashboardEnvironment[];
+  /** Dimension key → observed values, over the whole scope. */
+  dimensions: Record<string, string[]>;
+  metaEnvironments: string[];
+  repos: string[];
+  flow: OverviewFlow[];
+  friction: OverviewFriction;
+  health: OverviewHealth;
+  /** Deployments of the last 24 hours, most recent first. */
+  events: OverviewEvent[];
+  period: DoraPeriod;
+  /** Non-blocking errors collected while assembling the above. */
+  warnings: CodedMessage[];
+}
+
+// ─── Presentation ────────────────────────────────────────────────────
+
+/**
+ * How the overview presents itself. One name per direction rather than a
+ * theme/layout pair: `stream` is a different composition, not a repaint of
+ * `control`, and naming it as a third direction keeps the setting readable by
+ * the person choosing it.
+ */
+export type OverviewDirection = 'control' | 'instrument' | 'stream';
+
+export const OVERVIEW_DIRECTIONS: readonly OverviewDirection[] = [
+  'control',
+  'instrument',
+  'stream',
+];
+
+/**
+ * `system` is a state of its own, not the absence of a choice: it hands the
+ * decision to the operating system and keeps following it as that changes.
+ */
+export type DisplayMode = 'system' | 'light' | 'dark';
+
+export const DISPLAY_MODES: readonly DisplayMode[] = ['system', 'light', 'dark'];
+
+/**
+ * What a reader has chosen for themselves. Null means "whatever the install
+ * says" — kept apart from a value so that changing the installation default
+ * still moves everyone who never expressed a preference.
+ */
+export interface DisplayPreference {
+  direction: OverviewDirection | null;
+  mode: DisplayMode | null;
 }
 
 // ─── Background jobs ─────────────────────────────────────────────────

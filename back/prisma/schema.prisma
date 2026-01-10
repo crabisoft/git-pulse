@@ -286,6 +286,12 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  /// Which overview this account reads, and on which ground. Null follows the
+  /// installation default, so raising that default still moves everyone who
+  /// never expressed a preference — which a stored copy of it would not.
+  displayDirection String?
+  displayMode      String?
+
   sessions       Session[]
   passwordResets PasswordReset[]
 }

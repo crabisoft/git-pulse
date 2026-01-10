@@ -4,6 +4,27 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Dashboard GitHub / GitLab</title>
+    <script>
+      // Stamped before the first paint, from the copy the application leaves
+      // behind whenever the preference changes. The real one lives on the
+      // server and has not answered yet; waiting for it would flash a white
+      // screen at everyone who reads this in the dark.
+      (function () {
+        try {
+          var mode = localStorage.getItem('display.mode') || 'system';
+          var direction = localStorage.getItem('display.direction');
+          var dark =
+            mode === 'system'
+              ? matchMedia('(prefers-color-scheme: dark)').matches
+              : mode === 'dark';
+          document.documentElement.dataset.mode = dark ? 'dark' : 'light';
+          if (direction) document.documentElement.dataset.direction = direction;
+        } catch (e) {
+          // No storage to read: the stylesheet falls back to the media query,
+          // which is the right answer for a browser we know nothing about.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -265,6 +265,75 @@ export function DimensionFilter({
 }
 
 /**
+ * The meta-environments an environment may carry. Its own control rather than
+ * one more entry in the dimension bar: a meta-environment is a name covering
+ * several patterns, not an attribute extracted from one, and an environment
+ * can hold more than one of them.
+ */
+export function MetaFilter({
+  options,
+  value,
+  onChange,
+  disabled,
+}: {
+  options: string[];
+  value: string;
+  onChange: (next: string) => void;
+  disabled?: boolean;
+}) {
+  const { t } = useTranslation();
+  if (options.length === 0) return null;
+  return (
+    <FilterField label={t('overview.filters.meta')}>
+      <select value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)}>
+        <option value="">{t('dora.dimension.any')}</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </FilterField>
+  );
+}
+
+/**
+ * Which dimension the board folds on. Sits with the filters because it is read
+ * as one — "prod, chez acme, par app" is a single sentence — even though it
+ * narrows nothing and costs no request.
+ */
+export function GroupByFilter({
+  keys,
+  value,
+  onChange,
+  disabled,
+}: {
+  keys: string[];
+  value: string | null;
+  onChange: (next: string | null) => void;
+  disabled?: boolean;
+}) {
+  const { t } = useTranslation();
+  if (keys.length === 0) return null;
+  return (
+    <FilterField label={t('overview.filters.groupBy')}>
+      <select
+        value={value ?? ''}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.value || null)}
+      >
+        <option value="">{t('overview.filters.groupByNone')}</option>
+        {keys.map((key) => (
+          <option key={key} value={key}>
+            {key}
+          </option>
+        ))}
+      </select>
+    </FilterField>
+  );
+}
+
+/**
  * A multiple choice over a closed vocabulary. The same control the repo filter
  * uses, because environments and statuses ask the user exactly the same thing —
  * and an empty selection means "every one", which is also what the API reads

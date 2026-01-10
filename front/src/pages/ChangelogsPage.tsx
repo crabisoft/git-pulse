@@ -2,7 +2,8 @@ import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { ChangelogReport, DeploymentChangelog, DeploymentChangelogSummary } from '@repo/shared';
 import { api, type ChangelogsQuery, type PageQuery } from '../api';
-import { FILTER_DEBOUNCE_MS, useCancellableLoad, useDebounced } from '../hooks';
+import { useCancellableLoad } from '../hooks';
+import { changelogsCodec, useUrlQuery } from '../urlQuery';
 import { ChoiceFilter, FilterField } from '../Filters';
 import { RepoFilter } from '../RepoFilter';
 import { Pagination } from '../Pagination';
@@ -10,9 +11,6 @@ import { PlatformLink } from '../PlatformLink';
 import { RefLink } from '../RefLink';
 import { CommitList } from '../CommitList';
 import { CopyButton } from '../CopyButton';
-
-/** Module constant, so resetting on a source change never re-triggers a fetch. */
-const EMPTY_QUERY: ChangelogsQuery = { repos: [], environments: [], search: '' };
 
 /**
  * What deployments carried, months after the fact.
@@ -24,14 +22,16 @@ const EMPTY_QUERY: ChangelogsQuery = { repos: [], environments: [], search: '' }
  */
 export function ChangelogsPage({ sourceId }: { sourceId: string }) {
   const { t } = useTranslation();
-  const [query, setQuery] = useState<ChangelogsQuery>(EMPTY_QUERY);
+  /**
+   * The filters live in the address: an archive read is often a link somebody
+   * was sent, and a back should land on the search it came from. Debounced on
+   * the way there, so typing in the search box is neither a request nor a
+   * history entry per keystroke.
+   */
+  const { query, setQuery, settled } = useUrlQuery(changelogsCodec);
   const [report, setReport] = useState<ChangelogReport | null>(null);
   /** The release being read, if any. One at a time: it is a long read, not a column. */
   const [openId, setOpenId] = useState<string | null>(null);
-
-  // Typing in the search box must not be a request per keystroke, even against
-  // a local table: the page redraws on every answer.
-  const settled = useDebounced(query, FILTER_DEBOUNCE_MS);
 
   const load = useCallback(
     async (signal: AbortSignal) => {

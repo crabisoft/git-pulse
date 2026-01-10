@@ -1,11 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type {
-  DashboardEnvironment,
-  DashboardLive,
-  Deployment,
-  PullRequest,
-  Pipeline,
-  CodedMessage,
+import {
+  ENVIRONMENT_RECENT_MAX,
+  type DashboardEnvironment,
+  type DashboardLive,
+  type Deployment,
+  type PullRequest,
+  type Pipeline,
+  type CodedMessage,
+  type SourceMode,
 } from '@repo/shared';
 import { ReaderFactory } from '../ingest/reader.factory';
 import { EnvRulesService } from '../env-rules/env-rules.service';
@@ -14,6 +16,23 @@ import { SettingsService } from '../settings/settings.service';
 import { paginate, toWindow } from '../common/pagination';
 import { throwIfAborted } from '../common/request-abort';
 import type { DashboardLiveQueryDto } from './dto/dashboard-live-query.dto';
+
+/**
+ * One collection round, before anything is windowed or counted. Two readers
+ * want the same fetch — the live board pages through it, the overview folds it
+ * — and doing it twice would be two rounds of connector calls for one screen.
+ */
+export interface CollectedSource {
+  /** Every repo in scope, filter applied or not — the filter's vocabulary. */
+  repos: string[];
+  pullRequests: PullRequest[];
+  pipelines: Pipeline[];
+  deployments: Deployment[];
+  environments: DashboardEnvironment[];
+  mode: SourceMode;
+  syncedAt: string | null;
+  warnings: CodedMessage[];
+}
 
 @Injectable()
 export class DashboardService {
@@ -36,6 +55,42 @@ export class DashboardService {
     query: DashboardLiveQueryDto = {},
     signal?: AbortSignal,
   ): Promise<DashboardLive> {
+    const collected = await this.collect(sourceId, query.repos, signal);
+    const { stalePrHours, pageSize } = await this.settings.get();
+    const { pullRequests, pipelines, environments } = collected;
+
+    return {
+      sourceId,
+      pullRequests: paginate(
+        sortByAge(pullRequests),
+        toWindow({ limit: query.prsLimit, offset: query.prsOffset }, pageSize),
+      ),
+      pipelines: paginate(
+        pipelines,
+        toWindow({ limit: query.pipelinesLimit, offset: query.pipelinesOffset }, pageSize),
+      ),
+      environments: paginate(
+        environments,
+        toWindow({ limit: query.environmentsLimit, offset: query.environmentsOffset }, pageSize),
+      ),
+      repos: collected.repos,
+      summary: summarize(pullRequests, pipelines, environments, stalePrHours),
+      mode: collected.mode,
+      syncedAt: collected.syncedAt,
+      warnings: collected.warnings,
+    };
+  }
+
+  /**
+   * One round of collection, unwindowed and uncounted. A failing listing
+   * degrades into a warning rather than emptying the screen: a missing
+   * permission on pipelines should not cost the environments too.
+   */
+  async collect(
+    sourceId: string,
+    repoFilter?: string[],
+    signal?: AbortSignal,
+  ): Promise<CollectedSource> {
     const reader = await this.readers.for(sourceId, signal);
     const warnings: CodedMessage[] = [];
 
@@ -44,7 +99,7 @@ export class DashboardService {
       warnings.push({ code: 'dashboard.warn.reposFailed', params: { error: asMessage(e) } });
       return [] as string[];
     });
-    const repos = filterRepos(allRepos, query.repos);
+    const repos = filterRepos(allRepos, repoFilter);
 
     const pullRequests = await safe(
       () => reader.listPullRequests(repos),
@@ -64,9 +119,6 @@ export class DashboardService {
       'dashboard.warn.deploymentsFailed',
       signal,
     );
-    const withTickets = await this.withTickets(sourceId, reader.scope.owner, pullRequests);
-    const environments = await this.toEnvironments(sourceId, deployments);
-    const { stalePrHours, pageSize } = await this.settings.get();
 
     // An empty board and a board of an empty project look alike; saying the
     // ingestion has not run yet is the difference between the two.
@@ -76,21 +128,11 @@ export class DashboardService {
     }
 
     return {
-      sourceId,
-      pullRequests: paginate(
-        sortByAge(withTickets),
-        toWindow({ limit: query.prsLimit, offset: query.prsOffset }, pageSize),
-      ),
-      pipelines: paginate(
-        pipelines,
-        toWindow({ limit: query.pipelinesLimit, offset: query.pipelinesOffset }, pageSize),
-      ),
-      environments: paginate(
-        environments,
-        toWindow({ limit: query.environmentsLimit, offset: query.environmentsOffset }, pageSize),
-      ),
       repos: allRepos,
-      summary: summarize(withTickets, pipelines, environments, stalePrHours),
+      pullRequests: await this.withTickets(sourceId, reader.scope.owner, pullRequests),
+      pipelines,
+      deployments,
+      environments: await this.toEnvironments(sourceId, deployments),
       mode: reader.mode,
       syncedAt: syncedAt?.toISOString() ?? null,
       warnings,
@@ -134,7 +176,10 @@ export class DashboardService {
     return entries
       .map(([, items], i) => {
         const env = classified[i];
-        const latest = items.reduce(mostRecent);
+        // Sorted once, then read from both ends: the newest deployment states
+        // what is running, and the tail of the same order is the heartbeat.
+        const byDate = [...items].sort((a, b) => msOf(a.createdAt) - msOf(b.createdAt));
+        const latest = byDate[byDate.length - 1];
         return {
           name: env.name,
           attributes: env.attributes,
@@ -143,6 +188,8 @@ export class DashboardService {
           deployments: items.length,
           lastDeployAt: latest.createdAt,
           lastStatus: latest.status,
+          ref: latest.ref,
+          recent: byDate.slice(-ENVIRONMENT_RECENT_MAX).map((d) => d.status),
         };
       })
       .sort((a, b) => msOf(b.lastDeployAt) - msOf(a.lastDeployAt));
@@ -193,11 +240,6 @@ function summarize(
     runningPipelines: pipelines.filter((p) => p.status === 'running').length,
     environments: environments.length,
   };
-}
-
-/** Reducer keeping the most recently created deployment. */
-function mostRecent(a: Deployment, b: Deployment): Deployment {
-  return msOf(b.createdAt) > msOf(a.createdAt) ? b : a;
 }
 
 function msOf(date: string): number {

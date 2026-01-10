@@ -34,6 +34,65 @@ export function useDebounced<T>(value: T, delay: number): T {
  * Errors are translated here; an aborted run reports nothing at all — neither
  * an error nor the end of loading, which belongs to the run replacing it.
  */
+/**
+ * How often a screen left open brings itself up to date. Matched to the
+ * default collection cron rather than to a round number: refreshing faster
+ * than the data is collected spends connector calls to redraw the same figures.
+ */
+export const AUTO_REFRESH_MS = 15 * 60 * 1000;
+
+/**
+ * How often a wall screen brings itself up to date.
+ *
+ * Tighter than a desk, because nobody there will ever press Refresh: what this
+ * bounds is the lag between a collection landing and the wall showing it. Not
+ * tighter still, because a live source pays a full round of connector calls
+ * for every poll — only a stored one gets away with a database read.
+ */
+export const WALL_REFRESH_MS = 5 * 60 * 1000;
+
+/**
+ * Re-runs `reload` on a timer, but only while the tab is being looked at. A
+ * dashboard left open in a background tab for a week is otherwise a week of
+ * API calls nobody read — and the quota it spends is the one the collection
+ * needs.
+ *
+ * Coming back to the tab reloads at once: the figures on screen are as old as
+ * the time spent away, and waiting out the interval to say so is the wrong way
+ * round.
+ */
+export function useAutoRefresh(reload: () => void, intervalMs = AUTO_REFRESH_MS): void {
+  const latest = useRef(reload);
+  latest.current = reload;
+
+  useEffect(() => {
+    let timer: ReturnType<typeof setInterval> | null = null;
+
+    const start = () => {
+      if (timer === null) timer = setInterval(() => latest.current(), intervalMs);
+    };
+    const stop = () => {
+      if (timer !== null) clearInterval(timer);
+      timer = null;
+    };
+    const onVisibility = () => {
+      if (document.hidden) {
+        stop();
+      } else {
+        latest.current();
+        start();
+      }
+    };
+
+    if (!document.hidden) start();
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      stop();
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [intervalMs]);
+}
+
 export function useCancellableLoad(load: (signal: AbortSignal) => Promise<void>) {
   const { t } = useTranslation();
   const inFlight = useRef<AbortController | null>(null);

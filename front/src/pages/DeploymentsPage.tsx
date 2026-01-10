@@ -3,35 +3,24 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import type { ClassifiedDeployment, DeploymentReport } from '@repo/shared';
 import { api, type DeploymentsQuery, type PageQuery } from '../api';
-import { FILTER_DEBOUNCE_MS, useCancellableLoad, useDebounced } from '../hooks';
+import { useCancellableLoad } from '../hooks';
+import { deploymentsCodec, useUrlQuery } from '../urlQuery';
 import { ChoiceFilter, DimensionFilter, PeriodFilter } from '../Filters';
 import { RepoFilter } from '../RepoFilter';
 import { Pagination } from '../Pagination';
 import { PlatformLink } from '../PlatformLink';
 import { RefLink } from '../RefLink';
 
-/**
- * Module constant so resetting on a source change never re-triggers a fetch.
- * Empty everywhere means: rolling window from the settings, every repo, no slice.
- */
-const EMPTY_QUERY: DeploymentsQuery = {
-  repos: [],
-  environments: [],
-  statuses: [],
-  dimensions: {},
-};
-
 export function DeploymentsPage({ sourceId, slug }: { sourceId: string; slug: string }) {
   const { t } = useTranslation();
-  const [query, setQuery] = useState<DeploymentsQuery>(EMPTY_QUERY);
   const [report, setReport] = useState<DeploymentReport | null>(null);
-
   /**
-   * Every filter change is a full round of connector calls on a live source, so
-   * a burst of clicks becomes one request once it settles — the same safeguard
-   * the dashboard and DORA use.
+   * The filters live in the address, so a back walks them and a link carries
+   * them. Debounced on the way there: every change is a full round of
+   * connector calls on a live source, so a burst of clicks becomes one request
+   * and one history entry.
    */
-  const settled = useDebounced(query, FILTER_DEBOUNCE_MS);
+  const { query, setQuery, settled } = useUrlQuery(deploymentsCodec);
 
   const load = useCallback(
     async (signal: AbortSignal) => {

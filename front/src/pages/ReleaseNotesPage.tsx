@@ -10,6 +10,7 @@ import {
 } from '@repo/shared';
 import { api, apiErrorInfo, isAbort } from '../api';
 import { useCancellableLoad } from '../hooks';
+import { releaseNotesCodec, useUrlQuery } from '../urlQuery';
 import { useAuth } from '../auth';
 import { RefSelect } from '../RefSelect';
 import { RefLink } from '../RefLink';
@@ -33,11 +34,16 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
   const canRewrite = Boolean(state?.user);
 
   const [repos, setRepos] = useState<string[]>([]);
-  const [repo, setRepo] = useState('');
   const [tags, setTags] = useState<Tag[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  /**
+   * The range lives in the address, so a back walks it and a link carries it —
+   * "the notes between these two tags" is exactly the kind of thing that gets
+   * pasted into a chat.
+   */
+  const { query, setQuery, replaceQuery } = useUrlQuery(releaseNotesCodec);
+  const { repo, from, to } = query;
+  const setRange = (patch: Partial<typeof query>) => setQuery((q) => ({ ...q, ...patch }));
 
   const [notes, setNotes] = useState<ReleaseNotes | null>(null);
   const [rewritten, setRewritten] = useState<RewriteResult | null>(null);
@@ -64,10 +70,14 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
       setProviders(available);
       setProviderId(available.find((p) => p.isDefault)?.id ?? available[0]?.id ?? '');
       // Nothing is selected until the list is known, so the first repo wins —
-      // the same rule the source picker follows.
-      setRepo((current) => (inScope.includes(current) ? current : (inScope[0] ?? '')));
+      // the same rule the source picker follows. Amended into the address
+      // rather than added to it: a default the page picked is not a step
+      // anybody meant to take.
+      replaceQuery((current) =>
+        inScope.includes(current.repo) ? current : { ...current, repo: inScope[0] ?? '' },
+      );
     },
-    [sourceId, canRewrite],
+    [sourceId, canRewrite, replaceQuery],
   );
   const scope = useCancellableLoad(loadScope);
 
@@ -91,8 +101,6 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
       setBranches(repoBranches);
       // The bounds belong to the repo that was showing: keeping them would ask
       // for a range made of another repo's refs.
-      setFrom('');
-      setTo('');
       setNotes(null);
       setRewritten(null);
     },
@@ -171,7 +179,10 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
         {repos.length > 0 && (
           <div className="filters-row">
             <FilterField label={t('releaseNotes.repo')}>
-              <select value={repo} onChange={(e) => setRepo(e.target.value)}>
+              <select
+                value={repo}
+                onChange={(e) => setQuery({ repo: e.target.value, from: '', to: '' })}
+              >
                 {repos.map((name) => (
                   <option key={name} value={name}>
                     {name}
@@ -182,7 +193,7 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
             <FilterField label={t('releaseNotes.from')}>
               <RefSelect
                 value={from}
-                onChange={setFrom}
+                onChange={(value) => setRange({ from: value })}
                 /* Empty is not "no bound": it is the tag below `to`, which is
                    what a release note almost always wants. */
                 autoLabel={t('releaseNotes.fromAuto')}
@@ -194,7 +205,7 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
             <FilterField label={t('releaseNotes.to')}>
               <RefSelect
                 value={to}
-                onChange={setTo}
+                onChange={(value) => setRange({ to: value })}
                 autoLabel={t('releaseNotes.toAuto')}
                 tags={tags}
                 branches={branches}

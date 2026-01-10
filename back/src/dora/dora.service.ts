@@ -10,8 +10,9 @@ import type {
   RuleTarget,
 } from '@repo/shared';
 import { CodedException } from '../common/coded-exception';
-import { paginate, type PageWindow } from '../common/pagination';
+
 import { resolvePeriod, within } from '../common/period';
+import { foldByMetric } from './aggregate';
 import { throwIfAborted } from '../common/request-abort';
 import { PrismaService } from '../prisma/prisma.service';
 import { SourcesService } from '../sources/sources.service';
@@ -79,21 +80,21 @@ export class DoraService {
   }
 
   /**
-   * Read-side view: the same computation, sliced by dimension and paginated,
-   * plus the vocabularies the filter controls are built from. Those are
-   * collected before slicing, so narrowing a filter never empties the list you
-   * pick from.
+   * Read-side view: the same computation, sliced by dimension and folded into
+   * one reading per metric, plus the vocabularies the filter controls are
+   * built from. Those are collected before slicing, so narrowing a filter
+   * never empties the list you pick from.
+   *
+   * Folded rather than listed per combination: a reader asks "what is the lead
+   * time here", and answers the "here" with the filter bar. A row per
+   * combination made the page a cross-product nobody read past the first
+   * screen of.
    */
-  async report(
-    sourceId: string,
-    query: DoraQuery,
-    window: PageWindow,
-    signal?: AbortSignal,
-  ): Promise<DoraReport> {
+  async report(sourceId: string, query: DoraQuery, signal?: AbortSignal): Promise<DoraReport> {
     const { results, repos, period } = await this.build(sourceId, query, signal);
     const dimensions = collectDimensions(results);
     const sliced = results.filter((r) => matchesDimensions(r.dimensions, query.dimensions));
-    return { results: paginate(sliced, window), repos, dimensions, period };
+    return { results: foldByMetric(sliced), repos, dimensions, period };
   }
 
   /** Fetches and computes everything, before any slicing. */

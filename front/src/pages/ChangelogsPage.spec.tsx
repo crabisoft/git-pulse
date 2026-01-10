@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
@@ -17,6 +18,15 @@ vi.mock('../api', async (importOriginal) => ({
 }));
 
 const { api } = await import('../api');
+
+/** The filters live in the address, so the page needs a router around it. */
+function renderPage() {
+  return render(
+    <MemoryRouter>
+      <ChangelogsPage sourceId="src-1" />
+    </MemoryRouter>,
+  );
+}
 
 function summary(over: Partial<DeploymentChangelogSummary> = {}): DeploymentChangelogSummary {
   return {
@@ -82,7 +92,7 @@ beforeEach(() => {
 
 describe('ChangelogsPage', () => {
   it('lists what was filed without asking for any of its contents', async () => {
-    render(<ChangelogsPage sourceId="src-1" />);
+    renderPage();
 
     expect(await screen.findByText('widget')).toBeInTheDocument();
     expect(screen.getByText('v2.0.0')).toBeInTheDocument();
@@ -92,7 +102,7 @@ describe('ChangelogsPage', () => {
   });
 
   it('reads one release on request', async () => {
-    render(<ChangelogsPage sourceId="src-1" />);
+    renderPage();
 
     await userEvent.click(await screen.findByRole('button', { name: 'changelogs.read' }));
 
@@ -107,7 +117,7 @@ describe('ChangelogsPage', () => {
         lastArchivedAt: null,
       }),
     );
-    render(<ChangelogsPage sourceId="src-1" />);
+    renderPage();
 
     await waitFor(() => expect(screen.getByText('changelogs.neverRun')).toBeInTheDocument());
   });

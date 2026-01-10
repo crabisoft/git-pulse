@@ -21,7 +21,7 @@ export class CollectionController {
     return this.collector.collectSource(id);
   }
 
-  /** One metric, one dimension combination, bucketed for a chart. */
+  /** One metric over a period, folded over the filter and bucketed by day. */
   @Viewer()
   @Get('sources/:id/metrics/series')
   series(@Param('id') id: string, @Query() query: MetricSeriesDto) {
@@ -30,7 +30,6 @@ export class CollectionController {
       dimensions: toDimensionFilter(query.dimension),
       from: query.from,
       to: query.to,
-      bucket: query.bucket,
     });
   }
 

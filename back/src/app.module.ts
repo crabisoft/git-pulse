@@ -20,6 +20,7 @@ import { ChangelogsModule } from './changelogs/changelogs.module';
 import { CollectionModule } from './collection/collection.module';
 import { ApiQuotaModule } from './api-quota/api-quota.module';
 import { JobsModule } from './jobs/jobs.module';
+import { OverviewModule } from './overview/overview.module';
 
 @Module({
   imports: [
@@ -46,6 +47,7 @@ import { JobsModule } from './jobs/jobs.module';
     CollectionModule,
     ApiQuotaModule,
     JobsModule,
+    OverviewModule,
   ],
 })
 export class AppModule {}

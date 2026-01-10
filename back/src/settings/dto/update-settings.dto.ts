@@ -9,8 +9,12 @@ import {
   MinLength,
 } from 'class-validator';
 import {
+  DISPLAY_MODES,
+  OVERVIEW_DIRECTIONS,
   RELEASE_NOTES_GENERATORS,
+  type DisplayMode,
   type FailureSource,
+  type OverviewDirection,
   type ReleaseNotesGenerator,
 } from '@repo/shared';
 
@@ -59,4 +63,14 @@ export class UpdateSettingsDto {
   @IsOptional()
   @IsEnum(RELEASE_NOTES_GENERATORS)
   releaseNotesGenerator?: ReleaseNotesGenerator;
+
+  /** Which overview the install opens on, for whoever has not chosen. */
+  @IsOptional()
+  @IsEnum(OVERVIEW_DIRECTIONS)
+  overviewDirection?: OverviewDirection;
+
+  /** Light or dark for whoever has not chosen. */
+  @IsOptional()
+  @IsEnum(DISPLAY_MODES)
+  displayMode?: DisplayMode;
 }

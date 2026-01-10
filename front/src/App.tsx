@@ -11,11 +11,20 @@ import {
   useNavigate,
   useParams,
 } from 'react-router-dom';
-import { PAGE_LIMIT_MAX, type AppSettings, type SourcePublic } from '@repo/shared';
+import {
+  PAGE_LIMIT_MAX,
+  type AppSettings,
+  type DisplayMode,
+  type DisplayPreference,
+  type OverviewDirection,
+  type SourcePublic,
+} from '@repo/shared';
 import { api, apiErrorInfo } from './api';
 import { useAuth } from './auth';
+import { apply as applyDisplay, effective, watchSystem } from './display';
+import { useWallMode } from './wall';
 import { SECTION_PATHS, SettingsPage, type SettingsSection } from './pages/SettingsPage';
-import { DashboardPage } from './pages/DashboardPage';
+import { OverviewPage } from './pages/OverviewPage';
 import { DoraPage } from './pages/DoraPage';
 import { ReleaseNotesPage } from './pages/ReleaseNotesPage';
 import { DeploymentsPage } from './pages/DeploymentsPage';
@@ -152,6 +161,53 @@ function AppShell() {
     document.documentElement.lang = i18n.resolvedLanguage ?? 'en';
   }, [i18n.resolvedLanguage]);
 
+  /**
+   * What was picked from the overview, ahead of the round trip that stores it.
+   * Held here rather than in the page so it survives navigating away and back,
+   * and so a visitor — who has no account to store anything on — still gets to
+   * choose for this browser.
+   */
+  const [override, setOverride] = useState<Partial<DisplayPreference>>({});
+
+  // The inline script in index.html has already painted from last session's
+  // copy; this is where the real preference lands, and where it stays in step
+  // with the operating system for as long as `system` is what was chosen.
+  const display = effective(settings, {
+    direction: override.direction ?? state?.user?.display.direction ?? null,
+    mode: override.mode ?? state?.user?.display.mode ?? null,
+  });
+  useEffect(() => {
+    applyDisplay(display);
+    return watchSystem(display.mode, () => applyDisplay(display));
+  }, [display.direction, display.mode]);
+
+  /** Applied at once, then stored — for an account, which is what has one. */
+  const changeDisplay = useCallback(
+    async (next: { direction?: OverviewDirection; mode?: DisplayMode }) => {
+      setOverride((current) => ({ ...current, ...next }));
+      if (!state?.user) return;
+      try {
+        await api.updateMe({
+          ...(next.direction !== undefined && { displayDirection: next.direction }),
+          ...(next.mode !== undefined && { displayMode: next.mode }),
+        });
+      } catch (e) {
+        // Snap back to what is actually stored: a choice that looks applied
+        // and comes back changed at the next sign-in is worse than a refusal.
+        setOverride((current) => {
+          const reverted = { ...current };
+          for (const key of Object.keys(next) as Array<keyof DisplayPreference>) {
+            delete reverted[key];
+          }
+          return reverted;
+        });
+        const { code, params } = apiErrorInfo(e);
+        setError(t(code, params));
+      }
+    },
+    [state?.user, t],
+  );
+
   useEffect(() => {
     if (route) setLastSlug(route.slug);
   }, [route?.slug]);
@@ -164,11 +220,15 @@ function AppShell() {
     if (route) navigate(generatePath(route.pattern, { slug }));
   };
 
+  // A screen nobody is standing at: the shell steps out of the way, and what
+  // is left is the reading itself.
+  const wall = useWallMode();
   const module = pathname.split('/')[1] || 'dashboard';
   const withSource = (base: string) => (activeSource ? `${base}/${activeSource.slug}` : base);
 
   return (
     <div className="app">
+      {!wall && (
       <header className="topbar">
         <div className="brand">
           <span className="brand-dot" />
@@ -180,7 +240,7 @@ function AppShell() {
             className={module === 'dashboard' ? 'tab active' : 'tab'}
             to={withSource('/dashboard')}
           >
-            {t('nav.dashboard')}
+            {t('nav.overview')}
           </Link>
           <Link className={module === 'dora' ? 'tab active' : 'tab'} to={withSource('/dora')}>
             {t('nav.dora')}
@@ -243,6 +303,7 @@ function AppShell() {
           )}
         </div>
       </header>
+      )}
 
       <main className={module === 'settings' ? 'content flush' : 'content'}>
         {error && <div className="banner error">{error}</div>}
@@ -259,10 +320,13 @@ function AppShell() {
             element={
               <SourcePage sources={sources} loaded={loaded} base="/dashboard">
                 {(source) => (
-                  <DashboardPage
+                  <OverviewPage
                     key={source.id}
                     sourceId={source.id}
+                    slug={source.slug}
                     staleHours={settings?.stalePrHours ?? null}
+                    display={display}
+                    onDisplayChange={changeDisplay}
                   />
                 )}
               </SourcePage>

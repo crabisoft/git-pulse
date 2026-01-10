@@ -12,6 +12,10 @@ import type {
   SourcePublic,
   WebhookSetup,
   DashboardLive,
+  DisplayMode,
+  Incident,
+  OverviewDirection,
+  OverviewReport,
   ConnectionTestResult,
   CodedMessage,
   EnvRulePublic,
@@ -35,7 +39,6 @@ import type {
   RewriteRequest,
   RewriteResult,
   Tag,
-  MetricBucket,
   MetricSeries,
   MetricSnapshotPublic,
   Page,
@@ -185,6 +188,22 @@ export interface DeploymentsQuery extends DoraQuery {
 }
 
 /**
+ * The scope of an overview. The same period and dimensions as everywhere else,
+ * plus the meta-environment — a name covering several patterns, which is not
+ * an attribute and does not belong among them.
+ *
+ * No page window: the page groups and pivots what comes back.
+ */
+export interface OverviewQuery {
+  from?: string;
+  to?: string;
+  windowDays?: number;
+  repos?: string[];
+  dimensions?: Record<string, string>;
+  meta?: string;
+}
+
+/**
  * What narrows the changelog archive.
  *
  * No rolling window, unlike every other report: the archive exists to be read
@@ -289,8 +308,14 @@ export const api = {
    * What an account may change about itself. The role and the address are not
    * part of it — an admin hands those out.
    */
-  updateMe: (input: { name?: string; password?: string; currentPassword?: string }) =>
-    request<AuthState>('/auth/me', { method: 'PATCH', body: JSON.stringify(input) }),
+  updateMe: (input: {
+    name?: string;
+    password?: string;
+    currentPassword?: string;
+    /** Null hands the choice back to the installation default. */
+    displayDirection?: OverviewDirection | null;
+    displayMode?: DisplayMode | null;
+  }) => request<AuthState>('/auth/me', { method: 'PATCH', body: JSON.stringify(input) }),
   /** First admin of a fresh install — refused once an account exists. */
   setupAdmin: (input: CreateUserInput) =>
     request<AuthState>('/auth/setup', { method: 'POST', body: JSON.stringify(input) }),
@@ -440,6 +465,47 @@ export const api = {
   testLlmProvider: (id: string) =>
     request<ConnectionTestResult>(`/llm-providers/${id}/test`, { method: 'POST' }),
 
+  /**
+   * Everything the landing page reads, in one call. No page window: the
+   * environments come back whole because the page pivots them, and half a
+   * pivot is not half an answer.
+   */
+  overview: (sourceId: string, query: OverviewQuery = {}, signal?: AbortSignal) =>
+    request<OverviewReport>(
+      `/overview/${sourceId}` +
+        qs({
+          from: query.from,
+          to: query.to,
+          windowDays: query.windowDays,
+          repos: query.repos?.length ? query.repos : undefined,
+          meta: query.meta || undefined,
+          // The API takes `key:value` pairs, repeatable — same as DORA.
+          dimension: Object.entries(query.dimensions ?? {}).map(([k, v]) => `${k}:${v}`),
+        }),
+      { signal },
+    ),
+
+  /**
+   * Incidents over a period. Read on its own rather than folded into the
+   * overview: incidents live in a tracker, on another platform, with a budget
+   * of its own — only the view that shows them should pay for them.
+   */
+  incidents: (
+    sourceId: string,
+    query: { from?: string; to?: string; windowDays?: number; repos?: string[] } = {},
+    signal?: AbortSignal,
+  ) =>
+    request<Incident[]>(
+      `/sources/${sourceId}/incidents` +
+        qs({
+          from: query.from,
+          to: query.to,
+          windowDays: query.windowDays,
+          repos: query.repos?.length ? query.repos : undefined,
+        }),
+      { signal },
+    ),
+
   /** Deployments over a period, classified and filtered. */
   deployments: (sourceId: string, query: DeploymentsQuery = {}, signal?: AbortSignal) =>
     request<DeploymentReport>(
@@ -563,7 +629,7 @@ export const api = {
         }),
       { signal },
     ),
-  /** One metric, one dimension combination, bucketed for a chart. */
+  /** One metric over a period, folded over the filter and bucketed by day. */
   metricSeries: (
     sourceId: string,
     query: {
@@ -571,7 +637,6 @@ export const api = {
       dimensions?: Record<string, string>;
       from?: string;
       to?: string;
-      bucket?: MetricBucket;
     },
     signal?: AbortSignal,
   ) =>
@@ -582,7 +647,6 @@ export const api = {
           dimension: Object.entries(query.dimensions ?? {}).map(([k, v]) => `${k}:${v}`),
           from: query.from,
           to: query.to,
-          bucket: query.bucket,
         }),
       { signal },
     ),

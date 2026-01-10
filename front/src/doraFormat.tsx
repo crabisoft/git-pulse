@@ -24,12 +24,6 @@ export function formatDate(iso: string): string {
   return new Date(iso).toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'short' });
 }
 
-/** Identifies a dimension combination whatever order its keys came in. */
-export function dimKey(dimensions: Record<string, string>): string {
-  const sorted: Record<string, string> = {};
-  for (const k of Object.keys(dimensions).sort()) sorted[k] = dimensions[k];
-  return JSON.stringify(sorted);
-}
 
 export function SampleDetails({ details }: { details: Record<string, string> }) {
   const { t } = useTranslation();

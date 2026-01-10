@@ -1,3 +1,15 @@
+/*
+ * Colour lives in two layers, and neither reaches a component directly.
+ *
+ * The **mode** decides the ground and everything that has to hold its contrast
+ * against it — a green that reads on #0e131b is illegible on white, so the
+ * status colours are redefined per mode and not only the background.
+ *
+ * The **direction** decides the shape: how round, how dense, how loud. It is a
+ * set of values rather than a second stylesheet, which is what lets somebody
+ * switch between them from the settings without the application shipping two
+ * of everything.
+ */
 :root {
   --ground: #f5f7fa;
   --surface: #ffffff;
@@ -15,14 +27,23 @@
   --good: #1a7f4b;
   --warn: #a5680a;
   --crit: #c0392b;
+  /* Something in flight, as opposed to something that ended well. Only the
+     board reads it, and only for as long as a deployment is running. */
+  --live: #a06a00;
   --radius: 10px;
+  /* Padding a panel breathes with. The board tightens it; the forms do not. */
+  --density: 18px;
   /* Height of the sticky topbar — the settings rail hangs below it. */
   --topbar-h: 60px;
   --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
+
+/* Nothing chosen yet: follow the desk. Once a choice is stamped on the root
+   element it wins, in both directions — which is what a "light" setting on a
+   dark machine has to be able to do. */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-mode]) {
     --ground: #0e131b;
     --surface: #161c26;
     --surface-2: #1c2431;
@@ -36,6 +57,63 @@
     --good: #4cc98a;
     --warn: #e0a23a;
     --crit: #f0857a;
+    --live: #f0b429;
+  }
+}
+
+:root[data-mode="dark"] {
+  --ground: #0e131b;
+  --surface: #161c26;
+  --surface-2: #1c2431;
+  --ink: #e7edf5;
+  --muted: #9aa5b4;
+  --line: #262f3c;
+  --accent: #4d9bff;
+  --accent-deep: #7db4ff;
+  --chart-series: #4a90e2;
+  --chart-grid: #262f3c;
+  --good: #4cc98a;
+  --warn: #e0a23a;
+  --crit: #f0857a;
+  --live: #f0b429;
+}
+
+/* The control room: hairlines instead of cards, and a tighter rhythm. Held to
+   shape alone — the colours are the mode's business, whichever direction is
+   in effect. The stream shares its shape: it is a different composition, not a
+   different skin. */
+:root[data-direction="control"],
+:root[data-direction="stream"] {
+  --radius: 3px;
+  --density: 14px;
+}
+
+/* The instrument panel reads at arm's length rather than across a room: more
+   air, softer corners, and the tier ramp the gauges are drawn from. */
+:root[data-direction="instrument"] {
+  --radius: 10px;
+  --density: 20px;
+  --tier-low: #b4530a;
+  --tier-medium: #b7791f;
+  --tier-high: #2c7a7b;
+  --tier-elite: #134e4a;
+}
+
+/* The deep teal that signals "elite" on paper disappears into a dark ground,
+   so the ramp lightens while keeping its clay-to-teal reading. */
+:root[data-direction="instrument"][data-mode="dark"],
+:root[data-direction="instrument"]:not([data-mode]) {
+  --tier-low: #e08a5a;
+  --tier-medium: #d0a44e;
+  --tier-high: #4ea9a6;
+  --tier-elite: #7ad0bd;
+}
+@media (prefers-color-scheme: light) {
+  :root[data-direction="instrument"]:not([data-mode]) {
+    --tier-low: #b4530a;
+    --tier-medium: #b7791f;
+    --tier-high: #2c7a7b;
+    --tier-elite: #134e4a;
   }
 }
 
@@ -177,28 +255,25 @@ a.pill.attr:hover { border-color: var(--accent); }
 .pill.meta { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent-deep); }
 
 /* DORA */
-.dora-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
-.dora-rows { display: flex; flex-direction: column; }
-.dora-row {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
-  width: 100%; padding: 9px 6px; margin: 0 -6px; text-align: left;
-  background: none; border: none; border-bottom: 1px solid var(--line);
-  border-radius: 6px; color: inherit; font: inherit; cursor: pointer;
-}
-.dora-row:hover:not(:disabled) { background: var(--surface-2); }
-.dora-row:disabled { cursor: default; }
-.dora-row:disabled .dora-caret { visibility: hidden; }
-.dora-row:last-child { border-bottom: none; }
-.dora-caret { color: var(--muted); font-size: 1.1rem; line-height: 1; }
-/* min-width: 0 lets the label column shrink past its content; without it a
-   flex item refuses to go below its longest word and pushes out of the panel. */
-.dora-main { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
-.dora-dims { display: flex; gap: 6px; flex-wrap: wrap; }
-/* The metric reading keeps its width; the dimensions absorb what is left. */
-.dora-right { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
-.dora-value { font-size: 1.1rem; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 58px; text-align: right; white-space: nowrap; }
-.dora-sample { color: var(--muted); font-size: .74rem; }
-.spark { color: var(--accent); display: block; }
+.dora-grid { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
+/* One block per metric. The whole block opens the detail — the value, its
+   trend and the caret are one target rather than three — but the anchor is the
+   caret, stretched over the card from underneath. Wrapping the card in a link
+   would swallow the help button inside it. */
+.metric-card { position: relative; display: flex; flex-direction: column; gap: 4px; }
+.metric-card-link { margin-left: auto; display: inline-flex; align-items: center; }
+.metric-card-link::after { content: ""; position: absolute; inset: 0; border-radius: inherit; }
+.metric-card:hover { border-color: var(--accent); }
+.metric-card:hover .dora-caret { color: var(--accent); }
+.metric-card:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* Above the stretched link, which comes later in the DOM and would otherwise
+   cover it. */
+.metric-card .help-tip { z-index: 1; }
+.metric-card h3 { margin: 0 0 6px; font-size: .95rem; }
+.metric-card-body { display: flex; align-items: center; gap: 14px; }
+.dora-caret { color: var(--muted); font-size: 1.2rem; line-height: 1; }
+.dora-value { font-size: 1.5rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.dora-sample { color: var(--muted); font-size: .76rem; }
 
 /* Metric sub-page: the trend, then what it is made of. */
 .metric-head { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
@@ -274,7 +349,7 @@ h3.with-help, h2.with-help { display: flex; align-items: center; gap: 6px; }
   display: inline-flex; padding: 2px; border: none; border-radius: 50%;
   background: none; color: var(--muted); cursor: pointer;
 }
-.help-btn:hover, .help-btn[aria-expanded="true"] { color: var(--accent); background: var(--surface-2); }
+.help-btn:hover, .help-btn.is-open { color: var(--accent); background: var(--surface-2); }
 .help-pop {
   position: absolute; top: calc(100% + 6px); left: -8px; z-index: 15; width: max-content;
   max-width: 300px; padding: 10px 12px; border-radius: 8px;
@@ -551,3 +626,338 @@ pre.mono { background: var(--surface-2); border: 1px solid var(--line); border-r
   white-space: pre-wrap; overflow-wrap: anywhere;
 }
 .job-warnings { margin: 0; padding-left: 16px; color: var(--warn); }
+
+/* ───────── Overview
+   The landing page reads as one board, not as a stack of cards: hairlines
+   between rows rather than a panel around each block, so the eye crosses from
+   what is running to what is in the way without a border in between. */
+.overview { display: flex; flex-direction: column; gap: 22px; }
+.overview .page-head { margin-bottom: 0; }
+.overview .filters-row { margin-bottom: 0; }
+
+/* Age of what is on screen, and whether the machinery behind it is running. */
+.freshness { margin: 0 auto 0 12px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.freshness .chip {
+  font-family: var(--mono); font-size: .72rem; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 999px; padding: 2px 10px;
+}
+.freshness .chip.late { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 45%, var(--line)); }
+
+.section-head {
+  display: flex; align-items: baseline; gap: 10px; margin: 0 0 6px;
+  font-family: var(--mono); font-size: .7rem; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--muted);
+}
+.section-count { margin-left: auto; letter-spacing: .06em; }
+.empty-note { padding: 14px 2px; font-size: .86rem; }
+
+/* The board */
+.board { display: flex; flex-direction: column; }
+.group-head {
+  display: flex; align-items: baseline; gap: 10px; margin: 14px 0 2px;
+  font-family: var(--mono); font-size: .74rem; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--ink);
+}
+.group-head::after { content: ""; flex: 1; height: 1px; background: var(--line); order: 3; }
+.group-count { color: var(--muted); letter-spacing: .04em; text-transform: none; order: 2; }
+.group-alert { color: var(--crit); letter-spacing: .04em; text-transform: none; order: 4; }
+.board-row {
+  display: grid; grid-template-columns: minmax(140px, 1.1fr) auto 88px 110px minmax(0, 1.4fr) 92px;
+  align-items: center; gap: 14px;
+  padding: 9px 6px; margin: 0 -6px;
+  border-bottom: 1px solid var(--line); border-radius: var(--radius);
+  font-size: .86rem;
+}
+.board-row:hover { background: var(--surface); }
+.board-row.alert { background: color-mix(in srgb, var(--crit) 7%, transparent); }
+.env-name { font-family: var(--mono); font-weight: 600; overflow-wrap: anywhere; }
+.env-ref { overflow-wrap: anywhere; }
+.env-dims { gap: 4px; }
+.env-age { font-family: var(--mono); font-size: .76rem; color: var(--muted); text-align: right; white-space: nowrap; }
+.pill.attr.missing { color: var(--muted); border-style: dashed; }
+.pill.attr.missing b { color: var(--muted); }
+@media (max-width: 900px) {
+  .board-row { grid-template-columns: 1fr auto; grid-auto-flow: row; row-gap: 6px; }
+  .env-age { text-align: left; }
+}
+
+/* Eleven outcomes, oldest on the left. A failure is a notch as well as a
+   colour: colour alone would make a run of them look like a single one. */
+.heartbeat { display: inline-flex; gap: 2px; align-items: flex-end; height: 18px; }
+.heartbeat i { display: block; width: 6px; border-radius: 1px; }
+.heartbeat i.ok { height: 18px; background: color-mix(in srgb, var(--good) 65%, transparent); }
+.heartbeat i.ko { height: 7px; background: var(--crit); }
+.heartbeat i.run { height: 12px; background: var(--live); }
+
+.state { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; white-space: nowrap; }
+.state::before { content: ""; width: 7px; height: 7px; flex-shrink: 0; border-radius: 2px; }
+.state.ok { color: var(--good); }
+.state.ok::before { background: var(--good); }
+.state.ko { color: var(--crit); }
+.state.ko::before { background: var(--crit); transform: rotate(45deg); }
+.state.run { color: var(--live); }
+.state.run::before { background: var(--live); border-radius: 50%; }
+.state.idle { color: var(--muted); }
+.state.idle::before { background: var(--muted); }
+
+/* Flow and friction, side by side */
+.split { display: grid; grid-template-columns: 1.15fr 1fr; gap: 24px; align-items: start; }
+@media (max-width: 900px) { .split { grid-template-columns: 1fr; } }
+
+.flow-row {
+  display: grid; grid-template-columns: minmax(0, 1fr) 84px 92px 72px;
+  align-items: center; gap: 12px;
+  padding: 9px 6px; margin: 0 -6px;
+  border-bottom: 1px solid var(--line); border-radius: var(--radius);
+  color: inherit; text-decoration: none; font-size: .86rem;
+}
+.flow-row:hover { background: var(--surface); text-decoration: none; }
+.flow-label { min-width: 0; }
+.flow-value { font-family: var(--mono); font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+.delta { font-family: var(--mono); font-size: .76rem; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.delta.up { color: var(--good); }
+.delta.down { color: var(--crit); }
+.delta.flat { color: var(--muted); }
+
+.friction { display: flex; flex-direction: column; }
+.friction-row {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 9px 6px; border-bottom: 1px solid var(--line); font-size: .86rem;
+}
+.friction-row:last-child { border-bottom: none; }
+.friction-mark { width: 14px; flex-shrink: 0; font-family: var(--mono); color: var(--muted); }
+.friction-row.warn .friction-mark { color: var(--warn); }
+.friction-row.crit .friction-mark { color: var(--crit); }
+.friction-value { margin-left: auto; font-family: var(--mono); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* The last day, one lane per value of whatever the board is folded on. */
+.timeline { display: flex; flex-direction: column; gap: 4px; }
+.timeline-axis {
+  display: flex; justify-content: space-between; padding-left: 116px;
+  font-family: var(--mono); font-size: .68rem; color: var(--muted);
+}
+.timeline-lane { display: grid; grid-template-columns: 116px minmax(0, 1fr); align-items: center; }
+.timeline-name { font-family: var(--mono); font-size: .74rem; color: var(--muted); overflow-wrap: anywhere; }
+.timeline-track { position: relative; height: 22px; border-bottom: 1px solid var(--line); }
+.timeline-track > i {
+  position: absolute; top: 6px; width: 3px; height: 10px; border-radius: 1px;
+  background: color-mix(in srgb, var(--good) 70%, transparent); transform: translateX(-50%);
+}
+.timeline-track > i.ko { top: 3px; width: 4px; height: 16px; background: var(--crit); }
+.timeline-now { position: absolute; top: -2px; bottom: -2px; right: 0; left: auto !important; width: 1px; height: auto; background: var(--live); transform: none; }
+@media (max-width: 900px) {
+  .timeline-axis { padding-left: 0; }
+  .timeline-lane { grid-template-columns: 1fr; }
+}
+
+/* The exhaustive lists, folded under the summary that replaced them. */
+.detail-panels { display: flex; flex-direction: column; gap: 10px; }
+.detail-panels details {
+  border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface);
+  padding: 0 var(--density);
+}
+.detail-panels summary {
+  cursor: pointer; padding: 12px 0; font-size: .88rem; font-weight: 600;
+}
+.detail-panels summary:hover { color: var(--accent-deep); }
+.detail-panels details[open] summary { border-bottom: 1px solid var(--line); }
+.detail-panels details > *:last-child { padding-bottom: 14px; }
+
+/* Sparkline — filled under the line, with its last point called out. */
+.spark { display: block; }
+.spark-area { fill: currentColor; opacity: .14; }
+.spark-line { stroke: currentColor; stroke-width: 1.4; stroke-linejoin: round; stroke-linecap: round; }
+.spark-end { fill: currentColor; }
+.spark.tone-good { color: var(--good); }
+.spark.tone-bad { color: var(--crit); }
+.spark.tone-neutral { color: var(--muted); }
+
+/* Switching how the page presents itself, from the page itself: the moment
+   somebody wants the dark one is while they are reading, not in a settings
+   screen they would have to come back from. */
+.display-switch { display: flex; align-items: center; gap: 8px; }
+.display-switch .filter-field select { max-width: 200px; }
+.mode-switch {
+  display: inline-flex; gap: 2px; padding: 2px;
+  border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
+}
+.mode-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 24px; padding: 0; cursor: pointer;
+  font-size: .82rem; line-height: 1;
+  background: none; border: none; border-radius: 999px; color: var(--muted);
+}
+.mode-btn:hover:not(:disabled) { color: var(--ink); background: var(--surface-2); }
+.mode-btn[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.mode-btn:disabled { opacity: .5; cursor: default; }
+
+/* Named for assistive technology, absent from the layout. */
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0;
+}
+
+/* ───────── Direction B — the instrument panel */
+.gauges { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+@media (max-width: 900px) { .gauges { grid-template-columns: repeat(2, 1fr); } }
+.gauge-card {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; text-align: center;
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 16px 12px 14px;
+}
+.gauge-wrap { position: relative; width: 120px; height: 66px; }
+.gauge-blank { width: 120px; height: 66px; }
+.gauge-value {
+  position: absolute; inset: auto 0 2px; text-align: center;
+  font-size: 1.3rem; font-weight: 700; letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+}
+/* Bands: the one occupied is saturated, the rest held in reserve so the eye
+   lands on where the reading sits rather than on the scale itself. */
+.gauge-band { stroke-width: 9; opacity: .13; }
+.gauge-band.is-active { opacity: 1; }
+.gauge-band.tier-low { stroke: var(--tier-low); }
+.gauge-band.tier-medium { stroke: var(--tier-medium); }
+.gauge-band.tier-high { stroke: var(--tier-high); }
+.gauge-band.tier-elite { stroke: var(--tier-elite); }
+.gauge-marker-ring { fill: var(--surface); }
+.gauge-marker.tier-low { fill: var(--tier-low); }
+.gauge-marker.tier-medium { fill: var(--tier-medium); }
+.gauge-marker.tier-high { fill: var(--tier-high); }
+.gauge-marker.tier-elite { fill: var(--tier-elite); }
+.gauge-tier {
+  margin-top: 4px; font-family: var(--mono); font-size: .68rem;
+  letter-spacing: .12em; text-transform: uppercase; font-weight: 600;
+}
+.gauge-tier.tier-low { color: var(--tier-low); }
+.gauge-tier.tier-medium { color: var(--tier-medium); }
+.gauge-tier.tier-high { color: var(--tier-high); }
+.gauge-tier.tier-elite { color: var(--tier-elite); }
+.gauge-tier.tier-none { color: var(--muted); }
+.gauge-label { font-size: .82rem; color: var(--muted); line-height: 1.35; }
+.gauge-trend { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+
+/* The pivot: one dimension down the rows, another across the columns. */
+.matrix-head { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+.matrix-head .section-head { flex: 1; min-width: 160px; margin-bottom: 0; }
+.matrix-axes { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.matrix-axes select { height: 30px; padding: 0 8px; font-size: .8rem; }
+.matrix-scroll { overflow-x: auto; margin-top: 8px; }
+.matrix {
+  display: grid; gap: 1px; min-width: 480px;
+  background: var(--line); border: 1px solid var(--line);
+  border-radius: var(--radius); overflow: hidden;
+}
+.matrix > * { background: var(--surface); padding: 9px 12px; min-width: 0; }
+.matrix-corner, .matrix-column, .matrix-row-head {
+  background: var(--surface-2); font-family: var(--mono); font-size: .68rem;
+  letter-spacing: .1em; text-transform: uppercase; color: var(--muted);
+}
+.matrix-row-head {
+  text-transform: none; letter-spacing: .03em; font-size: .8rem;
+  font-weight: 600; color: var(--ink); overflow-wrap: anywhere;
+}
+/* A severity stripe rather than a tinted cell: the grid stays readable at a
+   glance without the colour swallowing the version it is about. */
+.matrix-cell { display: flex; flex-direction: column; gap: 3px; border-left: 3px solid transparent; }
+.matrix-cell.ok { border-left-color: var(--good); }
+.matrix-cell.ko { border-left-color: var(--crit); }
+.matrix-cell.run { border-left-color: var(--live); }
+.matrix-cell.idle { border-left-color: var(--muted); }
+.matrix-cell.empty { background: var(--surface-2); }
+.matrix-ref { font-size: .8rem; overflow-wrap: anywhere; }
+.matrix-none { font-family: var(--mono); font-size: .8rem; color: var(--muted); }
+.matrix-sub { font-size: .7rem; }
+
+/* ───────── Direction C — the delivery stream */
+.stream { display: grid; grid-template-columns: 1.5fr 1fr; gap: 24px; align-items: start; }
+@media (max-width: 900px) { .stream { grid-template-columns: 1fr; } }
+.river { display: flex; flex-direction: column; }
+.entry {
+  display: grid; grid-template-columns: 54px 18px minmax(0, 1fr); gap: 10px;
+  padding: 10px 0; border-bottom: 1px solid var(--line);
+}
+.entry:last-child { border-bottom: none; }
+.entry-time {
+  font-family: var(--mono); font-size: .78rem; color: var(--muted);
+  font-variant-numeric: tabular-nums; padding-top: 1px;
+}
+.entry-mark { font-family: var(--mono); font-size: .8rem; text-align: center; padding-top: 1px; }
+.entry.deploy .entry-mark { color: var(--good); }
+.entry.failure .entry-mark { color: var(--crit); }
+.entry.incident .entry-mark { color: var(--warn); }
+.entry.resolved .entry-mark { color: var(--muted); }
+.entry-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.entry-title { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; font-size: .87rem; }
+.entry-title b { font-family: var(--mono); font-weight: 600; }
+.entry-kind {
+  font-size: .68rem; letter-spacing: .08em; text-transform: uppercase; color: var(--muted);
+}
+.entry-detail { font-family: var(--mono); font-size: .76rem; color: var(--muted); overflow-wrap: anywhere; }
+.day-rule {
+  display: flex; align-items: center; gap: 10px; margin: 16px 0 4px;
+  font-family: var(--mono); font-size: .68rem; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--muted);
+}
+.day-rule::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+.rail { display: flex; flex-direction: column; gap: 14px; }
+.rail-block {
+  background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); padding: 12px var(--density);
+}
+.rail-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 0; border-bottom: 1px solid var(--line); font-size: .82rem;
+}
+.rail-row:last-child { border-bottom: none; }
+.rail-row .flow-value, .rail-row .state { margin-left: auto; }
+.rail-row .env-ref { color: var(--muted); }
+
+/* ───────── Wall mode
+   A screen nobody is standing at: read from across the room, operated by
+   nobody. The type grows, everything meant to be clicked goes, and what is
+   left is the reading. */
+:root[data-wall] { font-size: 20px; }
+:root[data-wall] .content { max-width: none; padding: 28px 36px; }
+:root[data-wall] .overview { gap: 30px; }
+:root[data-wall] .page-head h2 { font-size: 1.6rem; }
+:root[data-wall] .section-head { font-size: .8rem; letter-spacing: .18em; }
+:root[data-wall] .board-row,
+:root[data-wall] .flow-row,
+:root[data-wall] .friction-row,
+:root[data-wall] .rail-row,
+:root[data-wall] .entry { padding-top: 13px; padding-bottom: 13px; }
+:root[data-wall] .heartbeat { height: 24px; }
+:root[data-wall] .heartbeat i { width: 8px; }
+:root[data-wall] .heartbeat i.ok { height: 24px; }
+:root[data-wall] .dora-value,
+:root[data-wall] .flow-value,
+:root[data-wall] .gauge-value { font-size: 1.35rem; }
+/* Hover tells nothing to a room. The help buttons would only sit there as
+   marks nobody can press. */
+:root[data-wall] .help-tip { display: none; }
+/* Long enough to be read at a glance, and never so long that a wall of
+   environments scrolls out of sight. */
+:root[data-wall] .detail-panels { display: none; }
+
+/* Discreet: it is a destination somebody chooses once, not an action they
+   take daily. */
+.wall-enter { color: var(--muted); font-size: .82rem; }
+.wall-enter:hover { color: var(--ink); text-decoration: none; }
+
+.wall-exit {
+  margin-left: auto; padding: 6px 12px; border-radius: var(--radius);
+  border: 1px solid var(--line); background: var(--surface);
+  color: var(--muted); font-size: .8rem; text-decoration: none;
+  opacity: 0; transition: opacity .15s ease;
+}
+/* Revealed by any pointer movement over the page: whoever walks up to the
+   monitor finds it without meaning to. */
+.app:hover .wall-exit, .wall-exit:focus-visible { opacity: 1; }
+.wall-exit:hover { color: var(--ink); border-color: var(--accent); text-decoration: none; }
+@media (prefers-reduced-motion: reduce) { /* Discreet: it is a destination somebody chooses once, not an action they
+   take daily. */
+.wall-enter { color: var(--muted); font-size: .82rem; }
+.wall-enter:hover { color: var(--ink); text-decoration: none; }
+
+.wall-exit { transition: none; } }

@@ -1,12 +1,14 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
-import type {
-  AuthState,
-  Page,
-  PasswordResetIssued,
-  PasswordResetTarget,
-  UserPublic,
-  UserRole,
+import {
+  DISPLAY_MODES,
+  OVERVIEW_DIRECTIONS,
+  type AuthState,
+  type Page,
+  type PasswordResetIssued,
+  type PasswordResetTarget,
+  type UserPublic,
+  type UserRole,
 } from '@repo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { SettingsService } from '../settings/settings.service';
@@ -234,6 +236,15 @@ export class AuthService {
       const ok = await verifyPassword(dto.currentPassword ?? '', current.passwordHash);
       if (!ok) throw new CodedException('errors.auth.wrongPassword', HttpStatus.BAD_REQUEST);
     }
+    // Written here rather than through updateUser: how somebody reads the
+    // application is their own business, and no admin route sets it for them.
+    // Undefined leaves the column alone, null clears it back to the default.
+    if (dto.displayDirection !== undefined || dto.displayMode !== undefined) {
+      await this.prisma.user.update({
+        where: { id },
+        data: { displayDirection: dto.displayDirection, displayMode: dto.displayMode },
+      });
+    }
     return this.updateUser(id, { name: dto.name, password: dto.password }, keepToken);
   }
 
@@ -341,6 +352,8 @@ function toPublic(u: {
   role: UserRole;
   createdAt: Date;
   updatedAt: Date;
+  displayDirection: string | null;
+  displayMode: string | null;
 }): UserPublic {
   return {
     id: u.id,
@@ -349,5 +362,11 @@ function toPublic(u: {
     role: u.role,
     createdAt: u.createdAt.toISOString(),
     updatedAt: u.updatedAt.toISOString(),
+    display: {
+      // Narrowed on the way out rather than trusted: the columns are plain
+      // text, and a value left by an older version must not reach the front.
+      direction: OVERVIEW_DIRECTIONS.find((d) => d === u.displayDirection) ?? null,
+      mode: DISPLAY_MODES.find((m) => m === u.displayMode) ?? null,
+    },
   };
 }

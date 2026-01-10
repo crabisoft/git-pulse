@@ -1,6 +1,5 @@
 import { Transform } from 'class-transformer';
-import { IsArray, IsEnum, IsISO8601, IsOptional, IsString, Matches, MinLength } from 'class-validator';
-import type { MetricBucket } from '@repo/shared';
+import { IsArray, IsISO8601, IsOptional, IsString, Matches, MinLength } from 'class-validator';
 
 /** Accepts `?dimension=a:1&dimension=b:2` as well as `?dimension=a:1,b:2`. */
 function toList({ value }: { value: unknown }): string[] | undefined {
@@ -11,16 +10,16 @@ function toList({ value }: { value: unknown }): string[] | undefined {
     .filter(Boolean);
 }
 
-/** One metric, one dimension combination, over a period. */
+/** One metric over a period, sliced by whatever the reader filtered on. */
 export class MetricSeriesDto {
   @IsString()
   @MinLength(1)
   metric!: string;
 
   /**
-   * Slices as the DORA endpoint does, `key:value`. An omitted filter means the
-   * combination with no dimension at all, not "every combination": summing
-   * unrelated slices into one line would be meaningless.
+   * Slices as the DORA endpoint does, `key:value`. A partial filter keeps every
+   * combination that carries those pairs and folds them into one line — the
+   * same reading the value beside the chart is folded to.
    */
   @IsOptional()
   @Transform(toList)
@@ -35,8 +34,4 @@ export class MetricSeriesDto {
   @IsOptional()
   @IsISO8601()
   to?: string;
-
-  @IsOptional()
-  @IsEnum(['hour', 'day', 'week'] as const)
-  bucket?: MetricBucket;
 }

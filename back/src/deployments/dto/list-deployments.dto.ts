@@ -2,6 +2,7 @@ import { Transform } from 'class-transformer';
 import { IsArray, IsIn, IsOptional, IsString, Matches } from 'class-validator';
 import type { DeploymentBase, PipelineStatus } from '@repo/shared';
 import { DoraQueryDto } from '../../dora/dto/dora-query.dto';
+import { IsLimit, IsOffset } from '../../common/pagination';
 
 /** Every status a deployment may carry — the values `@IsIn` accepts. */
 const STATUSES = [
@@ -30,6 +31,17 @@ function toList({ value }: { value: unknown }): string[] | undefined {
  * would be worse than either of them being wrong.
  */
 export class ListDeploymentsDto extends DoraQueryDto {
+  /**
+   * Declared here rather than inherited: the DORA report folds into one row
+   * per metric and has nothing to page through, while a list of deployments
+   * very much does.
+   */
+  @IsLimit()
+  limit?: number;
+
+  @IsOffset()
+  offset?: number;
+
   /** Environment names, matched exactly. Absent matches every one. */
   @IsOptional()
   @Transform(toList)

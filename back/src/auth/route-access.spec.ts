@@ -6,6 +6,8 @@ import { AuthController } from './auth.controller';
 import { UsersController } from './users.controller';
 import { SettingsController } from '../settings/settings.controller';
 import { JobsController } from '../jobs/jobs.controller';
+import { OverviewController } from '../overview/overview.controller';
+import { IncidentsController } from '../incidents/incidents.controller';
 
 /**
  * The level a route ends up with, decorators and default included — read off
@@ -45,6 +47,16 @@ describe('route access', () => {
   it('lets the settings be read wherever the dashboard is, and written by admins only', () => {
     expect(levelOf(SettingsController, 'get')).toBe('viewer');
     expect(levelOf(SettingsController, 'update')).toBe('admin');
+  });
+
+  it('reads the overview wherever the dashboard is read', () => {
+    // Same level as the board it replaces. What it adds beyond that board —
+    // the state of the queues, the remaining quota — is withheld from a caller
+    // without an account by the service itself, not by this decorator.
+    expect(levelOf(OverviewController, 'report')).toBe('viewer');
+    // Incident titles and links, at the level that already shows pull request
+    // titles and links. Nothing here carries a payload or a credential.
+    expect(levelOf(IncidentsController, 'list')).toBe('viewer');
   });
 
   it('keeps the queues with the admins, reading them included', () => {
