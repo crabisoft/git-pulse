@@ -33,6 +33,17 @@ export class UpdateSettingsDto {
   @MinLength(1)
   collectCron?: string;
 
+  /** Cron pattern of the store's purge — its own schedule, not the collection's. */
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  pruneCron?: string;
+
+  /** Days kept beyond each source's ingestion depth before a row is swept. */
+  @IsOptional()
+  @IsInt()
+  retentionMarginDays?: number;
+
   @IsOptional()
   @IsInt()
   pageSize?: number;

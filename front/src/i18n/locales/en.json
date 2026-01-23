@@ -87,6 +87,10 @@
       "pageSizeHint": "default page size of every list",
       "collectCron": "Collection cron",
       "collectCronHint": "e.g. */15 * * * * (every 15 minutes)",
+      "pruneCron": "Purge schedule",
+      "pruneCronHint": "(cron; sweeps each source down to its own history depth)",
+      "retentionMargin": "Retention margin (days)",
+      "retentionMarginHint": "kept beyond each source's depth, so deepening one finds something already there",
       "languageHint": "kept in this browser",
       "failureSource": "Failure source",
       "failureSourceHint": "what counts as a failure for change failure rate and MTTR",
@@ -253,6 +257,7 @@
       "incidentTrackerNotAttached": "The incident tracker must be one of the trackers attached to the source.",
       "incidentTrackerUnsupported": "Incidents cannot be read from a {{kind}} tracker yet.",
       "webhooksRequireStored": "Webhooks only make sense with stored reads: switch the source to “Stored” first.",
+      "historyRequiresStored": "A history depth only makes sense with stored reads: switch the source to “Stored” first.",
       "webhooksDisabled": "Webhooks are not enabled on this source."
     },
     "envRule": {
@@ -271,13 +276,15 @@
       "unreachable": "Redis is not answering: {{error}}",
       "unknownQueue": "Unknown queue: {{name}}",
       "notFound": "This job is no longer held: {{id}}",
-      "notFailed": "This job is not failed any more (it is {{state}}) — somebody has already retried it."
+      "notFailed": "This job is not failed any more (it is {{state}}) — somebody has already retried it.",
+      "failed": "The run failed: {{error}}"
     },
     "collect": {
       "ingest": "Ingestion failed, the snapshot was taken off what was already stored: {{error}}",
       "dora": "DORA snapshot failed: {{error}}",
       "changelogs": "Deployment changelogs could not be archived: {{error}}",
-      "changelogsPartial": "{{count}} deployment(s) could not be archived — their contents will be lost once they age out of the store."
+      "changelogsPartial": "{{count}} deployment(s) could not be archived — their contents will be lost once they age out of the store.",
+      "refreshInFlight": "This source is already being re-read ({{state}}). Wait for that run to finish before asking for another."
     },
     "ticketRule": {
       "notFound": "Ticket rule not found.",
@@ -530,7 +537,12 @@
       "mode": "Data read from",
       "modeHint": "(decides whether the API quota follows the traffic or the collection)",
       "webhooks": "Accept events (webhooks)",
-      "webhooksHint": "speeds up freshness; the scheduled synchronisation stays the safety net"
+      "webhooksHint": "speeds up freshness; the scheduled synchronisation stays the safety net",
+      "historyDays": "History depth",
+      "historyDaysHint": "how far back the ingestion reads, on the first run and on every reconciliation",
+      "historyFollowsWindow": "Follow the reporting window",
+      "historyOption": "{{count}} days",
+      "historyCostHint": "deeper means more API calls on the first collection, and more rows kept afterwards"
     },
     "repoVisibility": {
       "public": "public",
@@ -581,6 +593,21 @@
       "action": "Collect now",
       "running": "Collecting… a first run over a large scope takes minutes",
       "ok": "Collection done — {{count}} snapshots written."
+    },
+    "refresh": {
+      "action": "Re-read the whole history",
+      "actionDays": "Re-read the whole history ({{days}} days)",
+      "title": "Re-read {{name}}",
+      "explain": "The whole history this source keeps is read again from its platform, rather than what changed since the last run. It runs in the background — you can leave this page. It is the most expensive thing this page starts, and on a wide scope it spends a large part of the API budget.",
+      "depth": "History depth",
+      "keepWindow": "Leave it as it is (follows the reporting window)",
+      "keepDays": "Leave it as it is ({{days}} days)",
+      "depthUnchanged": "the source keeps the depth it already has",
+      "depthPersists": "this becomes the source's depth, from now on — the purge sweeps at it too",
+      "confirm": "Re-read now",
+      "running": "Re-reading in the background…",
+      "done": "Re-read finished.",
+      "evicted": "Re-read finished — the queue no longer holds how it went."
     }
   },
   "ticketRules": {

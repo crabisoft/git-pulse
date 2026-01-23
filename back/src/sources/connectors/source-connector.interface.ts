@@ -80,9 +80,19 @@ export interface SourceConnector {
 
   listPullRequests(ctx: ConnectorContext, repos: string[]): Promise<PullRequest[]>;
 
-  listPipelines(ctx: ConnectorContext, repos: string[]): Promise<Pipeline[]>;
+  /**
+   * Pipelines/runs of these repos, newest first.
+   *
+   * `since` is an ISO date the listing reads back down to, and omitting it asks
+   * for the most recent page only. The two callers want opposite things and
+   * both are right: a live read shows what is happening now and pays for one
+   * page per repo, while an ingestion fills a window it will be reporting over
+   * and has to reach the far end of it.
+   */
+  listPipelines(ctx: ConnectorContext, repos: string[], since?: string): Promise<Pipeline[]>;
 
-  listDeployments(ctx: ConnectorContext, repos: string[]): Promise<Deployment[]>;
+  /** Deployments of these repos, newest first — same `since` rule as above. */
+  listDeployments(ctx: ConnectorContext, repos: string[], since?: string): Promise<Deployment[]>;
 
   /** Merged PRs/MRs updated since the given ISO date (for lead time). */
   listMergedPullRequests(

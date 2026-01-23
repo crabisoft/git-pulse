@@ -37,6 +37,17 @@ export class JobsController {
     return this.jobs.degraded(query.queue, toWindow(query, await this.settings.pageSize()));
   }
 
+  /**
+   * One job, for whoever started it and wants to know where it got to.
+   *
+   * Admin like the rest of this controller — it is reached from the sources
+   * page, which is admin already, and it carries what a run gave up on.
+   */
+  @Get(':queue/:id')
+  status(@Param('queue') queue: string, @Param('id') id: string) {
+    return this.jobs.status(queue, id);
+  }
+
   @Post(':queue/:id/retry')
   @HttpCode(204)
   async retry(@Param('queue') queue: string, @Param('id') id: string): Promise<void> {

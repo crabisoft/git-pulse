@@ -28,6 +28,8 @@ import type {
   DeploymentReport,
   DoraReport,
   JobFailure,
+  JobHandle,
+  JobStatus,
   JobWarning,
   JobsSnapshot,
   LlmKind,
@@ -363,6 +365,24 @@ export const api = {
    */
   collectSource: (id: string) =>
     request<MetricSnapshotPublic[]>(`/sources/${id}/collect`, { method: 'POST' }),
+  /**
+   * Queues a deep re-read of a stored source and returns what to follow it by.
+   *
+   * `historyDays` becomes the source's depth, it does not apply to this run
+   * alone: the purge sweeps each source at the depth the source states, so a
+   * run reaching deeper than that would be swept away shortly after paying for
+   * itself. Omitted keeps whatever the source already states.
+   *
+   * Rejects with 409 while a re-read of the same source is still in flight.
+   */
+  refreshSource: (id: string, historyDays?: number) =>
+    request<JobHandle>(`/sources/${id}/refresh`, {
+      method: 'POST',
+      body: JSON.stringify(historyDays === undefined ? {} : { historyDays }),
+    }),
+  /** Where a queued job got to. `unknown` once the queue has evicted it. */
+  jobStatus: (handle: JobHandle, signal?: AbortSignal) =>
+    request<JobStatus>(`/jobs/${handle.queue}/${handle.id}`, { signal }),
   /** `signal` lets a newer filter cancel the request this one supersedes. */
   live: (sourceId: string, query: DashboardLiveQuery = {}, signal?: AbortSignal) =>
     request<DashboardLive>(

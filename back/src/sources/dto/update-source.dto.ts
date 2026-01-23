@@ -2,13 +2,17 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsInt,
   IsOptional,
   IsString,
   IsUrl,
+  Max,
+  Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { SOURCE_HISTORY_MAX, SOURCE_HISTORY_MIN } from '@repo/shared';
 import type { AuthKind, SourceKind, SourceMode } from '@repo/shared';
 import { GitHubAppDto, ScopeDto } from './create-source.dto';
 
@@ -58,6 +62,17 @@ export class UpdateSourceDto {
   @IsOptional()
   @IsBoolean()
   webhooksEnabled?: boolean;
+
+  /**
+   * Deepening it only takes effect on the next reconciliation, which reads the
+   * whole depth — the refresh action is there for whoever will not wait for it.
+   * Explicit null goes back to following the reporting window.
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(SOURCE_HISTORY_MIN)
+  @Max(SOURCE_HISTORY_MAX)
+  historyDays?: number | null;
 
   /** Classification rules that apply here, from the global set. Replaces it. */
   @IsOptional()

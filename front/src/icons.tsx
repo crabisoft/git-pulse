@@ -167,3 +167,16 @@ export function SyncIcon(props: IconProps) {
     </Svg>
   );
 }
+
+/**
+ * The same circular arrows over a stack: re-reading the whole history a source
+ * keeps, rather than what moved since the last run.
+ */
+export function DeepSyncIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M20 9a8 8 0 0 0-13.6-3.4L3 9M4 15a8 8 0 0 0 13.6 3.4L21 15" />
+      <path d="M3 5v4h4M21 19v-4h-4" />
+    </Svg>
+  );
+}

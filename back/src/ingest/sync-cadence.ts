@@ -72,6 +72,32 @@ export function mergedSince(
 }
 
 /**
+ * How far back this source is ingested, in days.
+ *
+ * A source states its own depth, and one that states none follows the reporting
+ * window — which is what every source did before the field existed, and what
+ * keeps an install that widens its window from finding a store that stayed
+ * shallow. Stated deeper than the window is the point of having it: the store
+ * then holds more than the reports currently read.
+ */
+export function depthDays(historyDays: number | null, windowDays: number): number {
+  return historyDays ?? windowDays;
+}
+
+/**
+ * Lower bound of the pipeline and deployment listings, or null to read only
+ * what is most recent.
+ *
+ * Only a reconciliation reaches for the depth. A delta runs every few minutes
+ * and the newest page is all it can learn from — re-reading a year of history
+ * to find out what happened since lunch would spend the budget the depth was
+ * asked for in the first place.
+ */
+export function listingSince(now: Date, depth: number, full: boolean): Date | null {
+  return full ? new Date(now.getTime() - depth * DAY_MS) : null;
+}
+
+/**
  * Whether this run reconciles.
  *
  * True when a source has never run — it has nothing to be incremental from —

@@ -2,13 +2,17 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsInt,
   IsOptional,
   IsString,
   IsUrl,
+  Max,
+  Min,
   MinLength,
   ValidateNested,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { SOURCE_HISTORY_MAX, SOURCE_HISTORY_MIN } from '@repo/shared';
 import type { AuthKind, SourceKind, SourceMode } from '@repo/shared';
 
 export class ScopeDto {
@@ -86,6 +90,16 @@ export class CreateSourceDto {
   @IsOptional()
   @IsBoolean()
   webhooksEnabled?: boolean;
+
+  /**
+   * How far back the ingestion reads, in days. Omitted follows the reporting
+   * window — and is read by nothing at all in `live` mode.
+   */
+  @IsOptional()
+  @IsInt()
+  @Min(SOURCE_HISTORY_MIN)
+  @Max(SOURCE_HISTORY_MAX)
+  historyDays?: number | null;
 
   /** Classification rules that apply here, from the global set. Replaces it. */
   @IsOptional()

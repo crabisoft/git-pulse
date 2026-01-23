@@ -7,6 +7,8 @@ import {
   QUOTA_RESERVE_PCT_MAX,
   QUOTA_RESERVE_PCT_MIN,
   RELEASE_NOTES_GENERATORS,
+  RETENTION_MARGIN_MAX,
+  RETENTION_MARGIN_MIN,
   type AppSettings,
   type DisplayMode,
   type OverviewDirection,
@@ -195,6 +197,29 @@ export function GeneralSettings({
               onChange={(e) => set('collectCron', e.target.value)}
               required
               spellCheck={false}
+            />
+          </label>
+          <label>
+            {t('settings.general.pruneCron')}{' '}
+            <span className="hint">{t('settings.general.pruneCronHint')}</span>
+            <input
+              className="mono-input"
+              value={form.pruneCron}
+              onChange={(e) => set('pruneCron', e.target.value)}
+              required
+              spellCheck={false}
+            />
+          </label>
+          <label>
+            {t('settings.general.retentionMargin')}{' '}
+            <span className="hint">{t('settings.general.retentionMarginHint')}</span>
+            <input
+              type="number"
+              min={RETENTION_MARGIN_MIN}
+              max={RETENTION_MARGIN_MAX}
+              value={form.retentionMarginDays}
+              onChange={(e) => set('retentionMarginDays', Number(e.target.value))}
+              required
             />
           </label>
 

@@ -1,10 +1,21 @@
-import { Injectable, Logger } from '@nestjs/common';
-import type { CodedMessage, MetricSeries, MetricSnapshotPublic, Page } from '@repo/shared';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
+import type {
+  CodedMessage,
+  JobHandle,
+  MetricSeries,
+  MetricSnapshotPublic,
+  Page,
+} from '@repo/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import { SourcesService } from '../sources/sources.service';
+import { CodedException } from '../common/coded-exception';
+import { JOB_ONESHOT } from '../common/job-options';
 import { foldTrend, unitOf } from '../dora/trend';
 import { DashboardService } from '../dashboard/dashboard.service';
 import { DoraService } from '../dora/dora.service';
-import { SyncService } from '../ingest/sync.service';
+import { SyncService, type SyncOptions } from '../ingest/sync.service';
 import { ChangelogsService } from '../changelogs/changelogs.service';
 import { toPage, type PageWindow } from '../common/pagination';
 
@@ -37,11 +48,51 @@ export class CollectorService {
     private readonly dora: DoraService,
     private readonly sync: SyncService,
     private readonly changelogs: ChangelogsService,
+    private readonly sources: SourcesService,
+    @InjectQueue('collection') private readonly queue: Queue,
   ) {}
 
   /** What a collection wrote, for the caller that has nowhere to put the rest. */
-  async collectSource(sourceId: string): Promise<MetricSnapshotPublic[]> {
-    return (await this.collect(sourceId)).snapshots;
+  async collectSource(sourceId: string, options: SyncOptions = {}): Promise<MetricSnapshotPublic[]> {
+    return (await this.collect(sourceId, options)).snapshots;
+  }
+
+  /**
+   * Queues a deep re-read of a source and hands back what to follow it by.
+   *
+   * The job id is derived from the source, which is what makes a second click
+   * meet the first rather than double it: two deep runs on one source would
+   * spend the budget twice to write the same rows, and would race each other on
+   * the cursors while doing it. An in-flight one is refused rather than
+   * silently dropped — a caller who asked for a year and got nothing has to be
+   * told which of the two happened.
+   *
+   * A settled job is a result being kept for whoever started it, not a claim on
+   * the source: asking again supersedes it.
+   */
+  async queueRefresh(sourceId: string, historyDays?: number): Promise<JobHandle> {
+    // Fails here rather than inside a job nobody is watching, and covers the
+    // depth write below — which needs the source to exist just as much.
+    await this.sources.readSpec(sourceId);
+    if (historyDays !== undefined) {
+      await this.sources.setHistoryDays(sourceId, historyDays);
+    }
+
+    const id = refreshJobId(sourceId);
+    const existing = await this.queue.getJob(id);
+    if (existing) {
+      const state = await existing.getState();
+      if (!settled(state)) {
+        throw new CodedException('errors.collect.refreshInFlight', HttpStatus.CONFLICT, {
+          state,
+        });
+      }
+      await existing.remove();
+    }
+
+    await this.queue.add('collect-source', { sourceId, force: true }, { ...JOB_ONESHOT, jobId: id });
+    this.logger.log(`Relecture complète de ${sourceId} mise en file (${id}).`);
+    return { queue: 'collection', id };
   }
 
   /**
@@ -54,10 +105,10 @@ export class CollectorService {
    * of a view that stopped moving, not a hole in the series. What it gave up on
    * comes back with it rather than staying in the logs — see CollectionOutcome.
    */
-  async collect(sourceId: string): Promise<CollectionOutcome> {
+  async collect(sourceId: string, options: SyncOptions = {}): Promise<CollectionOutcome> {
     const warnings: CodedMessage[] = [];
 
-    await this.sync.syncIfStored(sourceId).catch((e) => {
+    await this.sync.syncIfStored(sourceId, options).catch((e) => {
       this.logger.warn(`Ingestion échouée pour ${sourceId} : ${asMessage(e)}`);
       warnings.push({ code: 'errors.collect.ingest', params: { error: asMessage(e) } });
     });
@@ -224,6 +275,34 @@ export class CollectorService {
 
 function asMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+/**
+ * The one job id a source's deep re-read is ever enqueued under.
+ *
+ * Prefixed rather than being the source id alone: the queue also carries this
+ * source's scheduled collections, which BullMQ names for it, and two kinds of
+ * work sharing an id would make each of them cancel the other.
+ */
+export function refreshJobId(sourceId: string): string {
+  return `refresh:${sourceId}`;
+}
+
+/**
+ * Whether nothing more will happen to a job in this state.
+ *
+ * A whitelist rather than a list of the states known to be running: BullMQ has
+ * grown states before (`prioritized`, `waiting-children`), and one it grows next
+ * has to read as "still going" here. Mistaking a running job for a finished one
+ * would let a second deep read start alongside the first, which is the one
+ * outcome this whole id scheme exists to prevent.
+ *
+ * `unknown` is in because it is what BullMQ answers for a job it can no longer
+ * place at all — one evicted between the fetch and this call. There is nothing
+ * left to collide with.
+ */
+function settled(state: string): boolean {
+  return state === 'completed' || state === 'failed' || state === 'unknown';
 }
 
 function toPublic(r: {

@@ -31,6 +31,31 @@ import { isNotFound, unresolvableRange } from './compare';
  */
 const COMPARE_CAP = 250;
 
+/**
+ * What a live listing reads: the most recent page, and only it.
+ *
+ * A live view answers a request somebody is waiting on, so its cost has to be
+ * one call per repo whatever the repo's history. Depth is the ingestion's job.
+ */
+const LIVE_PIPELINE_PAGE = 20;
+const LIVE_DEPLOYMENT_PAGE = 30;
+const LIVE_MERGED_PAGE = 50;
+
+/**
+ * How many pages a bounded listing will read before giving up on reaching its
+ * bound.
+ *
+ * The bound is a date and the pages are a count, so nothing but this stops a
+ * repository busy enough to have thousands of runs inside the window from
+ * spending a whole budget on one listing. Reaching it is reported rather than
+ * silently accepted: the ingestion then holds less history than was asked for,
+ * and that is worth knowing before the reports are read as gospel.
+ */
+const MAX_PAGES = 20;
+
+/** Page size of a bounded listing — the largest either endpoint accepts. */
+const DEEP_PAGE = 100;
+
 /** A commit as the compare endpoint shapes it — what `toCommit` reads. */
 type CompareCommit = Parameters<typeof toCommit>[0];
 
@@ -122,17 +147,27 @@ export class GitHubConnector implements SourceConnector {
     return out;
   }
 
-  async listPipelines(ctx: ConnectorContext, repos: string[]): Promise<Pipeline[]> {
+  async listPipelines(ctx: ConnectorContext, repos: string[], since?: string): Promise<Pipeline[]> {
     const gh = this.client(ctx);
     const out: Pipeline[] = [];
     for (const repo of repos) {
       ctx.signal?.throwIfAborted();
-      const runs = await gh.rest.actions.listWorkflowRunsForRepo({
-        owner: ctx.scope.owner,
+      const runs = await this.pagesDownTo(
+        ctx,
         repo,
-        per_page: 20,
-      });
-      for (const run of runs.data.workflow_runs) {
+        since,
+        async (page) => {
+          const res = await gh.rest.actions.listWorkflowRunsForRepo({
+            owner: ctx.scope.owner,
+            repo,
+            per_page: since ? DEEP_PAGE : LIVE_PIPELINE_PAGE,
+            page,
+          });
+          return res.data.workflow_runs;
+        },
+        (run) => run.created_at,
+      );
+      for (const run of runs) {
         const created = run.created_at;
         const updated = run.updated_at;
         out.push({
@@ -154,18 +189,32 @@ export class GitHubConnector implements SourceConnector {
     return out;
   }
 
-  async listDeployments(ctx: ConnectorContext, repos: string[]): Promise<Deployment[]> {
+  async listDeployments(
+    ctx: ConnectorContext,
+    repos: string[],
+    since?: string,
+  ): Promise<Deployment[]> {
     const gh = this.client(ctx);
     const out: Deployment[] = [];
     let skipped = 0;
     for (const repo of repos) {
       ctx.signal?.throwIfAborted();
-      const deps = await gh.rest.repos.listDeployments({
-        owner: ctx.scope.owner,
+      const deps = await this.pagesDownTo(
+        ctx,
         repo,
-        per_page: 30,
-      });
-      for (const d of deps.data) {
+        since,
+        async (page) =>
+          (
+            await gh.rest.repos.listDeployments({
+              owner: ctx.scope.owner,
+              repo,
+              per_page: since ? DEEP_PAGE : LIVE_DEPLOYMENT_PAGE,
+              page,
+            })
+          ).data,
+        (d) => d.created_at,
+      );
+      for (const d of deps) {
         // One status call per deployment, and the helper below swallows errors:
         // without this check a cancelled run would keep polling to no end.
         ctx.signal?.throwIfAborted();
@@ -210,15 +259,29 @@ export class GitHubConnector implements SourceConnector {
     let skipped = 0;
     for (const repo of repos) {
       ctx.signal?.throwIfAborted();
-      const prs = await gh.rest.pulls.list({
-        owner: ctx.scope.owner,
+      // Sorted by update and bounded on it, while what is kept is the merge:
+      // merging is an update, so a request last touched before the bound cannot
+      // have been merged after it. The pages stop on the weaker of the two
+      // dates, and the filter below keeps the right ones out of what they hold.
+      const prs = await this.pagesDownTo(
+        ctx,
         repo,
-        state: 'closed',
-        sort: 'updated',
-        direction: 'desc',
-        per_page: 50,
-      });
-      for (const pr of prs.data) {
+        since,
+        async (page) =>
+          (
+            await gh.rest.pulls.list({
+              owner: ctx.scope.owner,
+              repo,
+              state: 'closed',
+              sort: 'updated',
+              direction: 'desc',
+              per_page: LIVE_MERGED_PAGE,
+              page,
+            })
+          ).data,
+        (pr) => pr.updated_at,
+      );
+      for (const pr of prs) {
         if (!pr.merged_at || new Date(pr.merged_at).getTime() < sinceMs) continue;
         // Two extra calls per PR: worth checking inside this loop too.
         ctx.signal?.throwIfAborted();
@@ -254,6 +317,51 @@ export class GitHubConnector implements SourceConnector {
       );
     }
     return out;
+  }
+
+  /**
+   * Reads a newest-first listing back down to `since`, or reads one page when
+   * nothing bounds it.
+   *
+   * Written by hand rather than through `gh.paginate`, which has no way to stop
+   * early: these endpoints answer for the whole life of a repository, and the
+   * difference between reading a window and reading a history is the whole cost
+   * of a first ingestion.
+   *
+   * Items older than the bound are dropped rather than returned: the page that
+   * crosses it holds both sides, and a caller asked for a window.
+   */
+  private async pagesDownTo<T>(
+    ctx: ConnectorContext,
+    repo: string,
+    since: string | undefined,
+    fetch: (page: number) => Promise<T[]>,
+    at: (item: T) => string,
+  ): Promise<T[]> {
+    const first = await fetch(1);
+    if (!since) return first;
+
+    const sinceMs = new Date(since).getTime();
+    const older = (item: T) => new Date(at(item)).getTime() < sinceMs;
+    const out = [...first];
+    // An empty page is the end of the listing; one holding something older than
+    // the bound is the end of what was asked for. Either way there is nothing
+    // left to read below.
+    let done = first.length === 0 || first.some(older);
+    let page = 1;
+    while (!done && page < MAX_PAGES) {
+      ctx.signal?.throwIfAborted();
+      page += 1;
+      const next = await fetch(page);
+      out.push(...next);
+      done = next.length === 0 || next.some(older);
+    }
+    if (!done) {
+      this.logger.warn(
+        `Historique tronqué pour ${repo} : ${MAX_PAGES} pages lues sans atteindre ${since}.`,
+      );
+    }
+    return out.filter((item) => !older(item));
   }
 
   async listTags(ctx: ConnectorContext, repo: string): Promise<Tag[]> {

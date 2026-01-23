@@ -6,6 +6,8 @@ import {
   PAGE_LIMIT_MAX,
   QUOTA_RESERVE_PCT_MAX,
   QUOTA_RESERVE_PCT_MIN,
+  RETENTION_MARGIN_MAX,
+  RETENTION_MARGIN_MIN,
   DISPLAY_MODES,
   OVERVIEW_DIRECTIONS,
   RELEASE_NOTES_GENERATORS,
@@ -24,6 +26,14 @@ const FALLBACKS: AppSettings = {
   doraWindowDays: 30,
   stalePrHours: 72,
   collectCron: '*/15 * * * *',
+  // Nightly, and off-peak. What it deletes is bounded by each source's depth,
+  // so nothing is gained by sweeping more often than the depths change — and a
+  // sweep that ran every quarter of an hour spent its time proving there was
+  // nothing to delete.
+  pruneCron: '0 3 * * *',
+  // A week: enough to cover a change of mind about a depth, short enough that
+  // it is not quietly a second depth of its own.
+  retentionMarginDays: 7,
   pageSize: PAGE_LIMIT_DEFAULT,
   // Open by default: an install that has just been upgraded keeps showing its
   // dashboard to everyone it showed it to yesterday. Closing it is a decision,
@@ -52,6 +62,7 @@ const LIMITS = {
   stalePrHours: { min: 1, max: 8760 },
   pageSize: { min: 1, max: PAGE_LIMIT_MAX },
   quotaReservePct: { min: QUOTA_RESERVE_PCT_MIN, max: QUOTA_RESERVE_PCT_MAX },
+  retentionMarginDays: { min: RETENTION_MARGIN_MIN, max: RETENTION_MARGIN_MAX },
 };
 
 type Listener = (settings: AppSettings) => void;
@@ -75,6 +86,11 @@ export class SettingsService {
       doraWindowDays: readNumber(stored.get('doraWindowDays'), FALLBACKS.doraWindowDays),
       stalePrHours: readNumber(stored.get('stalePrHours'), FALLBACKS.stalePrHours),
       collectCron: stored.get('collectCron') ?? FALLBACKS.collectCron,
+      pruneCron: stored.get('pruneCron') ?? FALLBACKS.pruneCron,
+      retentionMarginDays: readNumber(
+        stored.get('retentionMarginDays'),
+        FALLBACKS.retentionMarginDays,
+      ),
       pageSize: readNumber(stored.get('pageSize'), FALLBACKS.pageSize),
       publicDashboard: readBoolean(stored.get('publicDashboard'), FALLBACKS.publicDashboard),
       failureSource: readFailureSource(stored.get('failureSource')),
@@ -101,7 +117,9 @@ export class SettingsService {
     assertInRange('stalePrHours', dto.stalePrHours);
     assertInRange('pageSize', dto.pageSize);
     assertInRange('quotaReservePct', dto.quotaReservePct);
+    assertInRange('retentionMarginDays', dto.retentionMarginDays);
     if (dto.collectCron !== undefined) assertValidCron(dto.collectCron);
+    if (dto.pruneCron !== undefined) assertValidCron(dto.pruneCron);
     await this.assertIncidentsConfigured(dto);
 
     const entries = Object.entries(dto).filter(([, value]) => value !== undefined);

@@ -4,9 +4,19 @@ import { Queue } from 'bullmq';
 import { SettingsService } from '../settings/settings.service';
 import { JOB_HISTORY } from '../common/job-options';
 
-const JOB_NAME = 'collect-all';
+const COLLECT_JOB = 'collect-all';
+const PRUNE_JOB = 'prune-store';
 
-/** Registers the repeatable collect-all job and keeps it in sync with the settings. */
+/**
+ * Registers the repeatable jobs of the collection queue and keeps them in sync
+ * with the settings.
+ *
+ * Two schedules rather than one, and that is the point: the collection runs at
+ * whatever cadence freshness asks for, while the purge deletes by each source's
+ * depth and has no reason to run more often than those change. They shared a
+ * schedule until the depth became a per-source setting, at which point a widened
+ * depth was raced by a sweep at the old one minutes later.
+ */
 @Injectable()
 export class CollectionScheduler implements OnModuleInit {
   private readonly logger = new Logger(CollectionScheduler.name);
@@ -17,19 +27,23 @@ export class CollectionScheduler implements OnModuleInit {
   ) {}
 
   async onModuleInit(): Promise<void> {
-    const { collectCron } = await this.settings.get();
-    await this.schedule(collectCron);
+    const { collectCron, pruneCron } = await this.settings.get();
+    await this.schedule(COLLECT_JOB, collectCron);
+    await this.schedule(PRUNE_JOB, pruneCron);
     this.settings.onChange((s) => {
-      void this.schedule(s.collectCron).catch((e) => {
-        this.logger.error(`Replanification de la collecte échouée : ${asMessage(e)}`);
+      void Promise.all([
+        this.schedule(COLLECT_JOB, s.collectCron),
+        this.schedule(PRUNE_JOB, s.pruneCron),
+      ]).catch((e) => {
+        this.logger.error(`Replanification échouée : ${asMessage(e)}`);
       });
     });
   }
 
   /** Drops the schedules on other patterns, then registers the job on this one. */
-  private async schedule(pattern: string): Promise<void> {
+  private async schedule(name: string, pattern: string): Promise<void> {
     for (const job of await this.queue.getRepeatableJobs()) {
-      if (job.name === JOB_NAME && job.pattern !== pattern) {
+      if (job.name === name && job.pattern !== pattern) {
         await this.queue.removeRepeatableByKey(job.key);
       }
     }
@@ -39,8 +53,8 @@ export class CollectionScheduler implements OnModuleInit {
     // No retry either, unlike the jobs it fans out: the cron brings this one
     // back on its own, and a second attempt would enqueue the whole fan-out
     // twice over.
-    await this.queue.add(JOB_NAME, {}, { repeat: { pattern }, ...JOB_HISTORY });
-    this.logger.log(`Collecte planifiée (cron "${pattern}").`);
+    await this.queue.add(name, {}, { repeat: { pattern }, ...JOB_HISTORY });
+    this.logger.log(`Tâche "${name}" planifiée (cron "${pattern}").`);
   }
 }
 

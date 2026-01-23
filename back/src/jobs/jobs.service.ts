@@ -3,9 +3,12 @@ import { InjectQueue } from '@nestjs/bullmq';
 import type { Job, Queue } from 'bullmq';
 import {
   JOB_SCAN_DEPTH,
+  JOB_STATES,
   QUEUE_NAMES,
   type CodedMessage,
   type JobFailure,
+  type JobState,
+  type JobStatus,
   type JobWarning,
   type JobsSnapshot,
   type Page,
@@ -109,6 +112,38 @@ export class JobsService {
     }
   }
 
+  /**
+   * One job, as whoever started it needs to follow it.
+   *
+   * A missing job is reported as `unknown` rather than thrown, unlike every
+   * other lookup here: this one is polled by a page holding an id it was given
+   * minutes ago, and the queue's own history bounds will eventually evict it.
+   * A 404 there would read as an error where the honest answer is "it ran, and
+   * this is no longer able to say how it went".
+   */
+  async status(queue: string, id: string): Promise<JobStatus> {
+    const name = assertQueueName(queue);
+    const job = await this.queues[name].getJob(id).catch((e) => {
+      throw unreachable(e);
+    });
+    if (!job) return absent(name, id);
+
+    const state = await job.getState().catch(() => 'unknown');
+    const returned = job.returnvalue as { warnings?: CodedMessage[] } | null;
+    return {
+      queue: name,
+      id: String(job.id),
+      name: job.name,
+      state: toJobState(state),
+      // BullMQ types progress as unknown: anything a job cared to report. Only
+      // a number means anything to a caller drawing a bar.
+      progress: typeof job.progress === 'number' ? job.progress : null,
+      error: job.failedReason ? { code: 'errors.jobs.failed', params: { error: job.failedReason } } : null,
+      warnings: returned?.warnings ?? [],
+      finishedAt: job.finishedOn ? new Date(job.finishedOn).toISOString() : null,
+    };
+  }
+
   /** Puts a failed job back at the front of its queue. */
   async retry(queue: string, id: string): Promise<void> {
     const job = await this.job(queue, id);
@@ -159,11 +194,34 @@ export class JobsService {
   }
 
   private queueOf(name: string): Queue {
-    if (!isQueueName(name)) {
-      throw new CodedException('errors.jobs.unknownQueue', HttpStatus.NOT_FOUND, { name });
-    }
-    return this.queues[name];
+    return this.queues[assertQueueName(name)];
   }
+}
+
+function assertQueueName(name: string): QueueName {
+  if (!isQueueName(name)) {
+    throw new CodedException('errors.jobs.unknownQueue', HttpStatus.NOT_FOUND, { name });
+  }
+  return name;
+}
+
+/** What a job the queue can no longer place looks like — see `status`. */
+function absent(queue: QueueName, id: string): JobStatus {
+  return {
+    queue,
+    id,
+    name: '',
+    state: 'unknown',
+    progress: null,
+    error: null,
+    warnings: [],
+    finishedAt: null,
+  };
+}
+
+/** BullMQ's state, narrowed to the ones a caller following a job can act on. */
+function toJobState(state: string): JobState {
+  return (JOB_STATES as readonly string[]).includes(state) ? (state as JobState) : 'waiting';
 }
 
 /** Shapes one failed job for the page — see JobFailure. */

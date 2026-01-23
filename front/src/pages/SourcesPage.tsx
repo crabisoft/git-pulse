@@ -4,11 +4,15 @@ import {
   INCIDENT_TRACKER_KINDS,
   PAGE_LIMIT_MAX,
   QUOTA_LIMIT_MIN,
+  SOURCE_HISTORY_PRESETS,
+  isJobSettled,
   scopeFromSelection,
   scopeTracks,
   type ApiBudgetPublic,
   type ApiQuotaPublic,
   type EnvRulePublic,
+  type JobHandle,
+  type JobStatus,
   type RepoVisibility,
   type RepositoryRef,
   type RuleTarget,
@@ -28,7 +32,7 @@ import {
   type PageQuery,
   type UpdateSourceInput,
 } from '../api';
-import { DeleteIcon, EditIcon, PlusIcon, SyncIcon, TestIcon } from '../icons';
+import { DeepSyncIcon, DeleteIcon, EditIcon, PlusIcon, SyncIcon, TestIcon } from '../icons';
 import { IconButton } from '../IconButton';
 import { ConfirmDialog, Modal } from '../Modal';
 import { MultiSelect } from '../MultiSelect';
@@ -44,6 +48,11 @@ interface FormState {
   mode: SourceMode;
   /** Accepts provider events. Only offered in `stored` mode. */
   webhooksEnabled: boolean;
+  /**
+   * How far back the ingestion reads, in days, as the select holds it. Empty
+   * means "follow the reporting window", which is what the API stores as null.
+   */
+  historyDays: string;
   owner: string;
   /** Repos the scope names, either side of the rule below. */
   include: string[];
@@ -69,6 +78,7 @@ const EMPTY: FormState = {
   authKind: 'token',
   mode: 'live',
   webhooksEnabled: false,
+  historyDays: '',
   owner: '',
   // A new source tracks the whole owner: nothing to pick from before it exists,
   // and everything selected is what "I have just declared this org" means.
@@ -93,6 +103,8 @@ function toInput(form: FormState): CreateSourceInput {
     mode: form.mode,
     // Refused by the API in `live` mode, and meaningless there anyway.
     webhooksEnabled: form.mode === 'stored' && form.webhooksEnabled,
+    // Read by nothing in `live` mode either. Null is "follow the window".
+    historyDays: form.mode === 'stored' && form.historyDays ? Number(form.historyDays) : null,
     scope: {
       owner: form.owner,
       include: form.include,
@@ -134,6 +146,7 @@ function toForm(source: SourcePublic): FormState {
     authKind: source.authKind,
     mode: source.mode,
     webhooksEnabled: source.webhooksEnabled,
+    historyDays: source.historyDays === null ? '' : String(source.historyDays),
     owner: source.scope.owner,
     include: source.scope.include ?? [],
     exclude: source.scope.exclude ?? [],
@@ -144,6 +157,30 @@ function toForm(source: SourcePublic): FormState {
     trackerIds: source.trackerIds,
     incidentTrackerId: source.incidentTrackerId ?? '',
   };
+}
+
+/**
+ * How often a queued re-read is asked where it got to.
+ *
+ * Slower than it could be on purpose: a deep re-read takes minutes, and the
+ * only thing a tighter loop would buy is a spinner that stops a few seconds
+ * earlier — paid for with a request per source per interval.
+ */
+const JOB_POLL_MS = 5_000;
+
+/** How a settled job reads on the row that started it. */
+function outcomeOf(status: JobStatus): ConnectionTestResult {
+  if (status.state === 'failed') {
+    return { ok: false, message: status.error ?? { code: 'errors.jobs.failed', params: {} } };
+  }
+  if (status.state === 'unknown') {
+    return { ok: true, message: { code: 'sources.refresh.evicted', params: {} } };
+  }
+  // Completed, and possibly having given up on part of its work: the collector
+  // catches its best-effort steps, so a green job is not a clean one.
+  return status.warnings.length > 0
+    ? { ok: false, message: status.warnings[0] }
+    : { ok: true, message: { code: 'sources.refresh.done', params: {} } };
 }
 
 /**
@@ -167,6 +204,10 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
   const [deleting, setDeleting] = useState<SourcePublic | null>(null);
   /** A freshly issued webhook secret, shown once and never readable again. */
   const [webhookSetup, setWebhookSetup] = useState<IssuedWebhook | null>(null);
+  /** Source whose deep re-read is being set up, before it is asked for. */
+  const [refreshing, setRefreshing] = useState<SourcePublic | null>(null);
+  /** Queued re-reads being followed, per source. Dropped once they settle. */
+  const [jobs, setJobs] = useState<Record<string, JobHandle>>({});
 
   const load = useCallback(async () => {
     try {
@@ -202,6 +243,59 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  /**
+   * Follows the queued re-reads until they settle.
+   *
+   * One timer for all of them rather than one each: a page with three sources
+   * refreshing is still a page, and the states are read from the same tick.
+   * A job the queue has evicted answers `unknown` — it ran, and nothing can say
+   * how it went any more, which is reported as such rather than as a failure.
+   */
+  useEffect(() => {
+    const handles = Object.entries(jobs);
+    if (handles.length === 0) return;
+
+    let live = true;
+    const tick = async () => {
+      const states = await Promise.all(
+        handles.map(async ([sourceId, handle]) => {
+          try {
+            return [sourceId, await api.jobStatus(handle)] as const;
+          } catch {
+            // A reading that failed is not a run that failed: leave the row as
+            // it is and try again on the next tick.
+            return [sourceId, null] as const;
+          }
+        }),
+      );
+      if (!live) return;
+
+      const settled = states.filter(([, s]) => s !== null && isJobSettled(s.state));
+      if (settled.length === 0) return;
+
+      setCollected((cur) => {
+        const next = { ...cur };
+        for (const [sourceId, status] of settled) next[sourceId] = outcomeOf(status!);
+        return next;
+      });
+      setJobs((cur) => {
+        const next = { ...cur };
+        for (const [sourceId] of settled) delete next[sourceId];
+        return next;
+      });
+      // A deep re-read is the heaviest thing this page starts, and the gauges
+      // are the point of watching it from here.
+      await loadQuotas();
+    };
+
+    const timer = setInterval(() => void tick(), JOB_POLL_MS);
+    void tick();
+    return () => {
+      live = false;
+      clearInterval(timer);
+    };
+  }, [jobs, loadQuotas]);
 
   /** Quotas of a source, by bucket — a provider meters several of them. */
   const quotasBySource = useMemo(() => {
@@ -265,6 +359,28 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
     // are the point of watching it from here. The source itself did not change,
     // so nothing else needs reloading.
     await loadQuotas();
+  }
+
+  /**
+   * Asks for a deep re-read and starts following it.
+   *
+   * Nothing is awaited here beyond the enqueueing: the run outlives the request
+   * that asked for it, which is the whole reason it is queued. What comes back
+   * is a handle, and the effect below is what turns it into a state on the row.
+   *
+   * The depth, when given, becomes the source's — so the list is reloaded, and
+   * the purge will sweep at the new depth rather than the old one.
+   */
+  async function startRefresh(source: SourcePublic, historyDays?: number) {
+    setRefreshing(null);
+    setCollected((cur) => ({ ...cur, [source.id]: 'pending' }));
+    try {
+      const handle = await api.refreshSource(source.id, historyDays);
+      setJobs((cur) => ({ ...cur, [source.id]: handle }));
+      if (historyDays !== undefined) await refresh();
+    } catch (err) {
+      setCollected((cur) => ({ ...cur, [source.id]: { ok: false, message: apiErrorInfo(err) } }));
+    }
   }
 
   async function remove(source: SourcePublic) {
@@ -344,7 +460,9 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
                   {cs && (
                     <div className={`source-test ${cs === 'pending' ? '' : cs.ok ? 'ok' : 'err'}`}>
                       {cs === 'pending'
-                        ? t('sources.collect.running')
+                        ? jobs[s.id]
+                          ? t('sources.refresh.running')
+                          : t('sources.collect.running')
                         : `${cs.ok ? '✓' : '✗'} ${t(cs.message.code, cs.message.params)}`}
                     </div>
                   )}
@@ -367,6 +485,22 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
                   >
                     <SyncIcon />
                   </IconButton>
+                  {/* Only where there is a store to refill: a live source is
+                      read from its provider at every request, so re-reading a
+                      depth it does not keep would buy nothing. */}
+                  {s.mode === 'stored' && (
+                    <IconButton
+                      label={
+                        s.historyDays
+                          ? t('sources.refresh.actionDays', { days: s.historyDays })
+                          : t('sources.refresh.action')
+                      }
+                      disabled={cs === 'pending'}
+                      onClick={() => setRefreshing(s)}
+                    >
+                      <DeepSyncIcon />
+                    </IconButton>
+                  )}
                   <IconButton label={t('common.delete')} tone="danger" onClick={() => setDeleting(s)}>
                     <DeleteIcon />
                   </IconButton>
@@ -409,10 +543,86 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
         />
       )}
 
+      {refreshing && (
+        <RefreshDialog
+          source={refreshing}
+          onConfirm={(days) => void startRefresh(refreshing, days)}
+          onClose={() => setRefreshing(null)}
+        />
+      )}
+
       {webhookSetup && (
         <WebhookDialog issued={webhookSetup} onClose={() => setWebhookSetup(null)} />
       )}
     </>
+  );
+}
+
+/**
+ * Confirms a deep re-read, and is where its depth is chosen.
+ *
+ * A dialog rather than a button that just runs: this is the most expensive
+ * thing the page can start, and the depth it is given does not apply to the run
+ * alone — it becomes the source's, because the purge sweeps each source at the
+ * depth the source states. Saying so before the click is the whole point of
+ * stopping here.
+ */
+function RefreshDialog({
+  source,
+  onConfirm,
+  onClose,
+}: {
+  source: SourcePublic;
+  onConfirm: (historyDays?: number) => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  // Empty means "leave the depth as it is", which is the common case: most
+  // re-reads are asked for to fill a store, not to change what it holds.
+  const [depth, setDepth] = useState('');
+  const title = t('sources.refresh.title', { name: source.name });
+
+  return (
+    <Modal
+      title={title}
+      label={title}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" type="button" onClick={onClose}>
+            {t('common.cancel')}
+          </button>
+          <button
+            className="btn primary"
+            type="button"
+            onClick={() => onConfirm(depth ? Number(depth) : undefined)}
+            autoFocus
+          >
+            {t('sources.refresh.confirm')}
+          </button>
+        </>
+      }
+    >
+      <p>{t('sources.refresh.explain')}</p>
+      <label>
+        {t('sources.refresh.depth')}
+        <select value={depth} onChange={(e) => setDepth(e.target.value)}>
+          <option value="">
+            {source.historyDays
+              ? t('sources.refresh.keepDays', { days: source.historyDays })
+              : t('sources.refresh.keepWindow')}
+          </option>
+          {SOURCE_HISTORY_PRESETS.map((days) => (
+            <option key={days} value={days}>
+              {t('sources.form.historyOption', { count: days })}
+            </option>
+          ))}
+        </select>
+        <span className="hint">
+          {depth ? t('sources.refresh.depthPersists') : t('sources.refresh.depthUnchanged')}
+        </span>
+      </label>
+    </Modal>
   );
 }
 
@@ -852,8 +1062,27 @@ function SourceDialog({
           <span className="hint">{t(`sources.mode.hint.${form.mode}`)}</span>
         </label>
 
-        {/* Only offered where it can do anything: events feed the store, so a
-            source read live has nowhere to put them. */}
+        {/* Both of these only exist for a store: a live source is read from its
+            provider in the instant, with no history of its own to keep. */}
+        {form.mode === 'stored' && (
+          <label>
+            {t('sources.form.historyDays')}{' '}
+            <span className="hint">{t('sources.form.historyDaysHint')}</span>
+            <select
+              value={form.historyDays}
+              onChange={(e) => set('historyDays', e.target.value)}
+            >
+              <option value="">{t('sources.form.historyFollowsWindow')}</option>
+              {SOURCE_HISTORY_PRESETS.map((days) => (
+                <option key={days} value={days}>
+                  {t('sources.form.historyOption', { count: days })}
+                </option>
+              ))}
+            </select>
+            <span className="hint">{t('sources.form.historyCostHint')}</span>
+          </label>
+        )}
+
         {form.mode === 'stored' && (
           <label className="checkbox">
             <input

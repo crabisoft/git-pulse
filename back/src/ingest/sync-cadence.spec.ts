@@ -3,7 +3,9 @@ import {
   DELTA_OVERLAP_MS,
   EVENT_QUIET_MS,
   FULL_SYNC_INTERVAL_MS,
+  depthDays,
   isDueForFullSync,
+  listingSince,
   mergedSince,
   skipsDelta,
 } from './sync-cadence';
@@ -78,5 +80,36 @@ describe('skipsDelta', () => {
     // A flood of events must not become a source that stops being checked
     // against its provider.
     expect(skipsDelta(NOW, NOW, true)).toBe(false);
+  });
+});
+
+describe('depthDays', () => {
+  it('takes the depth a source states', () => {
+    expect(depthDays(365, WINDOW_DAYS)).toBe(365);
+  });
+
+  it('follows the reporting window when a source states none', () => {
+    // Every source created before the field existed, and every one whose owner
+    // had no opinion: widening the window has to deepen them with it.
+    expect(depthDays(null, WINDOW_DAYS)).toBe(WINDOW_DAYS);
+  });
+
+  it('lets a source stay shallower than the window', () => {
+    // Refused nowhere: the reports then read further back than the store holds,
+    // which is a thin history rather than a wrong one.
+    expect(depthDays(7, WINDOW_DAYS)).toBe(7);
+  });
+});
+
+describe('listingSince', () => {
+  it('reaches the whole depth on a reconciliation', () => {
+    expect(listingSince(NOW, 30, true)).toEqual(new Date('2026-06-27T12:00:00Z'));
+  });
+
+  it('reads only what is most recent on a delta', () => {
+    // Null is what the connectors read as "one page". A delta runs every few
+    // minutes, and re-reading a year of history to learn what happened since
+    // lunch would spend the budget the depth was asked for.
+    expect(listingSince(NOW, 365, false)).toBeNull();
   });
 });

@@ -25,6 +25,40 @@ import { isNotFound, unresolvableRange } from './compare';
 
 export type GitlabClient = InstanceType<typeof Gitlab>;
 
+/**
+ * What a live listing reads: the most recent page, and only it.
+ *
+ * A live view answers a request somebody is waiting on, so its cost has to be
+ * one call per project whatever the project's history. Depth is the ingestion's
+ * job — see `bound` below for why saying so is not optional here.
+ */
+const LIVE_PIPELINE_PAGE = 20;
+const LIVE_DEPLOYMENT_PAGE = 30;
+const LIVE_MERGED_PAGE = 50;
+
+/** Page size of a bounded listing — the largest the API accepts. */
+const DEEP_PAGE = 100;
+
+/**
+ * How many pages a bounded listing will read. The same ceiling as the GitHub
+ * connector's, and for the same reason: the bound is a date and the pages are a
+ * count, so nothing else stops a project busy enough to fill the window with
+ * thousands of rows from spending a whole budget on one listing.
+ */
+const MAX_PAGES = 20;
+
+/**
+ * Page ceiling for a gitbeaker listing.
+ *
+ * `.all()` follows the `next` link until the resource runs out — given only a
+ * `perPage`, it reads every pipeline a project ever ran, which is neither what
+ * a live view wants nor what an ingestion is asked for. `maxPages` is the only
+ * way to say otherwise, and it is ignored unless `perPage` travels with it.
+ */
+function bound(since: string | undefined): { maxPages: number } {
+  return { maxPages: since ? MAX_PAGES : 1 };
+}
+
 /** GitLab connector — gitlab.com or a self-hosted instance via baseUrl. */
 @Injectable()
 export class GitLabConnector implements SourceConnector {
@@ -116,12 +150,16 @@ export class GitLabConnector implements SourceConnector {
     return out;
   }
 
-  async listPipelines(ctx: ConnectorContext, repos: string[]): Promise<Pipeline[]> {
+  async listPipelines(ctx: ConnectorContext, repos: string[], since?: string): Promise<Pipeline[]> {
     const gl = this.client(ctx);
     const out: Pipeline[] = [];
     for (const repo of repos) {
       ctx.signal?.throwIfAborted();
-      const pipelines = await gl.Pipelines.all(repo, { perPage: 20 });
+      const pipelines = await gl.Pipelines.all(repo, {
+        ...bound(since),
+        ...(since ? { createdAfter: since } : {}),
+        perPage: since ? DEEP_PAGE : LIVE_PIPELINE_PAGE,
+      });
       for (const p of pipelines) {
         out.push({
           id: `gl:${repo}:${p.id}`,
@@ -140,12 +178,23 @@ export class GitLabConnector implements SourceConnector {
     return out;
   }
 
-  async listDeployments(ctx: ConnectorContext, repos: string[]): Promise<Deployment[]> {
+  async listDeployments(
+    ctx: ConnectorContext,
+    repos: string[],
+    since?: string,
+  ): Promise<Deployment[]> {
     const gl = this.client(ctx);
     const out: Deployment[] = [];
     for (const repo of repos) {
       ctx.signal?.throwIfAborted();
-      const deployments = await gl.Deployments.all(repo, { perPage: 30 });
+      // Bounded on the update rather than the creation, which this endpoint
+      // does not filter on: a deployment is only ever updated after it is
+      // created, so this reads a superset of the window and never less than it.
+      const deployments = await gl.Deployments.all(repo, {
+        ...bound(since),
+        ...(since ? { updatedAfter: since } : {}),
+        perPage: since ? DEEP_PAGE : LIVE_DEPLOYMENT_PAGE,
+      });
       for (const d of deployments) {
         // The environment travels embedded in the listing, so its external URL
         // comes free — when the environment was configured with one at all.
@@ -191,7 +240,8 @@ export class GitLabConnector implements SourceConnector {
         projectId: repo,
         state: 'merged',
         updatedAfter: since,
-        perPage: 50,
+        perPage: LIVE_MERGED_PAGE,
+        maxPages: MAX_PAGES,
       });
       for (const mr of mrs) {
         const mergedAt = mr.merged_at as string | null;

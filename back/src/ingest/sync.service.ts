@@ -5,7 +5,7 @@ import { ConnectorFactory } from '../sources/connectors/connector.factory';
 import { SettingsService } from '../settings/settings.service';
 import type { ConnectorContext, SourceConnector } from '../sources/connectors/source-connector.interface';
 import { StoreService } from './store.service';
-import { isDueForFullSync, mergedSince, skipsDelta } from './sync-cadence';
+import { depthDays, isDueForFullSync, listingSince, mergedSince, skipsDelta } from './sync-cadence';
 
 /** Every listing, for the runs that mark them all at once. */
 const RESOURCES: SyncResource[] = ['repos', 'pulls', 'pipelines', 'deployments'];
@@ -32,6 +32,18 @@ export interface SyncOutcome {
   failed: SyncResource[];
 }
 
+/** How a run was asked for, when it was not the schedule that asked. */
+export interface SyncOptions {
+  /**
+   * Reconciles whatever the cadence says: the whole depth is re-read, the
+   * cursors are ignored and recent events spare nothing.
+   *
+   * What somebody asks for after deepening a source, or after doubting what it
+   * holds — neither of which the clock has any way to know about.
+   */
+  force?: boolean;
+}
+
 /**
  * Fills the store from the provider — the only thing that spends a stored
  * source's rate-limit budget.
@@ -56,15 +68,16 @@ export class SyncService {
    * Brings a source up to date if it reads from the store, and does nothing at
    * all if it reads live — where the provider is already the answer.
    */
-  async syncIfStored(sourceId: string): Promise<SyncOutcome | null> {
+  async syncIfStored(sourceId: string, options: SyncOptions = {}): Promise<SyncOutcome | null> {
     const { mode } = await this.sources.readSpec(sourceId);
     if (mode !== 'stored') return null;
-    return this.sync(sourceId);
+    return this.sync(sourceId, options);
   }
 
-  async sync(sourceId: string): Promise<SyncOutcome> {
+  async sync(sourceId: string, options: SyncOptions = {}): Promise<SyncOutcome> {
     const startedAt = new Date();
-    const full = await this.dueForFullSync(sourceId, startedAt);
+    const full = options.force || (await this.dueForFullSync(sourceId, startedAt));
+    const depth = await this.depth(sourceId);
     const outcome: SyncOutcome = {
       full,
       skipped: false,
@@ -110,16 +123,17 @@ export class SyncService {
     // reading a scope it no longer has.
     if (repos === null) return outcome;
 
-    await this.syncPullRequests(sourceId, connector, ctx, repos, startedAt, full, outcome);
-    await this.syncPipelines(sourceId, connector, ctx, repos, startedAt, full, outcome);
-    await this.syncDeployments(sourceId, connector, ctx, repos, startedAt, full, outcome);
+    const since = listingSince(startedAt, depth, full)?.toISOString();
+    await this.syncPullRequests(sourceId, connector, ctx, repos, startedAt, full, depth, outcome);
+    await this.syncPipelines(sourceId, connector, ctx, repos, startedAt, full, since, outcome);
+    await this.syncDeployments(sourceId, connector, ctx, repos, startedAt, full, since, outcome);
 
     if (full) {
       outcome.pruned = await this.store.pruneOutOfScope(sourceId, repos);
     }
 
     this.logger.log(
-      `Synchronisation ${full ? 'complète' : 'incrémentale'} de ${sourceId} : ` +
+      `Synchronisation ${full ? `complète (${depth} j)` : 'incrémentale'} de ${sourceId} : ` +
         `${outcome.repos} dépôt(s), ${outcome.pullRequests} PR ouverte(s), ${outcome.merged} fusionnée(s), ` +
         `${outcome.pipelines} pipeline(s), ${outcome.deployments} déploiement(s)` +
         (outcome.closed > 0 ? `, ${outcome.closed} clôturée(s)` : '') +
@@ -146,9 +160,10 @@ export class SyncService {
     repos: string[],
     startedAt: Date,
     full: boolean,
+    depth: number,
     outcome: SyncOutcome,
   ): Promise<void> {
-    const since = await this.mergedFrom(sourceId, startedAt, full);
+    const since = await this.mergedFrom(sourceId, startedAt, depth, full);
     await this.step(sourceId, 'pulls', startedAt, full, outcome, async () => {
       const open = await connector.listPullRequests(ctx, repos);
       outcome.pullRequests = await this.store.upsertPullRequests(sourceId, open, startedAt);
@@ -167,10 +182,11 @@ export class SyncService {
     repos: string[],
     startedAt: Date,
     full: boolean,
+    since: string | undefined,
     outcome: SyncOutcome,
   ): Promise<void> {
     await this.step(sourceId, 'pipelines', startedAt, full, outcome, async () => {
-      const items = await connector.listPipelines(ctx, repos);
+      const items = await connector.listPipelines(ctx, repos, since);
       outcome.pipelines = await this.store.upsertPipelines(sourceId, items, startedAt);
       return true;
     });
@@ -183,10 +199,11 @@ export class SyncService {
     repos: string[],
     startedAt: Date,
     full: boolean,
+    since: string | undefined,
     outcome: SyncOutcome,
   ): Promise<void> {
     await this.step(sourceId, 'deployments', startedAt, full, outcome, async () => {
-      const items = await connector.listDeployments(ctx, repos);
+      const items = await connector.listDeployments(ctx, repos, since);
       outcome.deployments = await this.store.upsertDeployments(sourceId, items, startedAt);
       return true;
     });
@@ -227,13 +244,26 @@ export class SyncService {
   }
 
   /** Lower bound of the merged listing — see `mergedSince` for the rule. */
-  private async mergedFrom(sourceId: string, now: Date, full: boolean): Promise<string> {
-    const { doraWindowDays } = await this.settings.get();
+  private async mergedFrom(
+    sourceId: string,
+    now: Date,
+    depth: number,
+    full: boolean,
+  ): Promise<string> {
     const state = await this.prisma.syncState.findUnique({
       where: { sourceId_resource: { sourceId, resource: 'pulls' } },
       select: { cursor: true },
     });
-    return mergedSince(state?.cursor ?? null, now, doraWindowDays, full).toISOString();
+    return mergedSince(state?.cursor ?? null, now, depth, full).toISOString();
+  }
+
+  /** How far back this source is ingested — see `depthDays` for the rule. */
+  private async depth(sourceId: string): Promise<number> {
+    const [{ historyDays }, { doraWindowDays }] = await Promise.all([
+      this.sources.readSpec(sourceId),
+      this.settings.get(),
+    ]);
+    return depthDays(historyDays, doraWindowDays);
   }
 
   /**

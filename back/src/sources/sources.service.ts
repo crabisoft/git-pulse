@@ -34,6 +34,8 @@ export interface SourceSpec {
   scope: ScopeRules;
   kind: SourceKind;
   baseUrl: string;
+  /** Ingestion depth in days, or null to follow the reporting window. */
+  historyDays: number | null;
 }
 
 @Injectable()
@@ -69,6 +71,7 @@ export class SourcesService {
           scope: dto.scope as unknown as object,
           mode: dto.mode,
           webhooksEnabled: dto.webhooksEnabled,
+          historyDays: dto.historyDays,
         },
       }),
       this.credentials.writeOp({ type: 'source', id }, credentialPlaintext(dto)),
@@ -154,7 +157,7 @@ export class SourcesService {
   async readSpec(id: string): Promise<SourceSpec> {
     const source = await this.prisma.source.findUnique({
       where: { id },
-      select: { mode: true, scope: true, kind: true, baseUrl: true },
+      select: { mode: true, scope: true, kind: true, baseUrl: true, historyDays: true },
     });
     if (!source) throw new CodedException('errors.source.notFound', HttpStatus.NOT_FOUND, { id });
     return {
@@ -162,6 +165,7 @@ export class SourcesService {
       scope: source.scope as unknown as ScopeRules,
       kind: source.kind as SourceKind,
       baseUrl: source.baseUrl,
+      historyDays: source.historyDays,
     };
   }
 
@@ -169,6 +173,30 @@ export class SourcesService {
     const source = await this.prisma.source.findUnique({ where: { id }, include: WITH_TRACKERS });
     if (!source) throw new CodedException('errors.source.notFound', HttpStatus.NOT_FOUND, { id });
     return toPublic(source);
+  }
+
+  /**
+   * Sets how deep this source is ingested, and nothing else.
+   *
+   * Narrow on purpose rather than a call into `update`: what asks for this is a
+   * refresh being told to read a year, and that path has no business walking
+   * through slug regeneration, credential re-encryption and tracker rebinding
+   * to change one integer.
+   *
+   * Refused on a live source, which stores nothing for a depth to describe —
+   * the same rule as the webhooks, and refused for the same reason: silently
+   * accepting it would leave a setting that reads as active and does nothing.
+   */
+  async setHistoryDays(id: string, historyDays: number): Promise<void> {
+    const source = await this.prisma.source.findUnique({
+      where: { id },
+      select: { mode: true },
+    });
+    if (!source) throw new CodedException('errors.source.notFound', HttpStatus.NOT_FOUND, { id });
+    if (source.mode !== 'stored') {
+      throw new CodedException('errors.source.historyRequiresStored', HttpStatus.BAD_REQUEST);
+    }
+    await this.prisma.source.update({ where: { id }, data: { historyDays } });
   }
 
   /**
@@ -229,6 +257,7 @@ export class SourcesService {
         scope: dto.scope ? (dto.scope as unknown as object) : undefined,
         mode,
         webhooksEnabled,
+        historyDays: dto.historyDays,
       },
     });
 
@@ -437,6 +466,7 @@ function toPublic(s: {
   scope: unknown;
   mode: string;
   webhooksEnabled: boolean;
+  historyDays: number | null;
   createdAt: Date;
   updatedAt: Date;
   trackers: Array<{ trackerId: string; incidents: boolean }>;
@@ -452,6 +482,7 @@ function toPublic(s: {
     scope: s.scope as ScopeRules,
     mode: s.mode as SourceMode,
     webhooksEnabled: s.webhooksEnabled,
+    historyDays: s.historyDays,
     envRuleIds: s.envRules.map((b) => b.ruleId),
     trackerIds: s.trackers.map((b) => b.trackerId),
     incidentTrackerId: s.trackers.find((b) => b.incidents)?.trackerId ?? null,

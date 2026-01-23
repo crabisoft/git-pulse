@@ -128,6 +128,17 @@ export interface SourcePublic {
    * mode, and false on an install whose network refuses inbound traffic.
    */
   webhooksEnabled: boolean;
+  /**
+   * How far back the ingestion reads for this source, in days. Only meaningful
+   * in `stored` mode, where it is what decides how much history a first
+   * collection brings back — a live source is of the instant.
+   *
+   * Null follows the reporting window, which is what every source did before
+   * the field existed. Setting it deeper than the window is the point of having
+   * it: the store then holds more than the current window reads, and widening
+   * the window later finds it already there.
+   */
+  historyDays: number | null;
   /** Classification rules that apply to this source, from the global set. */
   envRuleIds: string[];
   /** Trackers this source's pull requests may reference. */
@@ -925,6 +936,17 @@ export const DORA_WINDOW_MIN = 1;
 /** Widest window accepted, i.e. the largest preset. */
 export const DORA_WINDOW_MAX = 730;
 
+/**
+ * Depths a stored source offers, in days, and the bounds around them.
+ *
+ * The same range as the reporting window, deliberately: a depth shallower than
+ * the window would leave the reports reading rows nobody ingested, and one
+ * deeper is exactly what makes widening the window later worth anything.
+ */
+export const SOURCE_HISTORY_PRESETS: readonly number[] = DORA_WINDOW_PRESETS;
+export const SOURCE_HISTORY_MIN = DORA_WINDOW_MIN;
+export const SOURCE_HISTORY_MAX = DORA_WINDOW_MAX;
+
 /** The period a report was computed over — ISO bounds, both inclusive. */
 export interface DoraPeriod {
   from: string;
@@ -1148,6 +1170,24 @@ export interface AppSettings {
   /** Cron pattern of the scheduled collection. */
   collectCron: string;
   /**
+   * Cron pattern of the store's purge.
+   *
+   * Its own schedule rather than a step of the collection, which is what it
+   * used to be: the collection runs every few minutes because freshness asks it
+   * to, and nothing about deleting rows older than a source's depth needs to
+   * happen that often. Sharing a cadence also meant that widening a depth was
+   * raced by a sweep at the old one, minutes later.
+   */
+  pruneCron: string;
+  /**
+   * Days kept beyond each source's ingestion depth before a row is swept.
+   *
+   * The margin is what makes deepening a source read as a decision rather than
+   * as data loss: a month asked for the day after a fortnight was configured
+   * finds the fortnight still there. Zero sweeps exactly at the depth.
+   */
+  retentionMarginDays: number;
+  /**
    * Items per page applied by every list route when the client asks for no
    * `limit`. Capped at PAGE_LIMIT_MAX.
    */
@@ -1189,6 +1229,16 @@ export interface AppSettings {
 /** Bounds of `quotaReservePct`; a reserve of everything would collect nothing. */
 export const QUOTA_RESERVE_PCT_MIN = 0;
 export const QUOTA_RESERVE_PCT_MAX = 90;
+
+/**
+ * Bounds of `retentionMarginDays`.
+ *
+ * The ceiling is a year because the margin is a grace period, not a second
+ * depth: an install that wants to keep two years of history says so on its
+ * sources, where the ingestion can actually go and fetch them.
+ */
+export const RETENTION_MARGIN_MIN = 0;
+export const RETENTION_MARGIN_MAX = 365;
 
 // ─── Aggregated dashboard responses ──────────────────────────────────
 
@@ -1490,3 +1540,51 @@ export interface JobWarning {
  * Redis, nothing else.
  */
 export const JOB_SCAN_DEPTH = 200;
+
+/**
+ * Where a job is in its life, as a caller following one needs it.
+ *
+ * `unknown` is what BullMQ answers for a job it can no longer place — one
+ * evicted by the queue's own history bounds, typically. A page holding an id
+ * from an hour ago has to be able to tell that apart from a failure.
+ */
+export const JOB_STATES = [
+  'waiting',
+  'active',
+  'delayed',
+  'completed',
+  'failed',
+  'unknown',
+] as const;
+export type JobState = (typeof JOB_STATES)[number];
+
+/** Terminal states: nothing more will happen to a job in one of these. */
+export function isJobSettled(state: JobState): boolean {
+  return state === 'completed' || state === 'failed' || state === 'unknown';
+}
+
+/** What enqueueing returns: enough to come back and ask how it went. */
+export interface JobHandle {
+  queue: QueueName;
+  id: string;
+}
+
+/**
+ * One job, followed.
+ *
+ * Deliberately thinner than `JobFailure`: this is read by whoever started the
+ * work from the sources page, not by an admin reading the queues, so it carries
+ * how it went and no payload.
+ */
+export interface JobStatus extends JobHandle {
+  name: string;
+  state: JobState;
+  /** 0-100 where the job reports it, null where it reports nothing. */
+  progress: number | null;
+  /** Coded reason it failed, or null. */
+  error: CodedMessage | null;
+  /** What a completed collection gave up on — the degraded case, per source. */
+  warnings: CodedMessage[];
+  /** ISO date the run ended; null while it has not. */
+  finishedAt: string | null;
+}

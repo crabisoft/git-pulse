@@ -48,6 +48,13 @@ model Source {
   /// an install whose network refuses inbound traffic simply leaves it off.
   /// Only meaningful in `stored` mode, which the service enforces.
   webhooksEnabled Boolean @default(false)
+  /// How far back the ingestion reads for this source, in days. Only meaningful
+  /// in `stored` mode — a live source asks its provider for the instant.
+  ///
+  /// Nullable, and null means "follow the reporting window": a source created
+  /// before this, or one whose owner had no opinion, keeps exactly the depth it
+  /// had, and follows the window when that one is widened.
+  historyDays Int?
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 

@@ -8,6 +8,7 @@ import { SettingsController } from '../settings/settings.controller';
 import { JobsController } from '../jobs/jobs.controller';
 import { OverviewController } from '../overview/overview.controller';
 import { IncidentsController } from '../incidents/incidents.controller';
+import { CollectionController } from '../collection/collection.controller';
 
 /**
  * The level a route ends up with, decorators and default included — read off
@@ -57,6 +58,13 @@ describe('route access', () => {
     // Incident titles and links, at the level that already shows pull request
     // titles and links. Nothing here carries a payload or a credential.
     expect(levelOf(IncidentsController, 'list')).toBe('viewer');
+  });
+
+  it('keeps starting a collection with the admins, the deep one included', () => {
+    // Both spend the source's API budget, and the second can spend all of it in
+    // one go: it re-reads the whole depth rather than what changed.
+    expect(levelOf(CollectionController, 'collect')).toBe('admin');
+    expect(levelOf(CollectionController, 'refresh')).toBe('admin');
   });
 
   it('keeps the queues with the admins, reading them included', () => {

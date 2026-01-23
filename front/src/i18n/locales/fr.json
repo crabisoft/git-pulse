@@ -87,6 +87,10 @@
       "pageSizeHint": "taille de page par défaut de toutes les listes",
       "collectCron": "Cron de collecte",
       "collectCronHint": "ex. */15 * * * * (toutes les 15 minutes)",
+      "pruneCron": "Planification de la purge",
+      "pruneCronHint": "(cron ; ramène chaque source à sa propre profondeur d'historique)",
+      "retentionMargin": "Marge de rétention (jours)",
+      "retentionMarginHint": "conservés au-delà de la profondeur de chaque source, pour qu'un approfondissement trouve déjà quelque chose",
       "languageHint": "conservée sur ce navigateur",
       "failureSource": "Source des échecs",
       "failureSourceHint": "ce qui compte comme échec pour le taux d'échec et le MTTR",
@@ -253,6 +257,7 @@
       "incidentTrackerNotAttached": "Le tracker d'incidents doit faire partie des trackers associés à la source.",
       "incidentTrackerUnsupported": "Les incidents ne peuvent pas encore être lus depuis un tracker {{kind}}.",
       "webhooksRequireStored": "Les webhooks n'ont de sens qu'en lecture stockée : passez la source en « Stockée » d'abord.",
+      "historyRequiresStored": "Une profondeur d'historique n'a de sens qu'en lecture stockée : passez d'abord la source en « Stockée ».",
       "webhooksDisabled": "Les webhooks ne sont pas activés sur cette source."
     },
     "envRule": {
@@ -271,13 +276,15 @@
       "unreachable": "Redis ne répond pas : {{error}}",
       "unknownQueue": "File inconnue : {{name}}",
       "notFound": "Cette tâche n'est plus conservée : {{id}}",
-      "notFailed": "Cette tâche n'est plus en échec (elle est {{state}}) — quelqu'un l'a déjà relancée."
+      "notFailed": "Cette tâche n'est plus en échec (elle est {{state}}) — quelqu'un l'a déjà relancée.",
+      "failed": "Le passage a échoué : {{error}}"
     },
     "collect": {
       "ingest": "Ingestion échouée, le relevé a été pris sur ce qui était déjà stocké : {{error}}",
       "dora": "Relevé DORA échoué : {{error}}",
       "changelogs": "Archivage des changelogs de déploiement échoué : {{error}}",
-      "changelogsPartial": "{{count}} déploiement(s) n'ont pas pu être archivés — leur contenu sera perdu dès qu'ils sortiront du magasin."
+      "changelogsPartial": "{{count}} déploiement(s) n'ont pas pu être archivés — leur contenu sera perdu dès qu'ils sortiront du magasin.",
+      "refreshInFlight": "Cette source est déjà en cours de relecture ({{state}}). Attendez la fin de ce passage avant d'en demander un autre."
     },
     "ticketRule": {
       "notFound": "Règle de ticket introuvable.",
@@ -530,7 +537,12 @@
       "mode": "Lecture des données",
       "modeHint": "(décide si le quota d'API suit le trafic ou la collecte)",
       "webhooks": "Accepter les événements (webhooks)",
-      "webhooksHint": "accélère la fraîcheur ; la synchronisation planifiée reste le filet de sécurité"
+      "webhooksHint": "accélère la fraîcheur ; la synchronisation planifiée reste le filet de sécurité",
+      "historyDays": "Profondeur d'historique",
+      "historyDaysHint": "jusqu'où l'ingestion remonte, à la première passe comme à chaque réconciliation",
+      "historyFollowsWindow": "Suivre la fenêtre de reporting",
+      "historyOption": "{{count}} jours",
+      "historyCostHint": "plus profond = plus d'appels API à la première collecte, et plus de lignes conservées ensuite"
     },
     "repoVisibility": {
       "public": "public",
@@ -581,6 +593,21 @@
       "action": "Collecter maintenant",
       "running": "Collecte en cours… un premier passage sur un large périmètre prend plusieurs minutes",
       "ok": "Collecte terminée — {{count}} snapshots écrits."
+    },
+    "refresh": {
+      "action": "Relire tout l'historique",
+      "actionDays": "Relire tout l'historique ({{days}} jours)",
+      "title": "Relire {{name}}",
+      "explain": "Tout l'historique conservé par cette source est relu depuis sa plateforme, au lieu de ce qui a changé depuis le dernier passage. L'opération tourne en arrière-plan : vous pouvez quitter cette page. C'est le traitement le plus lourd lancé depuis ici, et sur un large périmètre il consomme une bonne part du budget d'API.",
+      "depth": "Profondeur d'historique",
+      "keepWindow": "Ne pas changer (suit la fenêtre de reporting)",
+      "keepDays": "Ne pas changer ({{days}} jours)",
+      "depthUnchanged": "la source conserve la profondeur qu'elle a déjà",
+      "depthPersists": "cette valeur devient la profondeur de la source — la purge s'y alignera aussi",
+      "confirm": "Relire maintenant",
+      "running": "Relecture en arrière-plan…",
+      "done": "Relecture terminée.",
+      "evicted": "Relecture terminée — la file ne conserve plus son résultat."
     }
   },
   "ticketRules": {

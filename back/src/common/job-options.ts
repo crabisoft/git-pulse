@@ -30,3 +30,14 @@ export const JOB_RETRIES: JobsOptions = {
 
 /** What every one-shot job in the install is enqueued with. */
 export const JOB_DEFAULTS: JobsOptions = { ...JOB_HISTORY, ...JOB_RETRIES };
+
+/**
+ * What a job somebody asked for by hand is enqueued with: kept like the rest,
+ * retried never.
+ *
+ * The backoff above is right for work the schedule will bring back anyway. It
+ * is wrong for a deep refresh, where three attempts against an unreachable
+ * platform means three whole API budgets spent re-reading the same year — and
+ * where somebody is watching, and can ask again once they know why.
+ */
+export const JOB_ONESHOT: JobsOptions = { ...JOB_HISTORY, attempts: 1 };
