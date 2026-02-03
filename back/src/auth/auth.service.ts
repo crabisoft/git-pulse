@@ -2,6 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { createHash, randomBytes } from 'node:crypto';
 import {
   DISPLAY_MODES,
+  SUPPORTED_LANGUAGES,
   OVERVIEW_DIRECTIONS,
   type AuthState,
   type Page,
@@ -239,10 +240,18 @@ export class AuthService {
     // Written here rather than through updateUser: how somebody reads the
     // application is their own business, and no admin route sets it for them.
     // Undefined leaves the column alone, null clears it back to the default.
-    if (dto.displayDirection !== undefined || dto.displayMode !== undefined) {
+    if (
+      dto.displayDirection !== undefined ||
+      dto.displayMode !== undefined ||
+      dto.language !== undefined
+    ) {
       await this.prisma.user.update({
         where: { id },
-        data: { displayDirection: dto.displayDirection, displayMode: dto.displayMode },
+        data: {
+          displayDirection: dto.displayDirection,
+          displayMode: dto.displayMode,
+          language: dto.language,
+        },
       });
     }
     return this.updateUser(id, { name: dto.name, password: dto.password }, keepToken);
@@ -354,6 +363,7 @@ function toPublic(u: {
   updatedAt: Date;
   displayDirection: string | null;
   displayMode: string | null;
+  language: string | null;
 }): UserPublic {
   return {
     id: u.id,
@@ -368,5 +378,6 @@ function toPublic(u: {
       direction: OVERVIEW_DIRECTIONS.find((d) => d === u.displayDirection) ?? null,
       mode: DISPLAY_MODES.find((m) => m === u.displayMode) ?? null,
     },
+    language: SUPPORTED_LANGUAGES.find((l) => l === u.language) ?? null,
   };
 }

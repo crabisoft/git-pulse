@@ -20,6 +20,7 @@ import type {
 } from './source-connector.interface';
 import { gitlabQuota, type HeaderBag, type QuotaSink } from '../../api-quota/rate-limit-headers';
 import { applyScope, ageHours } from './scope.util';
+import { byTagDate } from './tag-order';
 import { repoUrl } from './ref-url';
 import { isNotFound, unresolvableRange } from './compare';
 
@@ -285,13 +286,20 @@ export class GitLabConnector implements SourceConnector {
 
   async listTags(ctx: ConnectorContext, repo: string): Promise<Tag[]> {
     const gl = this.client(ctx);
-    const tags = await gl.Tags.all(repo, { perPage: 100 });
-    return tags.map((tag) => ({
-      name: tag.name as string,
-      sha: (tag.commit as { id?: string } | undefined)?.id ?? '',
-      // Annotated tags date themselves; lightweight ones do not.
-      taggedAt: ((tag.commit as { created_at?: string } | undefined)?.created_at as string) ?? null,
-    }));
+    // Ordered by the API and then again here. Asking is what keeps the newest
+    // hundred in the page when a project has more; sorting is what makes the
+    // result independent of a default this connector does not control.
+    const tags = await gl.Tags.all(repo, { perPage: 100, orderBy: 'updated', sort: 'desc' });
+    return byTagDate(
+      tags.map((tag) => ({
+        name: tag.name as string,
+        sha: (tag.commit as { id?: string } | undefined)?.id ?? '',
+        // The commit a tag points at always has a date, whether the tag itself
+        // was annotated or not — which is the date a release was cut.
+        taggedAt:
+          ((tag.commit as { created_at?: string } | undefined)?.created_at as string) ?? null,
+      })),
+    );
   }
 
   /** One call: GitLab marks the default branch on the listing itself. */

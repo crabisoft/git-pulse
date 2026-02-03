@@ -50,6 +50,19 @@ export class SourcesController {
     return this.sources.update(id, dto);
   }
 
+  /**
+   * Makes this source the one a reader lands on when the address names none.
+   *
+   * A route of its own rather than a field on the update: it is the only write
+   * here that changes another row, and PATCHing one source to un-favourite
+   * another reads as a side effect nobody asked for.
+   */
+  @Post(':id/default')
+  @HttpCode(200)
+  makeDefault(@Param('id') id: string) {
+    return this.sources.makeDefault(id);
+  }
+
   @Post(':id/test')
   @HttpCode(200)
   test(@Param('id') id: string) {

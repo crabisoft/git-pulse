@@ -97,3 +97,46 @@ describe('renderChangelog', () => {
     await expect(renderChangelog(GITHUB, 'v1.0.0', 'v1.1.0', [])).resolves.toContain('v1.1.0');
   });
 });
+
+describe('renderChangelog and the trackers', () => {
+  /** An entry carrying what the ticket rules found on it. */
+  function tracked(sha: string, message: string, tickets: ReleaseNoteEntry['tickets']) {
+    return { ...entry(sha, message), tickets };
+  }
+
+  const jira = (key: string) => ({
+    key,
+    url: `https://jira.acme.io/browse/${key}`,
+    foundIn: 'title' as const,
+    tracker: { id: 'tr-1', name: 'Jira', kind: 'jira' as const },
+  });
+
+  it('links a tracker key the preset knows nothing about', async () => {
+    // The preset links `#12` to this repository's issues. A Jira key is not an
+    // issue of this repository, and no template it expands can reach one.
+    const markdown = await renderChangelog(GITHUB, 'v1.0.0', 'v1.1.0', [
+      tracked('aaaaaaaaaaaaaaa', 'fix(auth): reset a password, OPS-123', [jira('OPS-123')]),
+    ]);
+
+    expect(markdown).toContain('[OPS-123](https://jira.acme.io/browse/OPS-123)');
+  });
+
+  it('leaves the repository issue links the preset already built', async () => {
+    // Both kinds end up in one document, and neither may swallow the other.
+    const markdown = await renderChangelog(GITHUB, 'v1.0.0', 'v1.1.0', [
+      tracked('aaaaaaaaaaaaaaa', 'feat(sources): collect on demand\n\nCloses #12', [
+        jira('OPS-7'),
+      ]),
+      tracked('bbbbbbbbbbbbbbb', 'fix(api): drop nothing, OPS-7', [jira('OPS-7')]),
+    ]);
+
+    expect(markdown).toContain('/issues/12');
+    expect(markdown).toContain('[OPS-7](https://jira.acme.io/browse/OPS-7)');
+  });
+
+  it('changes nothing when no rule matched anything', async () => {
+    const plain = await renderChangelog(GITHUB, 'v1.0.0', 'v1.1.0', ENTRIES);
+    expect(plain).toContain('collect on demand');
+    expect(plain).not.toContain('](https://jira');
+  });
+});

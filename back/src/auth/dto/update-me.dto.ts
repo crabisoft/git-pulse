@@ -2,8 +2,10 @@ import { IsEnum, IsOptional, IsString, MaxLength, MinLength, ValidateIf } from '
 import {
   DISPLAY_MODES,
   OVERVIEW_DIRECTIONS,
+  SUPPORTED_LANGUAGES,
   PASSWORD_MIN_LENGTH,
   type DisplayMode,
+  type Language,
   type OverviewDirection,
 } from '@repo/shared';
 
@@ -42,4 +44,13 @@ export class UpdateMeDto {
   @IsOptional()
   @IsEnum(DISPLAY_MODES)
   displayMode?: DisplayMode | null;
+
+  /**
+   * The language this account reads in. Null is a value here too: it hands the
+   * choice back to the browser, which is a better guess for somebody with no
+   * opinion than anything stored on this side.
+   */
+  @IsOptional()
+  @IsEnum(SUPPORTED_LANGUAGES)
+  language?: Language | null;
 }

@@ -169,3 +169,99 @@ describe('GitLab listing depth', () => {
     expect(served.calls()).toBe(20);
   });
 });
+
+/** Answers the GraphQL turn with `body`, and every REST call with `rest`. */
+function serveGraphQL(body: unknown, rest: unknown[] = []): { graphqlCalls: () => number } {
+  let graphqlCalls = 0;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = urlOf(input);
+      const isGraphQL = url.pathname.endsWith('/graphql') || init?.method === 'POST';
+      if (isGraphQL) graphqlCalls += 1;
+      const payload = isGraphQL ? body : rest;
+      const status = isGraphQL && body === null ? 502 : 200;
+      return new Response(JSON.stringify(payload ?? { errors: [{ message: 'no graphql here' }] }), {
+        status,
+        headers: { 'content-type': 'application/json' },
+      });
+    }),
+  );
+  return { graphqlCalls: () => graphqlCalls };
+}
+
+describe('GitHub tag order', () => {
+  it('reads the dates and hands the tags back newest first', async () => {
+    // The REST listing answers in name order and carries no date at all, which
+    // made the predecessor of v1.10.0 come back as v1.9.0.
+    serveGraphQL({
+      data: {
+        repository: {
+          refs: {
+            nodes: [
+              {
+                name: 'v1.10.0',
+                target: {
+                  __typename: 'Commit',
+                  oid: 'aaa',
+                  committedDate: '2026-06-01T00:00:00Z',
+                },
+              },
+              {
+                name: 'v1.9.0',
+                target: {
+                  __typename: 'Commit',
+                  oid: 'bbb',
+                  committedDate: '2026-05-01T00:00:00Z',
+                },
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    const tags = await new GitHubConnector().listTags(contextFor('github'), 'widget');
+
+    expect(tags.map((tag) => tag.name)).toEqual(['v1.10.0', 'v1.9.0']);
+    expect(tags[0]).toMatchObject({ sha: 'aaa', taggedAt: '2026-06-01T00:00:00Z' });
+  });
+
+  it('dates an annotated tag by its tagger, and points it at the commit', async () => {
+    // Git has two kinds of tag: one points straight at a commit, the other at
+    // a tag object that points at the commit. A release is usually the second.
+    serveGraphQL({
+      data: {
+        repository: {
+          refs: {
+            nodes: [
+              {
+                name: 'v2.0.0',
+                target: {
+                  __typename: 'Tag',
+                  tagger: { date: '2026-07-04T09:00:00Z' },
+                  target: { oid: 'ccc', committedDate: '2026-07-03T08:00:00Z' },
+                },
+              },
+            ],
+          },
+        },
+      },
+    });
+
+    const [tag] = await new GitHubConnector().listTags(contextFor('github'), 'widget');
+
+    expect(tag).toEqual({ name: 'v2.0.0', sha: 'ccc', taggedAt: '2026-07-04T09:00:00Z' });
+  });
+
+  it('falls back to the listing when the instance answers no GraphQL', async () => {
+    // An instance with GraphQL disabled still gets its tags — in the order it
+    // lists them, undated, which is exactly what it got before any of this.
+    const served = serveGraphQL(null, [{ name: 'v1.0.0', commit: { sha: 'ddd' } }]);
+
+    const tags = await new GitHubConnector().listTags(contextFor('github'), 'widget');
+
+    expect(served.graphqlCalls()).toBeGreaterThan(0);
+    expect(tags).toEqual([{ name: 'v1.0.0', sha: 'ddd', taggedAt: null }]);
+  });
+});

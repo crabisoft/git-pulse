@@ -55,6 +55,9 @@ model Source {
   /// before this, or one whose owner had no opinion, keeps exactly the depth it
   /// had, and follows the window when that one is widened.
   historyDays Int?
+  /// The source a reader lands on when the address names none. At most one, and
+  /// possibly none — an install with a single source has never needed to say.
+  isDefault Boolean    @default(false)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
@@ -298,6 +301,9 @@ model User {
   /// never expressed a preference — which a stored copy of it would not.
   displayDirection String?
   displayMode      String?
+  /// The language this account reads in. Null follows the browser, which is a
+  /// better guess for somebody who never chose than any default here.
+  language         String?
 
   sessions       Session[]
   passwordResets PasswordReset[]

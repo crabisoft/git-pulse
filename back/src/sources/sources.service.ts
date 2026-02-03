@@ -200,6 +200,35 @@ export class SourcesService {
   }
 
   /**
+   * Makes this source the one a reader lands on when the address names none.
+   *
+   * At most one across the install, cleared and set in the same transaction —
+   * two sources both claiming it would leave the choice to whichever the
+   * database happened to return first, which is not a choice anybody made.
+   *
+   * There is no way to unset it beyond naming another: an install with a
+   * favourite has an answer, and taking the answer away without giving one
+   * back only puts the question to the next reader.
+   */
+  async makeDefault(id: string): Promise<SourcePublic> {
+    const exists = await this.prisma.source.findUnique({ where: { id }, select: { id: true } });
+    if (!exists) throw new CodedException('errors.source.notFound', HttpStatus.NOT_FOUND, { id });
+
+    const [source] = await this.prisma.$transaction([
+      this.prisma.source.update({
+        where: { id },
+        include: WITH_TRACKERS,
+        data: { isDefault: true },
+      }),
+      this.prisma.source.updateMany({
+        where: { id: { not: id }, isDefault: true },
+        data: { isDefault: false },
+      }),
+    ]);
+    return toPublic(source);
+  }
+
+  /**
    * Partial update. The stored secret is kept untouched unless a new one is
    * supplied — except when the auth scheme changes, which makes it unusable.
    */
@@ -467,6 +496,7 @@ function toPublic(s: {
   mode: string;
   webhooksEnabled: boolean;
   historyDays: number | null;
+  isDefault: boolean;
   createdAt: Date;
   updatedAt: Date;
   trackers: Array<{ trackerId: string; incidents: boolean }>;
@@ -483,6 +513,7 @@ function toPublic(s: {
     mode: s.mode as SourceMode,
     webhooksEnabled: s.webhooksEnabled,
     historyDays: s.historyDays,
+    isDefault: s.isDefault,
     envRuleIds: s.envRules.map((b) => b.ruleId),
     trackerIds: s.trackers.map((b) => b.trackerId),
     incidentTrackerId: s.trackers.find((b) => b.incidents)?.trackerId ?? null,

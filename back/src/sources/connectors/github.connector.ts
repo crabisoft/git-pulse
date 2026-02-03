@@ -21,6 +21,7 @@ import type {
 } from './source-connector.interface';
 import { githubQuota, type HeaderBag, type QuotaSink } from '../../api-quota/rate-limit-headers';
 import { applyScope, ageHours } from './scope.util';
+import { byTagDate } from './tag-order';
 import { repoUrl } from './ref-url';
 import { isNotFound, unresolvableRange } from './compare';
 
@@ -364,15 +365,32 @@ export class GitHubConnector implements SourceConnector {
     return out.filter((item) => !older(item));
   }
 
+  /**
+   * Tags of a repo, newest first.
+   *
+   * Read over GraphQL, which is the only GitHub API that answers this at all:
+   * the REST listing returns tags ordered by name and carries no date, so the
+   * previous release of `v1.10.0` came back as `v1.9.0` — and a release note
+   * reported the wrong range with every link in it pointing somewhere
+   * plausible. GraphQL orders by the tagged commit's date and hands the dates
+   * over in the same call, so this costs one request either way.
+   *
+   * The REST listing is kept as a fallback: an instance that answers no GraphQL
+   * still gets its tags, in the order it happens to list them, which is what it
+   * always got.
+   */
   async listTags(ctx: ConnectorContext, repo: string): Promise<Tag[]> {
     const gh = this.client(ctx);
-    const tags = await gh.rest.repos.listTags({ owner: ctx.scope.owner, repo, per_page: 100 });
-    return tags.data.map((tag) => ({
-      name: tag.name,
-      sha: tag.commit.sha,
-      // Lightweight tags carry no date; the commit's stands in when needed.
-      taggedAt: null,
-    }));
+    try {
+      const answer = await gh.graphql<TagsQuery>(TAGS_QUERY, { owner: ctx.scope.owner, repo });
+      return byTagDate((answer.repository?.refs.nodes ?? []).map(toTag));
+    } catch (e) {
+      this.logger.warn(
+        `Tags de ${repo} lus sans leur date (GraphQL indisponible) : ${asMessage(e)}`,
+      );
+      const tags = await gh.rest.repos.listTags({ owner: ctx.scope.owner, repo, per_page: 100 });
+      return tags.data.map((tag) => ({ name: tag.name, sha: tag.commit.sha, taggedAt: null }));
+    }
   }
 
   /**
@@ -765,3 +783,79 @@ export function mapGitHubStatus(status: string | null, conclusion: string | null
 function asMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
 }
+
+/**
+ * A tag as GraphQL reports it.
+ *
+ * Two shapes, because git has two kinds of tag: a lightweight one points
+ * straight at a commit, an annotated one at a tag object that points at the
+ * commit. Both are asked for, and both are read below.
+ */
+interface TagNode {
+  name: string;
+  target:
+    | { __typename: 'Commit'; oid: string; committedDate: string }
+    | {
+        __typename: 'Tag';
+        tagger: { date: string } | null;
+        target: { oid: string; committedDate: string } | null;
+      }
+    | { __typename: string };
+}
+
+interface TagsQuery {
+  repository: { refs: { nodes: TagNode[] } } | null;
+}
+
+const TAGS_QUERY = `
+  query Tags($owner: String!, $repo: String!) {
+    repository(owner: $owner, name: $repo) {
+      refs(
+        refPrefix: "refs/tags/"
+        first: 100
+        orderBy: { field: TAG_COMMIT_DATE, direction: DESC }
+      ) {
+        nodes {
+          name
+          target {
+            __typename
+            ... on Commit { oid committedDate }
+            ... on Tag {
+              tagger { date }
+              target { ... on Commit { oid committedDate } }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+/**
+ * What a tag points at, and when it was cut.
+ *
+ * An annotated tag is dated by whoever cut it; a lightweight one has only the
+ * commit's date, which is the same thing for the purpose of ordering releases.
+ */
+function toTag(node: TagNode): Tag {
+  const target = node.target;
+  if (target.__typename === 'Commit') {
+    const commit = target as { oid: string; committedDate: string };
+    return { name: node.name, sha: commit.oid, taggedAt: commit.committedDate };
+  }
+  if (target.__typename === 'Tag') {
+    const tag = target as {
+      tagger: { date: string } | null;
+      target: { oid: string; committedDate: string } | null;
+    };
+    return {
+      name: node.name,
+      sha: tag.target?.oid ?? '',
+      taggedAt: tag.tagger?.date ?? tag.target?.committedDate ?? null,
+    };
+  }
+  // A tag pointing at a tree or a blob. Git allows it, releases never use it,
+  // and it has no date to be ordered by.
+  return { name: node.name, sha: '', taggedAt: null };
+}
+

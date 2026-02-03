@@ -18,9 +18,19 @@ describe('rewrite instructions', () => {
     expect(languageInstruction('fr')).toContain('fr');
   });
 
-  it('leaves the language alone when none is asked for', () => {
-    // Not "English": the notes are in whatever the commits were written in.
-    expect(languageInstruction(undefined)).toContain('already in');
+  it('takes the language from the commits when none is asked for', () => {
+    // Not "English", and not the reader's interface either: a release note
+    // reports what a repository's history says, in the words it says it.
+    const instruction = languageInstruction(undefined);
+    expect(instruction).toContain('commit messages themselves');
+    expect(instruction).toContain('Do not translate');
+    expect(instruction).toContain('do not follow the language of these instructions');
+  });
+
+  it('tells the model the same thing in its standing rules', () => {
+    // Said twice on purpose: the instruction travels with one request, and a
+    // model that skims the user turn still has the rule above it.
+    expect(REWRITE_SYSTEM).toContain('language of the notes comes from the entries');
   });
 
   it('sends the notes verbatim, after the instruction', () => {

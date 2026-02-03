@@ -26,13 +26,32 @@ export const REWRITE_SYSTEM = [
   '   the Conventional Commits prefixes, and put what a reader acts on first.',
   '5. Answer with the Markdown and nothing else — no preamble, no code fence',
   '   around the whole document.',
+  '6. The language of the notes comes from the entries you are given, never',
+  '   from the language of these instructions.',
 ].join('\n');
 
-/** The instruction that carries the target language, when one was asked for. */
+/**
+ * The instruction that carries the target language.
+ *
+ * Omitted, the notes are written in whatever language the commits were written
+ * in — and that has to be said, at length, because everything around it pulls
+ * the other way: these instructions are in English, the reader's interface may
+ * be in French, and a model handed a French interface and English commits will
+ * cheerfully translate unless told not to. What a release note reports is what
+ * a repository's own history says, in the words it says it.
+ *
+ * A language named here is a translation somebody asked for, which is a
+ * different thing and stays available.
+ */
 export function languageInstruction(language: string | undefined): string {
   return language
     ? `Write the notes in ${language}, translating the entries as needed. Leave identifiers, link targets and code alone.`
-    : 'Write the notes in the language the entries are already in.';
+    : [
+        'Write the notes in the language the entries below are already written in —',
+        'the language of the commit messages themselves. If they are in English, the',
+        'notes are in English; if they are in French, the notes are in French. Do not',
+        'translate, and do not follow the language of these instructions.',
+      ].join(' ');
 }
 
 /** The user turn: the instruction, then the notes to work on. */

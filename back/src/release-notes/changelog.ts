@@ -4,6 +4,7 @@ import { sync as parseCommit } from 'conventional-commits-parser';
 import createPreset from 'conventional-changelog-conventionalcommits';
 import type { ReleaseNoteEntry } from '@repo/shared';
 import { repoUrl, type RepoLocation } from '../sources/connectors/ref-url';
+import { linkTickets } from './link-tickets';
 
 /**
  * The other renderer: the range handed to the `conventional-changelog` packages
@@ -82,7 +83,14 @@ export async function renderChangelog(
     linkReferences: true,
   };
 
-  return collect(writer(context, preset.writerOpts), commits);
+  const rendered = await collect(writer(context, preset.writerOpts), commits);
+  // The writer links `#42` to this repository's own issues and nothing else.
+  // Everything a ticket rule recognised — a Jira key, a Linear one — is linked
+  // here, from what the extraction already attached to each entry.
+  return linkTickets(
+    rendered,
+    entries.flatMap((entry) => entry.tickets),
+  );
 }
 
 /** Drives the writer's stream to its end and returns what it wrote. */

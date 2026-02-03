@@ -107,6 +107,16 @@ export function scopeFromSelection(
     : { include: catalogue.filter((repo) => selected.has(repo)), exclude: [], trackNewRepos };
 }
 
+/**
+ * The languages the interface is translated into.
+ *
+ * Here rather than in the frontend that renders them: an account now stores
+ * which one it reads, so the API validates it — and a list in two places is a
+ * list that will disagree the day a third language lands.
+ */
+export const SUPPORTED_LANGUAGES = ['en', 'fr'] as const;
+export type Language = (typeof SUPPORTED_LANGUAGES)[number];
+
 /** Public representation of a source — never carries the secret. */
 export interface SourcePublic {
   id: string;
@@ -139,6 +149,14 @@ export interface SourcePublic {
    * the window later finds it already there.
    */
   historyDays: number | null;
+  /**
+   * The source a reader lands on when the address names none.
+   *
+   * At most one across the install, and possibly none: with a single source
+   * there is nothing to choose between, and the first one answers. What it
+   * changes is which board opens on an install that watches several.
+   */
+  isDefault: boolean;
   /** Classification rules that apply to this source, from the global set. */
   envRuleIds: string[];
   /** Trackers this source's pull requests may reference. */
@@ -1126,6 +1144,12 @@ export interface UserPublic {
   updatedAt: string;
   /** What this account chose for itself; nulls fall back to the settings. */
   display: DisplayPreference;
+  /**
+   * The language this account reads in. Null follows the browser, which is
+   * what an account that never chose should do — a machine set to French is a
+   * better guess than the installation's own default.
+   */
+  language: Language | null;
 }
 
 /**
