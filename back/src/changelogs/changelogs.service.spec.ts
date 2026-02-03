@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { HttpStatus } from '@nestjs/common';
-import type { ClassifiedDeployment, DeploymentChanges, PipelineStatus } from '@repo/shared';
+import type {
+  ClassifiedDeployment,
+  DeploymentChanges,
+  PipelineStatus,
+  ReleaseNoteEntry,
+} from '@repo/shared';
 import { CodedException } from '../common/coded-exception';
 import type { SettingsService } from '../settings/settings.service';
 import type { ApiQuotaService } from '../api-quota/api-quota.service';
@@ -37,6 +42,21 @@ function changes(overrides: Partial<DeploymentChanges> = {}): DeploymentChanges 
     markdown: '## widget',
     archivedAt: null,
     ...overrides,
+  };
+}
+
+/** One commit, as a rendered entry — what makes a comparison non-empty. */
+function entry(): ReleaseNoteEntry {
+  return {
+    summary: 'pay the invoice twice, never thrice',
+    message: 'fix(billing): pay the invoice twice, never thrice',
+    scope: 'billing',
+    breaking: false,
+    sha: '3f2a91c',
+    author: 'jacqueline',
+    url: 'https://github.com/acme/widget/commit/3f2a91c',
+    tickets: [],
+    pullRequest: null,
   };
 }
 
@@ -130,6 +150,64 @@ describe('archive', () => {
         entries: [],
         markdown: '',
       }),
+    );
+  });
+
+  it('falls back on the default branch when the predecessor carried nothing', async () => {
+    // Nothing between two deployments of the same ref, and nothing at all before
+    // a first one — both file "0 commits" where the reader is asking what is
+    // running there. The branch the ref was cut from still answers it.
+    const { changelogs, contentsOf, record } = service({ deployments: [deployment('a')] });
+    contentsOf
+      .mockResolvedValueOnce(changes({ entries: [], authors: 0, markdown: '' }))
+      .mockResolvedValueOnce(
+        changes({ base: 'default', baseRef: 'main', entries: [entry()], authors: 1 }),
+      );
+
+    const outcome = await changelogs.archive('src-1');
+
+    expect(outcome.archived).toBe(1);
+    expect(contentsOf).toHaveBeenNthCalledWith(
+      2,
+      'src-1',
+      expect.anything(),
+      expect.anything(),
+      'default',
+    );
+    expect(record).toHaveBeenCalledWith(
+      'src-1',
+      expect.objectContaining({ base: 'default', baseRef: 'main', entries: [entry()], authors: 1 }),
+    );
+  });
+
+  it('keeps the predecessor comparison when the default branch adds nothing to it', async () => {
+    // A ref that is the default branch, or one already merged into it, compares
+    // empty both ways: "nothing new since the last deployment" is the truer of
+    // the two readings, and the one that names a base the reader can follow.
+    const { changelogs, contentsOf, record } = service({ deployments: [deployment('a')] });
+    contentsOf.mockResolvedValue(changes({ entries: [], authors: 0 }));
+
+    await changelogs.archive('src-1');
+
+    expect(contentsOf).toHaveBeenCalledTimes(2);
+    expect(record).toHaveBeenCalledWith(
+      'src-1',
+      expect.objectContaining({ base: 'previous', baseRef: 'v-old' }),
+    );
+  });
+
+  it('files the empty comparison rather than losing it to a default branch that will not compare', async () => {
+    const { changelogs, contentsOf, record } = service({ deployments: [deployment('a')] });
+    contentsOf
+      .mockResolvedValueOnce(changes({ entries: [] }))
+      .mockRejectedValueOnce(new Error('404 no such branch'));
+
+    const outcome = await changelogs.archive('src-1');
+
+    expect(outcome).toEqual({ archived: 1, known: 0, deferred: 0, unreadable: 0, failed: 0 });
+    expect(record).toHaveBeenCalledWith(
+      'src-1',
+      expect.objectContaining({ base: 'previous', baseRef: 'v-old', entries: [] }),
     );
   });
 

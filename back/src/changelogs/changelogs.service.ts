@@ -112,7 +112,7 @@ export class ChangelogsService {
         break;
       }
       try {
-        const changes = await this.deployments.contentsOf(sourceId, target, classified);
+        const changes = await this.carried(sourceId, target, classified);
         await this.store.record(sourceId, toRecord(target, changes, releaseNotesGenerator));
         outcome.archived += 1;
       } catch (e) {
@@ -144,6 +144,53 @@ export class ChangelogsService {
       );
     }
     return outcome;
+  }
+
+  /**
+   * What a deployment carried against its predecessor, or — when that is
+   * nothing — what it carries against the default branch.
+   *
+   * Two ordinary cases file an empty comparison: a deployment that went out on
+   * a ref its predecessor already ran, and a first deployment, which has no
+   * predecessor to compare against at all. Both leave a row reading "0 commits"
+   * where a reader is asking what is running on that environment, and the
+   * branch the ref was cut from still answers it.
+   *
+   * Worth the second comparison here and nowhere else: this record is written
+   * once and read for months, long after the refs it names have gone. The
+   * deployments page asks the platform live, and the base it compares against
+   * is the reader's own choice.
+   */
+  private async carried(
+    sourceId: string,
+    target: ClassifiedDeployment,
+    classified: ClassifiedDeployment[],
+  ): Promise<DeploymentChanges> {
+    const carried = await this.deployments.contentsOf(sourceId, target, classified);
+    if (carried.entries.length > 0) return carried;
+
+    try {
+      const againstDefault = await this.deployments.contentsOf(
+        sourceId,
+        target,
+        classified,
+        'default',
+      );
+      // Kept only if it carries something. A ref that is the default branch, or
+      // one already merged into it, compares empty both ways — and "nothing new
+      // since the last deployment" is the truer of the two readings.
+      return againstDefault.entries.length > 0 ? againstDefault : carried;
+    } catch (e) {
+      // The predecessor comparison answered, and it is what would have been
+      // filed before this fallback existed. A default branch that will not
+      // compare — deleted, renamed, or a repo the platform has stopped
+      // resolving — is a reason to file that answer, not to lose it.
+      this.logger.warn(
+        `Comparaison avec la branche par défaut impossible pour le déploiement ${target.id} ` +
+          `(${target.repo} @ ${target.ref}) : comparaison vide conservée — ${asMessage(e)}`,
+      );
+      return carried;
+    }
   }
 }
 
