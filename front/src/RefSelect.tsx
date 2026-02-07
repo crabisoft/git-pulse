@@ -29,6 +29,9 @@ export function RefSelect({
       {autoLabel !== undefined && <option value="">{autoLabel}</option>}
       {tags.length > 0 && (
         <optgroup label={t('releaseNotes.tags')}>
+          {/* Listed newest first, which is the order the connector hands them
+              back in — see `byTagDate`. The name is all a picker needs: the
+              date decides the order and says nothing once it has. */}
           {tags.map((tag) => (
             <option key={`tag:${tag.name}`} value={tag.name}>
               {tag.name}

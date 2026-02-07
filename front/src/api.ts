@@ -363,6 +363,12 @@ export const api = {
    * which is what a fresh switch to that mode is waiting on — otherwise the
    * board stays empty until the next scheduled run.
    */
+  /**
+   * Makes a source the one a reader lands on when the address names none. At
+   * most one across the install, so this clears whichever held it.
+   */
+  makeDefaultSource: (id: string) =>
+    request<SourcePublic>(`/sources/${id}/default`, { method: 'POST' }),
   collectSource: (id: string) =>
     request<MetricSnapshotPublic[]>(`/sources/${id}/collect`, { method: 'POST' }),
   /**

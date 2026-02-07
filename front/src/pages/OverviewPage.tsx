@@ -1,10 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import type {
-  DisplayMode,
-  OverviewDirection,
-  OverviewReport,
-} from '@repo/shared';
+import type { OverviewDirection, OverviewReport } from '@repo/shared';
 import { api, type OverviewQuery } from '../api';
 import { AUTO_REFRESH_MS, WALL_REFRESH_MS, useAutoRefresh, useCancellableLoad } from '../hooks';
 import { overviewCodec, useUrlQuery, type OverviewState } from '../urlQuery';
@@ -14,7 +10,7 @@ import { RepoFilter } from '../RepoFilter';
 import { humanizeDuration } from '../doraFormat';
 import { defaultGroupBy } from '../overview/grouping';
 import { DetailPanels } from '../overview/DetailPanels';
-import { DisplaySwitch } from '../DisplaySwitch';
+import { DirectionSwitch } from '../DirectionSwitch';
 import { BoardView } from '../overview/BoardView';
 import { InstrumentView } from '../overview/InstrumentView';
 import { StreamView } from '../overview/StreamView';
@@ -33,15 +29,15 @@ export function OverviewPage({
   sourceId,
   slug,
   staleHours,
-  display,
-  onDisplayChange,
+  direction,
+  onDirectionChange,
 }: {
   sourceId: string;
   slug: string;
   staleHours: number | null;
-  /** How the page is presenting itself, resolved by the shell. */
-  display: { direction: OverviewDirection; mode: DisplayMode };
-  onDisplayChange: (next: { direction?: OverviewDirection; mode?: DisplayMode }) => void;
+  /** Which reading of the dashboard is on show, resolved by the shell. */
+  direction: OverviewDirection;
+  onDirectionChange: (next: OverviewDirection) => void;
 }) {
   const { t } = useTranslation();
   const [report, setReport] = useState<OverviewReport | null>(null);
@@ -90,11 +86,7 @@ export function OverviewPage({
           <WallExit />
         ) : (
           <>
-            <DisplaySwitch
-              direction={display.direction}
-              mode={display.mode}
-              onChange={onDisplayChange}
-            />
+            <DirectionSwitch direction={direction} onChange={onDirectionChange} />
             <button className="btn" onClick={reload} disabled={loading}>
               {loading ? t('common.refreshing') : `↻ ${t('common.refresh')}`}
             </button>
@@ -133,7 +125,7 @@ export function OverviewPage({
           onChange={(meta) => filter({ meta })}
           disabled={loading}
         />
-        {display.direction !== 'instrument' && (
+        {direction !== 'instrument' && (
           <GroupByFilter
             keys={Object.keys(dimensions)}
             value={fold}
@@ -154,7 +146,7 @@ export function OverviewPage({
 
       {report && (
         <>
-          {display.direction === 'instrument' ? (
+          {direction === 'instrument' ? (
             <InstrumentView
               report={report}
               axes={crossing}
@@ -172,7 +164,7 @@ export function OverviewPage({
               }}
               staleHours={staleHours}
             />
-          ) : display.direction === 'stream' ? (
+          ) : direction === 'stream' ? (
             <StreamView report={report} sourceId={sourceId} query={settled.filters} />
           ) : (
             <BoardView report={report} fold={fold} slug={slug} staleHours={staleHours} />

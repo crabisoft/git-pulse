@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { DataList } from '../DataList';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   CartesianGrid,
@@ -234,42 +235,47 @@ function SampleTable({
   if (samples.length === 0) return <p className="muted">{t('dora.detail.noSample')}</p>;
 
   return (
-    <table className="data">
-      <thead>
-        <tr>
-          <th>{t('dora.detail.cols.item')}</th>
-          <th>{t('dora.detail.cols.date')}</th>
-          {isDuration ? (
-            <th className="num">{t('dora.detail.cols.duration')}</th>
-          ) : (
-            <th>{t('dashboard.cols.status')}</th>
-          )}
-        </tr>
-      </thead>
-      <tbody>
-        {samples.map((s, i) => (
-          <tr key={i}>
-            <td className="mono">
-              {s.url ? (
-                <a href={s.url} target="_blank" rel="noreferrer">
-                  {s.label}
+    <DataList
+      rows={samples.map((sample, i) => ({ ...sample, key: String(i) }))}
+      rowKey={(sample) => sample.key}
+      columns={[
+        {
+          key: 'item',
+          header: t('dora.detail.cols.item'),
+          role: 'lead',
+          className: 'mono',
+          cell: (sample) => (
+            <>
+              {sample.url ? (
+                <a href={sample.url} target="_blank" rel="noreferrer">
+                  {sample.label}
                 </a>
               ) : (
-                s.label
+                sample.label
               )}
-              {s.details && <SampleDetails details={s.details} />}
-            </td>
-            <td>{formatDate(s.at)}</td>
-            {isDuration ? (
-              <td className="num">{s.value === null ? '—' : humanizeDuration(s.value)}</td>
-            ) : (
-              <td>
-                <SampleStatus status={s.status} />
-              </td>
-            )}
-          </tr>
-        ))}
-      </tbody>
-    </table>
+              {sample.details && <SampleDetails details={sample.details} />}
+            </>
+          ),
+        },
+        {
+          key: 'date',
+          header: t('dora.detail.cols.date'),
+          cell: (sample) => formatDate(sample.at),
+        },
+        isDuration
+          ? {
+              key: 'duration',
+              header: t('dora.detail.cols.duration'),
+              className: 'num',
+              cell: (sample) => (sample.value === null ? '—' : humanizeDuration(sample.value)),
+            }
+          : {
+              key: 'status',
+              header: t('dashboard.cols.status'),
+              role: 'aside',
+              cell: (sample) => <SampleStatus status={sample.status} />,
+            },
+      ]}
+    />
   );
 }

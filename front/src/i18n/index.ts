@@ -1,16 +1,9 @@
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import LanguageDetector from 'i18next-browser-languagedetector';
+import { SUPPORTED_LANGUAGES } from '@repo/shared';
 import en from './locales/en.json';
 import fr from './locales/fr.json';
-
-export const SUPPORTED_LANGUAGES = ['en', 'fr'] as const;
-export type Language = (typeof SUPPORTED_LANGUAGES)[number];
-
-export const LANGUAGE_LABELS: Record<Language, string> = {
-  en: 'English',
-  fr: 'Français',
-};
 
 i18n
   .use(LanguageDetector)
@@ -25,11 +18,16 @@ i18n
     // Map region variants (e.g. fr-FR → fr) onto the supported languages.
     load: 'languageOnly',
     nonExplicitSupportedLngs: true,
-    detection: {
-      order: ['localStorage', 'navigator', 'htmlTag'],
-      caches: ['localStorage'],
-      lookupLocalStorage: 'lang',
-    },
+    /**
+     * The browser decides, and nothing here remembers otherwise.
+     *
+     * An account that stated a language has it applied as soon as the session
+     * is known — see `App`. One that stated none reads in the language of the
+     * machine it is on, which is a better guess than any default stored here,
+     * and a better one than a copy of what somebody picked on this browser
+     * once. Nothing is cached for that reason: the account is the only memory.
+     */
+    detection: { order: ['navigator', 'htmlTag'], caches: [] },
     interpolation: { escapeValue: false },
   });
 

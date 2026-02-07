@@ -1,5 +1,6 @@
 import { useCallback, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
+import { DataList } from '../DataList';
 import type { DashboardLive, PipelineStatus, TicketRef } from '@repo/shared';
 import { api, type PageQuery } from '../api';
 import { useCancellableLoad } from '../hooks';
@@ -100,69 +101,93 @@ function DetailBody({
 
   return (
     <>
-      <table className="data">
-        <thead>
-          {kind === 'prs' ? (
-            <tr>
-              <th>{t('dashboard.cols.repo')}</th>
-              <th>{t('dashboard.cols.title')}</th>
-              <th>{t('dashboard.cols.author')}</th>
-              <th className="num">{t('dashboard.cols.ageH')}</th>
-            </tr>
-          ) : (
-            <tr>
-              <th>{t('dashboard.cols.repo')}</th>
-              <th>{t('dashboard.cols.ref')}</th>
-              <th>{t('dashboard.cols.status')}</th>
-              <th className="num">{t('dashboard.cols.duration')}</th>
-            </tr>
-          )}
-        </thead>
-        <tbody>
-          {kind === 'prs'
-            ? data.pullRequests.items.map((pr) => (
-                <tr key={pr.id} className={pr.ageHours >= stale ? 'stale' : ''}>
-                  <td className="mono">
-                    <a href={pr.repoUrl} target="_blank" rel="noreferrer">
-                      {pr.repo}
-                    </a>
-                  </td>
-                  <td>
-                    <a href={pr.url} target="_blank" rel="noreferrer">
-                      #{pr.number} {pr.title}
-                    </a>
-                    {pr.tickets.length > 0 && (
-                      <div className="pills ticket-refs">
-                        {pr.tickets.map((ref) => (
-                          <TicketPill key={`${ref.tracker.name}:${ref.key}`} ticket={ref} />
-                        ))}
-                      </div>
-                    )}
-                  </td>
-                  <td>{pr.author}</td>
-                  <td className="num">{pr.ageHours}</td>
-                </tr>
-              ))
-            : data.pipelines.items.map((p) => (
-                <tr key={p.id}>
-                  <td className="mono">
-                    <a href={p.repoUrl} target="_blank" rel="noreferrer">
-                      {p.repo}
-                    </a>
-                  </td>
-                  <td className="mono">
-                    <a href={p.url} target="_blank" rel="noreferrer">
-                      {p.ref}
-                    </a>
-                  </td>
-                  <td>
-                    <StatusPill status={p.status} />
-                  </td>
-                  <td className="num">{formatDuration(p.durationSec)}</td>
-                </tr>
-              ))}
-        </tbody>
-      </table>
+      {/* Two sets of columns rather than two tables: what a panel lists changes,
+          how it is rendered at each width does not — see DataList. */}
+      {kind === 'prs' ? (
+        <DataList
+          rows={data.pullRequests.items}
+          rowKey={(pr) => pr.id}
+          rowClass={(pr) => (pr.ageHours >= stale ? 'stale' : undefined)}
+          columns={[
+            {
+              key: 'repo',
+              header: t('dashboard.cols.repo'),
+              className: 'mono',
+              cell: (pr) => (
+                <a href={pr.repoUrl} target="_blank" rel="noreferrer">
+                  {pr.repo}
+                </a>
+              ),
+            },
+            {
+              key: 'title',
+              header: t('dashboard.cols.title'),
+              role: 'lead',
+              cell: (pr) => (
+                <>
+                  <a href={pr.url} target="_blank" rel="noreferrer">
+                    #{pr.number} {pr.title}
+                  </a>
+                  {pr.tickets.length > 0 && (
+                    <div className="pills ticket-refs">
+                      {pr.tickets.map((ref) => (
+                        <TicketPill key={`${ref.tracker.name}:${ref.key}`} ticket={ref} />
+                      ))}
+                    </div>
+                  )}
+                </>
+              ),
+            },
+            { key: 'author', header: t('dashboard.cols.author'), cell: (pr) => pr.author },
+            {
+              key: 'age',
+              header: t('dashboard.cols.ageH'),
+              className: 'num',
+              cell: (pr) => pr.ageHours,
+            },
+          ]}
+        />
+      ) : (
+        <DataList
+          rows={data.pipelines.items}
+          rowKey={(pipeline) => pipeline.id}
+          columns={[
+            {
+              key: 'repo',
+              header: t('dashboard.cols.repo'),
+              className: 'mono',
+              cell: (pipeline) => (
+                <a href={pipeline.repoUrl} target="_blank" rel="noreferrer">
+                  {pipeline.repo}
+                </a>
+              ),
+            },
+            {
+              key: 'ref',
+              header: t('dashboard.cols.ref'),
+              role: 'lead',
+              className: 'mono',
+              cell: (pipeline) => (
+                <a href={pipeline.url} target="_blank" rel="noreferrer">
+                  {pipeline.ref}
+                </a>
+              ),
+            },
+            {
+              key: 'status',
+              header: t('dashboard.cols.status'),
+              role: 'aside',
+              cell: (pipeline) => <StatusPill status={pipeline.status} />,
+            },
+            {
+              key: 'duration',
+              header: t('dashboard.cols.duration'),
+              className: 'num',
+              cell: (pipeline) => formatDuration(pipeline.durationSec),
+            },
+          ]}
+        />
+      )}
       <Pagination info={list.page} value={page} onChange={setPage} disabled={loading} />
     </>
   );

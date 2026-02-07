@@ -123,3 +123,38 @@ export function useCancellableLoad(load: (signal: AbortSignal) => Promise<void>)
 
   return { reload, loading, error };
 }
+
+/**
+ * The width below which a page is laid out as a phone rather than as a table.
+ *
+ * Stated once, in the stylesheet's terms: the components that render two
+ * different things read it, and the CSS that folds the rest matches it. Two
+ * numbers drifting apart would give a page a card list and a desktop top bar.
+ */
+export const NARROW_PX = 640;
+
+/**
+ * Whether the window is narrow enough to be read as a phone.
+ *
+ * Some layouts cannot be reached from CSS: a table scrolled sideways is not a
+ * list of cards, whatever is done to it, and rendering both and hiding one
+ * would put every row in the document twice — twice for a screen reader, twice
+ * for anybody searching the page. So the component picks, and this is what it
+ * picks on.
+ */
+export function useNarrow(): boolean {
+  const query = `(max-width: ${NARROW_PX}px)`;
+  const [narrow, setNarrow] = useState(() => window.matchMedia(query).matches);
+
+  useEffect(() => {
+    const media = window.matchMedia(query);
+    const onChange = () => setNarrow(media.matches);
+    // Read again on subscribe: the width may have changed between the first
+    // render and this effect — a rotation, or a devtools pane opening.
+    onChange();
+    media.addEventListener('change', onChange);
+    return () => media.removeEventListener('change', onChange);
+  }, [query]);
+
+  return narrow;
+}

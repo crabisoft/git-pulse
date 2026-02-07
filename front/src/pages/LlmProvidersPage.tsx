@@ -11,6 +11,7 @@ import {
 import { api, apiErrorInfo, type CreateLlmProviderInput } from '../api';
 import { DeleteIcon, EditIcon, PlusIcon } from '../icons';
 import { IconButton } from '../IconButton';
+import { DataList } from '../DataList';
 import { ConfirmDialog, Modal } from '../Modal';
 
 const EMPTY: CreateLlmProviderInput = {
@@ -99,68 +100,78 @@ export function LlmProvidersPage() {
         {providers.length === 0 && <p className="muted">{t('llm.listEmpty')}</p>}
 
         {providers.length > 0 && (
-          <table className="data">
-            <thead>
-              <tr>
-                <th>{t('llm.form.name')}</th>
-                <th>{t('llm.form.kind')}</th>
-                <th>{t('llm.form.model')}</th>
-                <th>{t('llm.form.baseUrl')}</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {providers.map((provider) => (
-                <tr key={provider.id}>
-                  <td>
+          <DataList
+            rows={providers}
+            rowKey={(provider) => provider.id}
+            columns={[
+              {
+                key: 'name',
+                header: t('llm.form.name'),
+                role: 'lead',
+                cell: (provider) => (
+                  <>
                     {provider.name}{' '}
-                    {provider.isDefault && (
-                      <span className="pill meta">{t('llm.defaultBadge')}</span>
-                    )}
-                    {/* A provider without a key cannot answer, and would only say so at the first call. */}
+                    {provider.isDefault && <span className="pill meta">{t('llm.defaultBadge')}</span>}
+                    {/* A provider without a key cannot answer, and would only say so at
+                        the first call. */}
                     {!provider.hasKey && (
                       <span className="pill status-failed">{t('llm.noKeyBadge')}</span>
                     )}
-                  </td>
-                  <td>
-                    <span className="pill attr">{provider.kind}</span>
-                  </td>
-                  <td className="mono">{provider.model}</td>
-                  <td className="mono">
-                    {provider.baseUrl ?? (
-                      <span className="muted">{t('llm.defaultEndpoint')}</span>
-                    )}
-                  </td>
-                  <td>
-                    <div className="row-actions">
-                      {!provider.isDefault && (
-                        <button className="btn" onClick={() => void makeDefault(provider)}>
-                          {t('llm.makeDefault')}
-                        </button>
-                      )}
-                      <button
-                        className="btn"
-                        disabled={testing === provider.id}
-                        onClick={() => void test(provider)}
-                      >
-                        {testing === provider.id ? t('llm.testing') : t('llm.runTest')}
+                  </>
+                ),
+              },
+              {
+                key: 'kind',
+                header: t('llm.form.kind'),
+                role: 'aside',
+                cell: (provider) => <span className="pill attr">{provider.kind}</span>,
+              },
+              {
+                key: 'model',
+                header: t('llm.form.model'),
+                className: 'mono',
+                cell: (provider) => provider.model,
+              },
+              {
+                key: 'baseUrl',
+                header: t('llm.form.baseUrl'),
+                className: 'mono',
+                cell: (provider) =>
+                  provider.baseUrl ?? <span className="muted">{t('llm.defaultEndpoint')}</span>,
+              },
+              {
+                key: 'actions',
+                role: 'full',
+                className: 'row-actions',
+                cell: (provider) => (
+                  <>
+                    {!provider.isDefault && (
+                      <button className="btn" onClick={() => void makeDefault(provider)}>
+                        {t('llm.makeDefault')}
                       </button>
-                      <IconButton label={t('common.edit')} onClick={() => setEditing({ provider })}>
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        label={t('common.delete')}
-                        tone="danger"
-                        onClick={() => setDeleting(provider)}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    )}
+                    <button
+                      className="btn"
+                      disabled={testing === provider.id}
+                      onClick={() => void test(provider)}
+                    >
+                      {testing === provider.id ? t('llm.testing') : t('llm.runTest')}
+                    </button>
+                    <IconButton label={t('common.edit')} onClick={() => setEditing({ provider })}>
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      label={t('common.delete')}
+                      tone="danger"
+                      onClick={() => setDeleting(provider)}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </>
+                ),
+              },
+            ]}
+          />
         )}
       </section>
 

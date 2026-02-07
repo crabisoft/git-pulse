@@ -4,74 +4,109 @@ import {
   DISPLAY_MODES,
   OVERVIEW_DIRECTIONS,
   PASSWORD_MIN_LENGTH,
+  SUPPORTED_LANGUAGES,
   type DisplayMode,
+  type Language,
   type OverviewDirection,
   type UserPublic,
 } from '@repo/shared';
 import { api, apiErrorInfo } from '../api';
 import { useAuth } from '../auth';
 import { isAvailable } from '../display';
+import { initials, nameHue } from '../initials';
+import { LANGUAGE_LABELS } from '../languages';
+
+/** The form's shape. Everything is a string: it is what the inputs hold. */
+interface FormState {
+  name: string;
+  currentPassword: string;
+  password: string;
+  confirm: string;
+  /** Empty means "follow the installation default" — see `toInput`. */
+  displayDirection: string;
+  displayMode: string;
+  /** Empty follows the browser — see `toInput`. */
+  language: string;
+}
+
+function toForm(user: UserPublic): FormState {
+  return {
+    name: user.name,
+    currentPassword: '',
+    password: '',
+    confirm: '',
+    displayDirection: user.display.direction ?? '',
+    displayMode: user.display.mode ?? '',
+    language: user.language ?? '',
+  };
+}
 
 /**
- * What an account can do about itself without an admin. Deliberately thin: the
- * role and the address are how an admin identifies it, so only the name and the
- * password are here — and the password only against the current one.
+ * What one save sends.
+ *
+ * An untouched field is left out entirely, which is what keeps a save that only
+ * changes a theme from asking the server to rename the account to what it is
+ * already called. The preferences are the exception: empty is a value there —
+ * it hands the choice back to the installation default, and is the only way to
+ * stop overriding it once one has.
+ */
+function toInput(form: FormState, user: UserPublic) {
+  return {
+    ...(form.name !== user.name && { name: form.name }),
+    ...(form.password && { password: form.password, currentPassword: form.currentPassword }),
+    ...(form.displayDirection !== (user.display.direction ?? '') && {
+      displayDirection: (form.displayDirection || null) as OverviewDirection | null,
+    }),
+    ...(form.displayMode !== (user.display.mode ?? '') && {
+      displayMode: (form.displayMode || null) as DisplayMode | null,
+    }),
+    ...(form.language !== (user.language ?? '') && {
+      language: (form.language || null) as Language | null,
+    }),
+  };
+}
+
+/**
+ * Everything an account holds about itself, in one place and behind one Save.
+ *
+ * The role and the address are read-only: an admin hands those out, and letting
+ * an account rewrite either would let it rename itself out from under the
+ * person who granted it. Everything else on this page is the account's own,
+ * which is why none of it lives in the settings section — that one is what the
+ * install is like for everybody.
  */
 export function AccountPage({ user }: { user: UserPublic }) {
   const { t } = useTranslation();
   const { refresh } = useAuth();
-  const [name, setName] = useState(user.name);
-  const [currentPassword, setCurrentPassword] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirm, setConfirm] = useState('');
+  const [form, setForm] = useState<FormState>(() => toForm(user));
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
-  /** Only a failure is worth a line: a success repaints the application. */
-  const [displayMsg, setDisplayMsg] = useState<string | null>(null);
 
-  /**
-   * Saves one presentation choice. Null is a value here and not an omission:
-   * it hands the choice back to the installation default, which is the only
-   * way to stop overriding it once one has.
-   */
-  async function applyDisplay(input: {
-    displayDirection?: OverviewDirection | null;
-    displayMode?: DisplayMode | null;
-  }) {
-    setBusy(true);
-    setDisplayMsg(null);
-    try {
-      await api.updateMe(input);
-      await refresh();
-    } catch (err) {
-      const { code, params } = apiErrorInfo(err);
-      setDisplayMsg(t(code, params));
-    } finally {
-      setBusy(false);
-    }
+  function set<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setForm((cur) => ({ ...cur, [key]: value }));
+    // A save is what the banner described; the next edit makes it stale.
+    setMsg(null);
   }
+
+  const input = toInput(form, user);
+  const dirty = Object.keys(input).length > 0;
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (password && password !== confirm) {
+    if (form.password && form.password !== form.confirm) {
       setMsg({ kind: 'err', text: t('auth.passwordMismatch') });
       return;
     }
     setBusy(true);
     setMsg(null);
-    // One request for both, so a rejected password cannot leave a renamed
-    // account behind it. An untouched field is simply not sent.
-    const input = {
-      ...(name !== user.name && { name }),
-      ...(password && { password, currentPassword }),
-    };
     try {
+      // One request for all of it, so a rejected password cannot leave a
+      // renamed account and a changed theme behind it.
       await api.updateMe(input);
-      setCurrentPassword('');
-      setPassword('');
-      setConfirm('');
+      setForm((cur) => ({ ...cur, currentPassword: '', password: '', confirm: '' }));
       setMsg({ kind: 'ok', text: t('account.saved') });
-      // The topbar reads the name from the session state.
+      // The corner reads the name from the session state, and the whole
+      // application reads the presentation from it.
       await refresh();
     } catch (err) {
       const { code, params } = apiErrorInfo(err);
@@ -82,117 +117,141 @@ export function AccountPage({ user }: { user: UserPublic }) {
   }
 
   return (
-    <div className="page-narrow">
-      <div className="page-head">
-        <h2>{t('account.title')}</h2>
+    <div>
+      <div className="page-head account-head">
+        <span
+          className="avatar avatar-lg"
+          aria-hidden="true"
+          style={{ '--avatar-hue': nameHue(user.name) } as React.CSSProperties}
+        >
+          {initials(user.name)}
+        </span>
+        <div>
+          <h2>{t('account.title')}</h2>
+          <p className="muted">{t('account.subtitle')}</p>
+        </div>
       </div>
 
-      <section className="panel">
-        <form className="form" onSubmit={submit}>
-          <label>
-            {t('account.email')} <span className="hint">{t('account.emailHint')}</span>
-            <input className="mono-input" value={user.email} disabled />
-          </label>
-          <label>
-            {t('account.role')} <span className="hint">{t('account.roleHint')}</span>
-            <input value={t(`users.role.${user.role}`)} disabled />
-          </label>
-          <label>
-            {t('account.name')}
-            <input value={name} onChange={(e) => setName(e.target.value)} required />
-          </label>
+      {/* Laid out like the settings section it was pulled out of: full-width
+          bands, fields running across them, one button under all of them. */}
+      <form onSubmit={submit}>
+        <div className="blocks">
+          <section className="panel">
+            <h2>{t('account.identityTitle')}</h2>
+            <p className="hint">{t('account.identityHint')}</p>
+            <div className="form across">
+              <label>
+                {t('account.email')} <span className="hint">{t('account.emailHint')}</span>
+                <input className="mono-input" value={user.email} disabled />
+              </label>
+              <label>
+                {t('account.role')} <span className="hint">{t('account.roleHint')}</span>
+                <input value={t(`users.role.${user.role}`)} disabled />
+              </label>
+              <label>
+                {t('account.name')} <span className="hint">{t('account.nameHint')}</span>
+                <input value={form.name} onChange={(e) => set('name', e.target.value)} required />
+              </label>
+            </div>
+          </section>
 
-          <h3 className="form-section">{t('account.passwordTitle')}</h3>
-          <label>
-            {t('account.currentPassword')}{' '}
-            <span className="hint">{t('account.currentPasswordHint')}</span>
-            <input
-              type="password"
-              value={currentPassword}
-              onChange={(e) => setCurrentPassword(e.target.value)}
-              required={password.length > 0}
-              autoComplete="current-password"
-            />
-          </label>
-          <label>
-            {t('account.newPassword')}{' '}
-            <span className="hint">{t('auth.passwordHint', { min: PASSWORD_MIN_LENGTH })}</span>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              minLength={password ? PASSWORD_MIN_LENGTH : undefined}
-              autoComplete="new-password"
-            />
-          </label>
-          <label>
-            {t('auth.confirmPassword')}
-            <input
-              type="password"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              required={password.length > 0}
-              autoComplete="new-password"
-            />
-          </label>
-          <p className="hint">{t('account.sessionsNote')}</p>
+          <section className="panel">
+            <h2>{t('account.displayTitle')}</h2>
+            <p className="hint">{t('account.displayHint')}</p>
+            <div className="form across">
+              <label>
+                {t('account.displayDirection')}
+                <select
+                  value={form.displayDirection}
+                  onChange={(e) => set('displayDirection', e.target.value)}
+                >
+                  <option value="">{t('account.followInstall')}</option>
+                  {OVERVIEW_DIRECTIONS.map((value) => (
+                    <option key={value} value={value} disabled={!isAvailable(value)}>
+                      {t(`display.direction.${value}`)}
+                      {isAvailable(value) ? '' : ` — ${t('display.soon')}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                {t('account.displayMode')}{' '}
+                <span className="hint">{t('account.displayModeHint')}</span>
+                <select
+                  value={form.displayMode}
+                  onChange={(e) => set('displayMode', e.target.value)}
+                >
+                  <option value="">{t('account.followInstall')}</option>
+                  {DISPLAY_MODES.map((value) => (
+                    <option key={value} value={value}>
+                      {t(`display.mode.${value}`)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                {t('account.language')}{' '}
+                <span className="hint">{t('account.languageHint')}</span>
+                <select value={form.language} onChange={(e) => set('language', e.target.value)}>
+                  <option value="">{t('account.followBrowser')}</option>
+                  {SUPPORTED_LANGUAGES.map((lng) => (
+                    <option key={lng} value={lng}>
+                      {LANGUAGE_LABELS[lng]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          </section>
 
-          {msg && <div className={`banner ${msg.kind === 'ok' ? 'ok' : 'error'}`}>{msg.text}</div>}
-          <div className="form-actions">
-            <button className="btn primary" type="submit" disabled={busy}>
-              {busy ? t('common.saving') : t('common.save')}
-            </button>
-          </div>
-        </form>
-      </section>
+          <section className="panel">
+            <h2>{t('account.passwordTitle')}</h2>
+            <p className="hint">{t('account.passwordHint')}</p>
+            <div className="form across">
+              <label>
+                {t('account.currentPassword')}{' '}
+                <span className="hint">{t('account.currentPasswordHint')}</span>
+                <input
+                  type="password"
+                  value={form.currentPassword}
+                  onChange={(e) => set('currentPassword', e.target.value)}
+                  required={form.password.length > 0}
+                  autoComplete="current-password"
+                />
+              </label>
+              <label>
+                {t('account.newPassword')}{' '}
+                <span className="hint">{t('auth.passwordHint', { min: PASSWORD_MIN_LENGTH })}</span>
+                <input
+                  type="password"
+                  value={form.password}
+                  onChange={(e) => set('password', e.target.value)}
+                  minLength={form.password ? PASSWORD_MIN_LENGTH : undefined}
+                  autoComplete="new-password"
+                />
+              </label>
+              <label>
+                {t('auth.confirmPassword')}
+                <input
+                  type="password"
+                  value={form.confirm}
+                  onChange={(e) => set('confirm', e.target.value)}
+                  required={form.password.length > 0}
+                  autoComplete="new-password"
+                />
+              </label>
+              <p className="hint wide">{t('account.sessionsNote')}</p>
+            </div>
+          </section>
+        </div>
 
-      <section className="panel">
-        <h3 className="form-section">{t('account.displayTitle')}</h3>
-        <p className="hint">{t('account.displayHint')}</p>
-        {/* Its own form, applied on the spot: unlike a name or a password,
-            what these change is visible the instant they are picked, so
-            holding them behind a Save button would only add a step. */}
-        <form className="form">
-          <label>
-            {t('account.displayDirection')}
-            <select
-              value={user.display.direction ?? ''}
-              disabled={busy}
-              onChange={(e) =>
-                void applyDisplay({
-                  displayDirection: (e.target.value || null) as OverviewDirection | null,
-                })
-              }
-            >
-              <option value="">{t('account.followInstall')}</option>
-              {OVERVIEW_DIRECTIONS.map((value) => (
-                <option key={value} value={value} disabled={!isAvailable(value)}>
-                  {t(`display.direction.${value}`)}
-                  {isAvailable(value) ? '' : ` — ${t('display.soon')}`}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            {t('account.displayMode')}
-            <select
-              value={user.display.mode ?? ''}
-              disabled={busy}
-              onChange={(e) =>
-                void applyDisplay({ displayMode: (e.target.value || null) as DisplayMode | null })
-              }
-            >
-              <option value="">{t('account.followInstall')}</option>
-              {DISPLAY_MODES.map((value) => (
-                <option key={value} value={value}>
-                  {t(`display.mode.${value}`)}
-                </option>
-              ))}
-            </select>
-          </label>
-          {displayMsg && <div className="banner error">{displayMsg}</div>}
-        </form>
-      </section>
+        {msg && <div className={`banner ${msg.kind === 'ok' ? 'ok' : 'error'}`}>{msg.text}</div>}
+        <div className="form-actions page-actions">
+          <button className="btn primary" type="submit" disabled={busy || !dirty}>
+            {busy ? t('common.saving') : t('common.save')}
+          </button>
+        </div>
+      </form>
     </div>
   );
 }

@@ -22,7 +22,7 @@ export function RepoFilter({
 
   return (
     <div className="repo-filter">
-      <span className="repo-filter-label">{t('dashboard.filter.repos')}</span>
+      <span className="filter-label">{t('dashboard.filter.repos')}</span>
       <MultiSelect
         options={options}
         selected={selected}

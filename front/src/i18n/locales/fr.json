@@ -8,7 +8,8 @@
     "releaseNotes": "Notes de version",
     "deployments": "Déploiements",
     "changelogs": "Historique",
-    "overview": "Vue d'ensemble"
+    "overview": "Vue d'ensemble",
+    "menu": "Sections"
   },
   "auth": {
     "signInTitle": "Connexion",
@@ -42,10 +43,19 @@
     "sessionsNote": "Changer le mot de passe déconnecte vos autres navigateurs. Celui-ci reste ouvert.",
     "saved": "Compte mis à jour.",
     "displayTitle": "Affichage",
-    "displayHint": "Vos choix, appliqués tout de suite. Laissés sur « Réglage de l'installation », ils suivent ce que l'administrateur a défini.",
+    "displayHint": "Laissés sur « Réglage de l'installation », ils suivent ce que l'administrateur a défini.",
     "displayDirection": "Vue d'ensemble",
-    "displayMode": "Mode",
-    "followInstall": "Réglage de l'installation"
+    "displayMode": "Mode par défaut",
+    "followInstall": "Réglage de l'installation",
+    "subtitle": "Ce qui n'appartient qu'à vous — ce que l'installation est pour tout le monde reste dans les réglages.",
+    "identityTitle": "Identité",
+    "nameHint": "ce dont vos initiales et le coin de l'écran sont tirés",
+    "passwordHint": "Laissez vide pour conserver celui que vous avez.",
+    "identityHint": "Ce par quoi l'installation vous identifie. L'adresse et le rôle relèvent d'un administrateur.",
+    "displayModeHint": "celui dans lequel ce compte démarre ; la barre du haut le change pour l'instant présent",
+    "language": "Langue",
+    "languageHint": "suit ce compte quel que soit le navigateur",
+    "followBrowser": "Suivre le navigateur"
   },
   "reset": {
     "title": "Choisir un nouveau mot de passe",
@@ -76,7 +86,6 @@
       "jobs": "Files, planification et échecs"
     },
     "general": {
-      "appTitle": "Application",
       "uiTitle": "Interface",
       "saved": "Réglages enregistrés.",
       "doraWindowDays": "Fenêtre DORA",
@@ -91,7 +100,6 @@
       "pruneCronHint": "(cron ; ramène chaque source à sa propre profondeur d'historique)",
       "retentionMargin": "Marge de rétention (jours)",
       "retentionMarginHint": "conservés au-delà de la profondeur de chaque source, pour qu'un approfondissement trouve déjà quelque chose",
-      "languageHint": "conservée sur ce navigateur",
       "failureSource": "Source des échecs",
       "failureSourceHint": "ce qui compte comme échec pour le taux d'échec et le MTTR",
       "failure": {
@@ -114,7 +122,14 @@
       "overviewDirection": "Vue d'ensemble par défaut",
       "overviewDirectionHint": "Pour les comptes qui n'ont rien choisi.",
       "displayMode": "Mode d'affichage par défaut",
-      "displayModeHint": "« Système » suit le réglage du poste."
+      "displayModeHint": "« Système » suit le réglage du poste.",
+      "reportingTitle": "Reporting",
+      "reportingHint": "Ce sur quoi les métriques sont calculées, et ce qui compte comme un échec.",
+      "collectionTitle": "Collecte et magasin",
+      "collectionHint": "Quand les sources sont lues, quand le magasin est purgé, et quelle part du budget d'API est mise en réserve.",
+      "uiHint": "L'allure de l'application pour tous ceux qui n'ont rien choisi sur leur compte.",
+      "accessTitle": "Accès et listes",
+      "accessHint": "Qui entre sans compte, et ce qu'une liste affiche d'un coup."
     }
   },
   "users": {
@@ -608,6 +623,11 @@
       "running": "Relecture en arrière-plan…",
       "done": "Relecture terminée.",
       "evicted": "Relecture terminée — la file ne conserve plus son résultat."
+    },
+    "default": {
+      "is": "Ouverte par défaut",
+      "make": "Ouvrir cette source par défaut",
+      "badge": "par défaut"
     }
   },
   "ticketRules": {
@@ -746,13 +766,14 @@
     "rewriteHint": "Le Markdown ci-dessus est la seule chose envoyée au fournisseur. Les notes générées restent affichées, pour vérifier que rien n’a été ajouté.",
     "provider": "Fournisseur",
     "language": "Langue",
-    "languageKeep": "Conserver la langue",
+    "languageKeep": "Suivre les commits",
     "rewrite": "Reformuler",
     "rewriting": "Reformulation…",
     "rewrittenBy": "Reformulé par {{name}} ({{model}})",
     "tags": "Tags",
     "branches": "Branches",
-    "defaultBranch": "branche par défaut"
+    "defaultBranch": "branche par défaut",
+    "languageKeepHint": "les notes sont rédigées dans la langue des messages de commit"
   },
   "deployments": {
     "title": "Déploiements",
@@ -943,7 +964,8 @@
       "dark": "Sombre"
     },
     "directionLabel": "Vue d'ensemble",
-    "modeLabel": "Mode d'affichage",
-    "soon": "bientôt"
+    "soon": "bientôt",
+    "current": "Thème : {{mode}}",
+    "switchTo": "Passer en {{mode}}"
   }
 }

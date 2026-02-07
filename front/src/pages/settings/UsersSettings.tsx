@@ -11,6 +11,7 @@ import { api, apiErrorInfo, type CreateUserInput } from '../../api';
 import { useAuth } from '../../auth';
 import { DeleteIcon, EditIcon, KeyIcon, PlusIcon } from '../../icons';
 import { IconButton } from '../../IconButton';
+import { DataList } from '../../DataList';
 import { ConfirmDialog, Modal } from '../../Modal';
 
 const ROLES: UserRole[] = ['admin', 'user'];
@@ -76,57 +77,66 @@ export function UsersSettings() {
 
         {msg && <div className={`banner ${msg.kind === 'ok' ? 'ok' : 'error'}`}>{msg.text}</div>}
 
-        <table className="data">
-          <thead>
-            <tr>
-              <th>{t('users.form.name')}</th>
-              <th>{t('users.form.email')}</th>
-              <th>{t('users.form.role')}</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((user) => {
-              const isSelf = user.id === state?.user?.id;
-              return (
-                <tr key={user.id}>
-                  <td>
-                    {user.name}
-                    {isSelf && <span className="muted"> · {t('users.you')}</span>}
-                  </td>
-                  <td className="mono">{user.email}</td>
-                  <td>
-                    <span className="pill attr">{t(`users.role.${user.role}`)}</span>
-                  </td>
-                  <td>
-                    <div className="row-actions">
-                      <IconButton label={t('common.edit')} onClick={() => setEditing({ user })}>
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        label={t('users.reset.action')}
-                        onClick={() => void issueLink(user)}
-                      >
-                        <KeyIcon />
-                      </IconButton>
-                      {/* Deleting the account you are signed in with only ever
-                          ends one way; the API would allow it, the UI does not. */}
-                      {!isSelf && (
-                        <IconButton
-                          label={t('common.delete')}
-                          tone="danger"
-                          onClick={() => setDeleting(user)}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+        <DataList
+          rows={users}
+          rowKey={(user) => user.id}
+          columns={[
+            {
+              key: 'name',
+              header: t('users.form.name'),
+              role: 'lead',
+              cell: (user) => (
+                <>
+                  {user.name}
+                  {user.id === state?.user?.id && (
+                    <span className="muted"> · {t('users.you')}</span>
+                  )}
+                </>
+              ),
+            },
+            {
+              key: 'email',
+              header: t('users.form.email'),
+              className: 'mono',
+              cell: (user) => user.email,
+            },
+            {
+              key: 'role',
+              header: t('users.form.role'),
+              role: 'aside',
+              cell: (user) => <span className="pill attr">{t(`users.role.${user.role}`)}</span>,
+            },
+            {
+              key: 'actions',
+              role: 'full',
+              className: 'row-actions',
+              cell: (user) => (
+                <>
+                  <IconButton label={t('common.edit')} onClick={() => setEditing({ user })}>
+                    <EditIcon />
+                  </IconButton>
+                  <IconButton
+                    label={t('users.reset.action')}
+                    onClick={() => void issueLink(user)}
+                  >
+                    <KeyIcon />
+                  </IconButton>
+                  {/* Deleting the account you are signed in with only ever ends
+                      one way; the API would allow it, the UI does not. */}
+                  {user.id !== state?.user?.id && (
+                    <IconButton
+                      label={t('common.delete')}
+                      tone="danger"
+                      onClick={() => setDeleting(user)}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  )}
+                </>
+              ),
+            },
+          ]}
+        />
       </section>
 
       {editing && (

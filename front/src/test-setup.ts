@@ -18,4 +18,25 @@ const i18n = { resolvedLanguage: 'en', changeLanguage: vi.fn() };
 
 vi.mock('react-i18next', () => ({ useTranslation: () => ({ t, i18n }) }));
 
+/**
+ * jsdom implements no media queries, and every component that renders one thing
+ * for a phone and another for a desk asks for one. Stubbed as "not narrow", so
+ * a suite gets the table it was written against; a suite about the other
+ * rendering overrides this for itself.
+ */
+vi.stubGlobal(
+  'matchMedia',
+  (query: string) =>
+    ({
+      media: query,
+      matches: false,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }) as unknown as MediaQueryList,
+);
+
 afterEach(cleanup);

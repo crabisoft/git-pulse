@@ -19,7 +19,7 @@ vi.mock('../api', async (importOriginal) => ({
 
 const { api } = await import('../api');
 
-const onDisplayChange = vi.fn();
+const onDirectionChange = vi.fn();
 
 /** The flow rows link to the metric pages, so the page needs a router around it. */
 function renderPage(direction: OverviewDirection = 'control', entries = ['/dashboard/acme']) {
@@ -29,8 +29,8 @@ function renderPage(direction: OverviewDirection = 'control', entries = ['/dashb
         sourceId="src-1"
         slug="acme"
         staleHours={72}
-        display={{ direction, mode: 'system' }}
-        onDisplayChange={onDisplayChange}
+        direction={direction}
+        onDirectionChange={onDirectionChange}
       />
     </MemoryRouter>,
   );
@@ -101,7 +101,7 @@ beforeEach(() => {
   vi.mocked(api.live).mockReset();
   vi.mocked(api.incidents).mockReset();
   vi.mocked(api.incidents).mockResolvedValue([]);
-  onDisplayChange.mockReset();
+  onDirectionChange.mockReset();
 });
 
 describe('OverviewPage', () => {
@@ -197,16 +197,26 @@ describe('OverviewPage', () => {
     expect(screen.queryByText(/overview.health.quota/)).not.toBeInTheDocument();
   });
 
-  it('switches the display from the page, without a settings detour', async () => {
+  it('switches the reading from the page, without a settings detour', async () => {
     vi.mocked(api.overview).mockResolvedValue(report());
     renderPage();
     await waitFor(() => expect(screen.getByText('prod-acme-api')).toBeInTheDocument());
 
-    await userEvent.click(screen.getByRole('button', { name: 'display.mode.dark' }));
+    await userEvent.selectOptions(screen.getByTitle('display.directionLabel'), 'instrument');
 
-    expect(onDisplayChange).toHaveBeenCalledWith({ mode: 'dark' });
+    expect(onDirectionChange).toHaveBeenCalledWith('instrument');
     // Presentation is not data: it must not cost a request.
     expect(vi.mocked(api.overview)).toHaveBeenCalledOnce();
+  });
+
+  it('leaves light and dark to the bar', async () => {
+    // The switch lives in the top bar, on this page as on every other. A second
+    // one here asked the same question twice, in a shape of its own.
+    vi.mocked(api.overview).mockResolvedValue(report());
+    renderPage();
+    await waitFor(() => expect(screen.getByText('prod-acme-api')).toBeInTheDocument());
+
+    expect(screen.queryByRole('button', { name: 'display.mode.dark' })).not.toBeInTheDocument();
   });
 
   it('offers no direction this build cannot render', async () => {

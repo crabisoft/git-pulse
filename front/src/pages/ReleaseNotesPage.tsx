@@ -287,7 +287,13 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
                 ))}
               </select>
             </FilterField>
-            <FilterField label={t('releaseNotes.language')}>
+            {/* Left alone, the notes come out in the language the commits were
+                written in — not the reader's, and not the model's. Naming one
+                here is asking for a translation, which is a different thing. */}
+            <FilterField
+              label={t('releaseNotes.language')}
+              hint={language ? undefined : t('releaseNotes.languageKeepHint')}
+            >
               <select value={language} onChange={(e) => setLanguage(e.target.value)}>
                 <option value="">{t('releaseNotes.languageKeep')}</option>
                 {LANGUAGES.map((tag) => (

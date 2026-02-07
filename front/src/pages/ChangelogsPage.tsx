@@ -9,6 +9,7 @@ import { RepoFilter } from '../RepoFilter';
 import { Pagination } from '../Pagination';
 import { PlatformLink } from '../PlatformLink';
 import { RefLink } from '../RefLink';
+import { DataList } from '../DataList';
 import { CommitList } from '../CommitList';
 import { CopyButton } from '../CopyButton';
 
@@ -97,7 +98,7 @@ export function ChangelogsPage({ sourceId }: { sourceId: string }) {
             onChange={(e) => filter({ to: e.target.value || undefined })}
           />
         </FilterField>
-        <FilterField label={t('changelogs.search')}>
+        <FilterField label={t('changelogs.search')} wide>
           <input
             type="search"
             value={query.search ?? ''}
@@ -117,29 +118,75 @@ export function ChangelogsPage({ sourceId }: { sourceId: string }) {
       )}
 
       {rows.length > 0 && (
-        <table className="data">
-          <thead>
-            <tr>
-              <th>{t('deployments.when')}</th>
-              <th>{t('deployments.repo')}</th>
-              <th>{t('deployments.environment')}</th>
-              <th>{t('deployments.ref')}</th>
-              <th>{t('changelogs.contents')}</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((log) => (
-              <Row
-                key={log.id}
-                sourceId={sourceId}
-                log={log}
-                open={openId === log.id}
-                onToggle={() => setOpenId(openId === log.id ? null : log.id)}
-              />
-            ))}
-          </tbody>
-        </table>
+        <DataList
+          rows={rows}
+          rowKey={(log) => log.id}
+          expanded={(log) =>
+            openId === log.id ? <Contents sourceId={sourceId} log={log} /> : null
+          }
+          columns={[
+            {
+              key: 'when',
+              header: t('deployments.when'),
+              role: 'lead',
+              cell: (log) => (
+                <PlatformLink url={log.deploymentUrl} title={t('deployments.openDeployment')}>
+                  {new Date(log.deployedAt).toLocaleString()}
+                </PlatformLink>
+              ),
+            },
+            { key: 'repo', header: t('deployments.repo'), cell: (log) => log.repo },
+            {
+              key: 'environment',
+              header: t('deployments.environment'),
+              cell: (log) => (
+                <PlatformLink url={log.environmentUrl} title={t('deployments.openEnvironment')}>
+                  {log.environment}
+                </PlatformLink>
+              ),
+            },
+            {
+              key: 'ref',
+              header: t('deployments.ref'),
+              cell: (log) => (
+                <>
+                  <RefLink name={log.ref} url={log.refUrl} />
+                  {log.baseRef && (
+                    <div className="muted">
+                      {t('deployments.against')} <RefLink name={log.baseRef} url={log.baseRefUrl} />
+                    </div>
+                  )}
+                </>
+              ),
+            },
+            {
+              key: 'contents',
+              header: t('changelogs.contents'),
+              cell: (log) =>
+                log.unreadable ? (
+                  <span className="pill">{t('changelogs.unreadable')}</span>
+                ) : (
+                  t('deployments.summary', { count: log.commits, authors: log.authors })
+                ),
+            },
+            {
+              key: 'read',
+              role: 'full',
+              // Nothing to open on a record filed without contents: the button would
+              // promise a read that has no text behind it.
+              cell: (log) =>
+                log.unreadable ? null : (
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => setOpenId(openId === log.id ? null : log.id)}
+                  >
+                    {openId === log.id ? t('changelogs.hide') : t('changelogs.read')}
+                  </button>
+                ),
+            },
+          ]}
+        />
       )}
 
       {report && (
@@ -174,83 +221,43 @@ export function ChangelogsPage({ sourceId }: { sourceId: string }) {
  * a hundred releases carries every commit message of each otherwise, which is
  * most of the payload and none of what the table shows.
  */
-function Row({
+/**
+ * What a deployment carried, fetched when it is opened and not before.
+ *
+ * A list of these is a page of requests nobody asked for: the summary on the
+ * row is what most readers stop at, and the contents are what one of them
+ * wanted. Kept as a component of its own so the fetch is scoped to the row
+ * being read — closing it drops the state with it.
+ */
+function Contents({
   sourceId,
   log,
-  open,
-  onToggle,
 }: {
   sourceId: string;
   log: DeploymentChangelogSummary;
-  open: boolean;
-  onToggle: () => void;
 }) {
   const { t } = useTranslation();
   const [detail, setDetail] = useState<DeploymentChangelog | null>(null);
 
   const load = useCallback(
     async (signal: AbortSignal) => {
-      if (!open) return;
       setDetail(await api.changelog(sourceId, log.deploymentId, signal));
     },
-    [sourceId, log.deploymentId, open],
+    [sourceId, log.deploymentId],
   );
   const { loading, error } = useCancellableLoad(load);
 
   return (
-    <>
-      <tr>
-        <td>
-          <PlatformLink url={log.deploymentUrl} title={t('deployments.openDeployment')}>
-            {new Date(log.deployedAt).toLocaleString()}
-          </PlatformLink>
-        </td>
-        <td>{log.repo}</td>
-        <td>
-          <PlatformLink url={log.environmentUrl} title={t('deployments.openEnvironment')}>
-            {log.environment}
-          </PlatformLink>
-        </td>
-        <td>
-          <RefLink name={log.ref} url={log.refUrl} />
-          {log.baseRef && (
-            <div className="muted">
-              {t('deployments.against')} <RefLink name={log.baseRef} url={log.baseRefUrl} />
-            </div>
-          )}
-        </td>
-        <td>
-          {log.unreadable ? (
-            <span className="pill">{t('changelogs.unreadable')}</span>
-          ) : (
-            t('deployments.summary', { count: log.commits, authors: log.authors })
-          )}
-        </td>
-        <td>
-          {/* Nothing to open on a record filed without contents: the button
-              would promise a read that has no text behind it. */}
-          {!log.unreadable && (
-            <button type="button" className="btn" onClick={onToggle}>
-              {open ? t('changelogs.hide') : t('changelogs.read')}
-            </button>
-          )}
-        </td>
-      </tr>
-      {open && (
-        <tr>
-          <td colSpan={6}>
-            {error && <div className="banner error">{error}</div>}
-            {loading && <p className="muted">{t('common.loading')}</p>}
-            {detail && <Contents log={detail} />}
-          </td>
-        </tr>
-      )}
-    </>
+    <div className="changelog-contents">
+      {error && <div className="banner error">{error}</div>}
+      {loading && <p className="muted">{t('common.loading')}</p>}
+      {detail && <ContentsBody log={detail} />}
+    </div>
   );
 }
 
 /** What was filed: the commits, and the text that was rendered from them. */
-function Contents({ log }: { log: DeploymentChangelog }) {
+function ContentsBody({ log }: { log: DeploymentChangelog }) {
   const { t } = useTranslation();
 
   // Both of these have no base and no entries, and they mean opposite things:

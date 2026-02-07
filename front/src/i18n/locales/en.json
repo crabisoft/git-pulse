@@ -8,7 +8,8 @@
     "releaseNotes": "Release notes",
     "deployments": "Deployments",
     "changelogs": "History",
-    "overview": "Overview"
+    "overview": "Overview",
+    "menu": "Sections"
   },
   "auth": {
     "signInTitle": "Sign in",
@@ -42,10 +43,19 @@
     "sessionsNote": "Changing the password signs out your other browsers. This one stays open.",
     "saved": "Account updated.",
     "displayTitle": "Display",
-    "displayHint": "Your own choices, applied at once. Left on “Installation setting” they follow whatever the administrator picked.",
+    "displayHint": "Left on “Installation setting”, each one follows what the administrator chose.",
     "displayDirection": "Overview",
-    "displayMode": "Mode",
-    "followInstall": "Installation setting"
+    "displayMode": "Default mode",
+    "followInstall": "Installation setting",
+    "subtitle": "Yours alone — what the install is like for everybody lives in the settings.",
+    "identityTitle": "Identity",
+    "nameHint": "what your initials and the corner of the screen are drawn from",
+    "passwordHint": "Leave it blank to keep the one you have.",
+    "identityHint": "How the install knows you. The address and the role are an administrator's to change.",
+    "displayModeHint": "the one this account starts in; the bar at the top switches it for the moment you are in",
+    "language": "Language",
+    "languageHint": "follows this account wherever it signs in",
+    "followBrowser": "Follow the browser"
   },
   "reset": {
     "title": "Choose a new password",
@@ -76,7 +86,6 @@
       "jobs": "Queues, schedules and failures"
     },
     "general": {
-      "appTitle": "Application",
       "uiTitle": "Interface",
       "saved": "Settings saved.",
       "doraWindowDays": "DORA window",
@@ -91,7 +100,6 @@
       "pruneCronHint": "(cron; sweeps each source down to its own history depth)",
       "retentionMargin": "Retention margin (days)",
       "retentionMarginHint": "kept beyond each source's depth, so deepening one finds something already there",
-      "languageHint": "kept in this browser",
       "failureSource": "Failure source",
       "failureSourceHint": "what counts as a failure for change failure rate and MTTR",
       "failure": {
@@ -114,7 +122,14 @@
       "overviewDirection": "Default overview",
       "overviewDirectionHint": "For accounts that picked nothing.",
       "displayMode": "Default display mode",
-      "displayModeHint": "“System” follows the machine’s setting."
+      "displayModeHint": "“System” follows the machine’s setting.",
+      "reportingTitle": "Reporting",
+      "reportingHint": "What the metrics are computed over, and what counts as a failure.",
+      "collectionTitle": "Collection and store",
+      "collectionHint": "When sources are read, when the store is swept, and how much API budget is held back.",
+      "uiHint": "How the application looks for everyone who has not chosen otherwise on their account.",
+      "accessTitle": "Access and lists",
+      "accessHint": "Who gets in without an account, and how much a list shows at once."
     }
   },
   "users": {
@@ -608,6 +623,11 @@
       "running": "Re-reading in the background…",
       "done": "Re-read finished.",
       "evicted": "Re-read finished — the queue no longer holds how it went."
+    },
+    "default": {
+      "is": "Opens by default",
+      "make": "Open on this source by default",
+      "badge": "default"
     }
   },
   "ticketRules": {
@@ -746,13 +766,14 @@
     "rewriteHint": "The Markdown above is the only thing sent to the vendor. The generated notes stay on screen, so you can check nothing was added.",
     "provider": "Provider",
     "language": "Language",
-    "languageKeep": "Keep as written",
+    "languageKeep": "Follow the commits",
     "rewrite": "Rewrite",
     "rewriting": "Rewriting…",
     "rewrittenBy": "Rewritten by {{name}} ({{model}})",
     "tags": "Tags",
     "branches": "Branches",
-    "defaultBranch": "default branch"
+    "defaultBranch": "default branch",
+    "languageKeepHint": "the notes are written in whatever language the commit messages are in"
   },
   "deployments": {
     "title": "Deployments",
@@ -943,7 +964,8 @@
       "dark": "Dark"
     },
     "directionLabel": "Overview",
-    "modeLabel": "Display mode",
-    "soon": "soon"
+    "soon": "soon",
+    "current": "Theme: {{mode}}",
+    "switchTo": "Switch to {{mode}}"
   }
 }

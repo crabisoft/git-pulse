@@ -28,11 +28,28 @@ const CUSTOM = 'custom';
  * reads left to right — label, value, next filter — and that is the shape the
  * period and dimension filters already have.
  */
-export function FilterField({ label, children }: { label: string; children: ReactNode }) {
+export function FilterField({
+  label,
+  hint,
+  wide,
+  children,
+}: {
+  label: string;
+  /** What the control does when it is left alone, where that is worth saying. */
+  hint?: string;
+  /**
+   * Takes whatever the row has left. For a field written into rather than
+   * picked from: a search is a sentence somebody types, and the width it is
+   * given is how much of it they can still read.
+   */
+  wide?: boolean;
+  children: ReactNode;
+}) {
   return (
-    <label className="filter-field">
-      {label}
+    <label className={wide ? 'filter-field wide' : 'filter-field'}>
+      <span className="filter-label">{label}</span>
       {children}
+      {hint && <span className="hint">{hint}</span>}
     </label>
   );
 }
@@ -88,7 +105,7 @@ export function PeriodFilter({
   return (
     <div className="period-filter">
       <label>
-        {t('dora.period.window')}
+        <span className="filter-label">{t('dora.period.window')}</span>
         <select
           // The dialog owns the selection while it is open, so cancelling it
           // snaps the dropdown back to the window still in effect.
@@ -240,7 +257,7 @@ export function DimensionFilter({
     <div className="dimension-filter">
       {keys.map((key) => (
         <label key={key}>
-          {key}
+          <span className="filter-label">{key}</span>
           <select
             value={value[key] ?? ''}
             disabled={disabled}
@@ -367,7 +384,7 @@ export function ChoiceFilter({
 
   return (
     <div className="repo-filter">
-      <span className="repo-filter-label">{label}</span>
+      <span className="filter-label">{label}</span>
       <MultiSelect
         options={items}
         selected={new Set(value)}

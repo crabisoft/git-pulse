@@ -13,6 +13,7 @@ import { api, apiErrorInfo } from '../../api';
 import { useCancellableLoad } from '../../hooks';
 import { DeleteIcon, SyncIcon } from '../../icons';
 import { IconButton } from '../../IconButton';
+import { DataList } from '../../DataList';
 import { ConfirmDialog } from '../../Modal';
 
 /**
@@ -121,35 +122,58 @@ export function JobsSettings({ sources }: { sources: SourcePublic[] }) {
             <p className="muted subtabs-hint">
               {t('jobs.observedAt', { at: at(snapshot.observedAt) })}
             </p>
-            <table className="data">
-              <thead>
-                <tr>
-                  <th>{t('jobs.queue')}</th>
-                  <th>{t('jobs.count.waiting')}</th>
-                  <th>{t('jobs.count.active')}</th>
-                  <th>{t('jobs.count.delayed')}</th>
-                  <th>{t('jobs.count.failed')}</th>
-                  <th>{t('jobs.count.completed')}</th>
-                  <th>{t('jobs.schedule')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {snapshot.queues.map((queue) => (
-                  <tr key={queue.name}>
-                    <td>
+            <DataList
+              rows={snapshot.queues}
+              rowKey={(queue) => queue.name}
+              columns={[
+                {
+                  key: 'queue',
+                  header: t('jobs.queue'),
+                  role: 'lead',
+                  cell: (queue) => (
+                    <>
                       {t(`jobs.queueName.${queue.name}`)}
                       {queue.paused && <span className="pill status-pending">{t('jobs.paused')}</span>}
-                    </td>
-                    <td className="num">{queue.counts.waiting}</td>
-                    <td className="num">{queue.counts.active}</td>
-                    <td className="num">{queue.counts.delayed}</td>
-                    <td className="num">{queue.counts.failed}</td>
-                    <td className="num">{queue.counts.completed}</td>
-                    <td>{schedule(queue, t)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </>
+                  ),
+                },
+                {
+                  key: 'waiting',
+                  header: t('jobs.count.waiting'),
+                  className: 'num',
+                  cell: (queue) => queue.counts.waiting,
+                },
+                {
+                  key: 'active',
+                  header: t('jobs.count.active'),
+                  className: 'num',
+                  cell: (queue) => queue.counts.active,
+                },
+                {
+                  key: 'delayed',
+                  header: t('jobs.count.delayed'),
+                  className: 'num',
+                  cell: (queue) => queue.counts.delayed,
+                },
+                {
+                  key: 'failed',
+                  header: t('jobs.count.failed'),
+                  className: 'num',
+                  cell: (queue) => queue.counts.failed,
+                },
+                {
+                  key: 'completed',
+                  header: t('jobs.count.completed'),
+                  className: 'num',
+                  cell: (queue) => queue.counts.completed,
+                },
+                {
+                  key: 'schedule',
+                  header: t('jobs.schedule'),
+                  cell: (queue) => schedule(queue, t),
+                },
+              ]}
+            />
           </section>
         </>
       )}
@@ -163,42 +187,53 @@ export function JobsSettings({ sources }: { sources: SourcePublic[] }) {
         )}
 
         {failures && failures.items.length > 0 && (
-          <table className="data">
-            <thead>
-              <tr>
-                <th>{t('jobs.job')}</th>
-                <th>{t('jobs.subject')}</th>
-                <th>{t('jobs.attempts')}</th>
-                <th>{t('jobs.failedAt')}</th>
-                <th>{t('jobs.reason')}</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {failures.items.map((failure) => (
-                <tr key={`${failure.queue}:${failure.id}`}>
-                  <td>
-                    <span className="pill attr">{failure.name}</span>
-                  </td>
-                  <td>{subject(failure.data, sourceName)}</td>
-                  <td className="num">{failure.attemptsMade}</td>
-                  <td>{failure.failedAt ? at(failure.failedAt) : '—'}</td>
-                  <td>
-                    <details className="job-reason">
-                      <summary>{failure.reason || t('jobs.noReason')}</summary>
-                      {failure.stack && <pre>{failure.stack}</pre>}
-                    </details>
-                  </td>
-                  <td className="row-actions">
+          <DataList
+            rows={failures.items}
+            rowKey={(failure) => `${failure.queue}:${failure.id}`}
+            columns={[
+              {
+                key: 'job',
+                header: t('jobs.job'),
+                role: 'lead',
+                cell: (failure) => <span className="pill attr">{failure.name}</span>,
+              },
+              {
+                key: 'subject',
+                header: t('jobs.subject'),
+                cell: (failure) => subject(failure.data, sourceName),
+              },
+              {
+                key: 'attempts',
+                header: t('jobs.attempts'),
+                className: 'num',
+                cell: (failure) => failure.attemptsMade,
+              },
+              {
+                key: 'failedAt',
+                header: t('jobs.failedAt'),
+                cell: (failure) => (failure.failedAt ? at(failure.failedAt) : '—'),
+              },
+              {
+                key: 'reason',
+                header: t('jobs.reason'),
+                cell: (failure) => (
+                  <details className="job-reason">
+                    <summary>{failure.reason || t('jobs.noReason')}</summary>
+                    {failure.stack && <pre>{failure.stack}</pre>}
+                  </details>
+                ),
+              },
+              {
+                key: 'actions',
+                role: 'full',
+                className: 'row-actions',
+                cell: (failure) => (
+                  <>
                     <IconButton
                       label={t('jobs.retry')}
                       disabled={acting === failure.id}
                       onClick={() =>
-                        void act(
-                          failure,
-                          () => api.retryJob(failure.queue, failure.id),
-                          'jobs.retried',
-                        )
+                        void act(failure, () => api.retryJob(failure.queue, failure.id), 'jobs.retried')
                       }
                     >
                       <SyncIcon />
@@ -211,11 +246,11 @@ export function JobsSettings({ sources }: { sources: SourcePublic[] }) {
                     >
                       <DeleteIcon />
                     </IconButton>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </>
+                ),
+              },
+            ]}
+          />
         )}
       </section>
 
@@ -223,34 +258,39 @@ export function JobsSettings({ sources }: { sources: SourcePublic[] }) {
         <section className="panel">
           <h2>{t('jobs.degraded.title')}</h2>
           <p className="muted subtabs-hint">{t('jobs.degraded.hint')}</p>
-          <table className="data">
-            <thead>
-              <tr>
-                <th>{t('jobs.job')}</th>
-                <th>{t('jobs.subject')}</th>
-                <th>{t('jobs.finishedAt')}</th>
-                <th>{t('jobs.givenUp')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {degraded.items.map((run) => (
-                <tr key={`${run.queue}:${run.id}`}>
-                  <td>
-                    <span className="pill attr">{run.name}</span>
-                  </td>
-                  <td>{subject(run.data, sourceName)}</td>
-                  <td>{run.finishedAt ? at(run.finishedAt) : '—'}</td>
-                  <td>
-                    <ul className="job-warnings">
-                      {run.warnings.map((warning, i) => (
-                        <li key={i}>{t(warning.code, warning.params)}</li>
-                      ))}
-                    </ul>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataList
+            rows={degraded.items}
+            rowKey={(run) => `${run.queue}:${run.id}`}
+            columns={[
+              {
+                key: 'job',
+                header: t('jobs.job'),
+                role: 'lead',
+                cell: (run) => <span className="pill attr">{run.name}</span>,
+              },
+              {
+                key: 'subject',
+                header: t('jobs.subject'),
+                cell: (run) => subject(run.data, sourceName),
+              },
+              {
+                key: 'finishedAt',
+                header: t('jobs.finishedAt'),
+                cell: (run) => (run.finishedAt ? at(run.finishedAt) : '—'),
+              },
+              {
+                key: 'givenUp',
+                header: t('jobs.givenUp'),
+                cell: (run) => (
+                  <ul className="job-warnings">
+                    {run.warnings.map((warning, i) => (
+                      <li key={i}>{t(warning.code, warning.params)}</li>
+                    ))}
+                  </ul>
+                ),
+              },
+            ]}
+          />
         </section>
       )}
 

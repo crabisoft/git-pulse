@@ -10,6 +10,7 @@ import {
 import { api, apiErrorInfo, type CreateTicketRuleInput, type PageQuery } from '../api';
 import { DeleteIcon, EditIcon, PlusIcon } from '../icons';
 import { IconButton } from '../IconButton';
+import { DataList } from '../DataList';
 import { Modal, ConfirmDialog } from '../Modal';
 import { Pagination } from '../Pagination';
 
@@ -104,45 +105,54 @@ export function TicketRulesPage() {
         )}
 
         {rules.length > 0 && (
-          <table className="data">
-            <thead>
-              <tr>
-                <th>{t('ticketRules.form.name')}</th>
-                <th>{t('ticketRules.form.pattern')}</th>
-                <th>{t('ticketRules.form.tracker')}</th>
-                <th className="num">{t('ticketRules.form.priority')}</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {rules.map((rule) => (
-                <tr key={rule.id}>
-                  <td>{rule.name}</td>
-                  <td className="mono">{rule.pattern}</td>
-                  <td>
-                    <span className="pill attr">
-                      {trackers.find((tr) => tr.id === rule.trackerId)?.name ?? rule.trackerId}
-                    </span>
-                  </td>
-                  <td className="num">{rule.priority}</td>
-                  <td>
-                    <div className="row-actions">
-                      <IconButton label={t('common.edit')} onClick={() => setEditing({ rule })}>
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        label={t('common.delete')}
-                        tone="danger"
-                        onClick={() => setDeleting(rule)}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <DataList
+            rows={rules}
+            rowKey={(rule) => rule.id}
+            columns={[
+              {
+                key: 'name',
+                header: t('ticketRules.form.name'),
+                role: 'lead',
+                cell: (rule) => rule.name,
+              },
+              {
+                key: 'pattern',
+                header: t('ticketRules.form.pattern'),
+                className: 'mono',
+                cell: (rule) => rule.pattern,
+              },
+              {
+                key: 'tracker',
+                header: t('ticketRules.form.tracker'),
+                cell: (rule) => (
+                  <span className="pill attr">
+                    {trackers.find((tr) => tr.id === rule.trackerId)?.name ?? rule.trackerId}
+                  </span>
+                ),
+              },
+              {
+                key: 'priority',
+                header: t('ticketRules.form.priority'),
+                className: 'num',
+                cell: (rule) => rule.priority,
+              },
+              {
+                key: 'actions',
+                role: 'full',
+                className: 'row-actions',
+                cell: (rule) => (
+                  <>
+                    <IconButton label={t('common.edit')} onClick={() => setEditing({ rule })}>
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton label={t('common.delete')} tone="danger" onClick={() => setDeleting(rule)}>
+                      <DeleteIcon />
+                    </IconButton>
+                  </>
+                ),
+              },
+            ]}
+          />
         )}
 
         {pageInfo && <Pagination info={pageInfo} value={page} onChange={setPage} />}

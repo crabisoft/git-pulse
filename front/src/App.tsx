@@ -31,6 +31,9 @@ import { DeploymentsPage } from './pages/DeploymentsPage';
 import { DeploymentChangesPage } from './pages/DeploymentChangesPage';
 import { ChangelogsPage } from './pages/ChangelogsPage';
 import { LoginPage } from './pages/LoginPage';
+import { AccountMenu } from './AccountMenu';
+import { MainNav } from './MainNav';
+import { ThemeToggle } from './ThemeToggle';
 import { AccountPage } from './pages/AccountPage';
 import { ResetPasswordPage } from './pages/ResetPasswordPage';
 /**
@@ -129,8 +132,17 @@ function AppShell() {
   const [lastSlug, setLastSlug] = useState<string | null>(null);
   // Never point the picker or the nav links at a source that no longer exists.
   const candidate = route?.slug ?? lastSlug;
+  /**
+   * What opens when the address names no source, and when nothing was read
+   * this session: the favourite, and the first source when none was marked.
+   *
+   * The address still wins over it. A favourite decides where somebody lands,
+   * not what a link they were sent means.
+   */
   const activeSource =
-    sources.find((s) => s.slug === candidate) ?? (sources.length > 0 ? sources[0] : null);
+    sources.find((s) => s.slug === candidate) ??
+    sources.find((s) => s.isDefault) ??
+    (sources.length > 0 ? sources[0] : null);
 
   const refresh = useCallback(async () => {
     try {
@@ -156,6 +168,18 @@ function AppShell() {
       setError(t(code, params));
     });
   }, [t]);
+
+  /**
+   * The language the account reads in, applied the moment the session says so.
+   *
+   * Null is a value: it hands the choice back to the browser, which is what
+   * i18next detected before any of this arrived — so there is nothing to undo,
+   * and an account that clears its preference falls back where it started.
+   */
+  const language = state?.user?.language ?? null;
+  useEffect(() => {
+    if (language && language !== i18n.resolvedLanguage) void i18n.changeLanguage(language);
+  }, [language, i18n]);
 
   useEffect(() => {
     document.documentElement.lang = i18n.resolvedLanguage ?? 'en';
@@ -235,41 +259,7 @@ function AppShell() {
           <strong>Git Dashboard</strong>
           <span className="brand-sub">{t('brand.subtitle')}</span>
         </div>
-        <nav className="tabs">
-          <Link
-            className={module === 'dashboard' ? 'tab active' : 'tab'}
-            to={withSource('/dashboard')}
-          >
-            {t('nav.overview')}
-          </Link>
-          <Link className={module === 'dora' ? 'tab active' : 'tab'} to={withSource('/dora')}>
-            {t('nav.dora')}
-          </Link>
-          <Link
-            className={module === 'deployments' ? 'tab active' : 'tab'}
-            to={withSource('/deployments')}
-          >
-            {t('nav.deployments')}
-          </Link>
-          <Link
-            className={module === 'changelogs' ? 'tab active' : 'tab'}
-            to={withSource('/changelogs')}
-          >
-            {t('nav.changelogs')}
-          </Link>
-          <Link
-            className={module === 'release-notes' ? 'tab active' : 'tab'}
-            to={withSource('/release-notes')}
-          >
-            {t('nav.releaseNotes')}
-          </Link>
-          {/* Hidden rather than disabled: to a visitor, the section does not exist. */}
-          {isAdmin && (
-            <Link className={module === 'settings' ? 'tab active' : 'tab'} to="/settings">
-              {t('nav.settings')}
-            </Link>
-          )}
-        </nav>
+        <MainNav module={module} withSource={withSource} />
 
         <div className="topbar-right">
           {/* Nothing under Settings reads it: each section owns its own scope. */}
@@ -287,15 +277,16 @@ function AppShell() {
             </select>
           )}
 
+          {/* On the bar rather than in the settings: it is a choice about the
+              room somebody is sitting in, and it changes as the room does. */}
+          <ThemeToggle mode={display.mode} onChange={(mode) => void changeDisplay({ mode })} />
+
           {state?.user ? (
-            <div className="account">
-              <Link className="account-name" to="/account" title={t('auth.account')}>
-                {state.user.name}
-              </Link>
-              <button className="btn" type="button" onClick={() => void signOut()}>
-                {t('auth.signOut')}
-              </button>
-            </div>
+            <AccountMenu
+              user={state.user}
+              isAdmin={isAdmin}
+              onSignOut={() => void signOut()}
+            />
           ) : (
             <Link className="btn" to="/login">
               {t('auth.signIn')}
@@ -325,8 +316,8 @@ function AppShell() {
                     sourceId={source.id}
                     slug={source.slug}
                     staleHours={settings?.stalePrHours ?? null}
-                    display={display}
-                    onDisplayChange={changeDisplay}
+                    direction={display.direction}
+                    onDirectionChange={(direction) => void changeDisplay({ direction })}
                   />
                 )}
               </SourcePage>

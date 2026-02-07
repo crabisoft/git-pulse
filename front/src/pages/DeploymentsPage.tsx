@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import type { ClassifiedDeployment, DeploymentReport } from '@repo/shared';
 import { api, type DeploymentsQuery, type PageQuery } from '../api';
 import { useCancellableLoad } from '../hooks';
+import { DataList } from '../DataList';
 import { deploymentsCodec, useUrlQuery } from '../urlQuery';
 import { ChoiceFilter, DimensionFilter, PeriodFilter } from '../Filters';
 import { RepoFilter } from '../RepoFilter';
@@ -97,36 +98,46 @@ export function DeploymentsPage({ sourceId, slug }: { sourceId: string; slug: st
 
       {report && rows.length === 0 && <p className="muted">{t('deployments.empty')}</p>}
 
-      {rows.length > 0 && (
-        <table className="data">
-          <thead>
-            <tr>
-              <th>{t('deployments.when')}</th>
-              <th>{t('deployments.repo')}</th>
-              <th>{t('deployments.environment')}</th>
-              <th>{t('deployments.ref')}</th>
-              <th>{t('deployments.status')}</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((deployment) => (
-              <tr key={deployment.id}>
-                <td>
-                  {/* The date is what identifies a deployment on this page, so
-                      it is what carries the way back to it on the platform. */}
-                  <PlatformLink url={deployment.url} title={t('deployments.openDeployment')}>
-                    {new Date(deployment.createdAt).toLocaleString()}
-                  </PlatformLink>
-                </td>
-                <td>{deployment.repo}</td>
-                <td>
-                  <PlatformLink
-                    url={deployment.environmentUrl}
-                    title={t('deployments.openEnvironment')}
-                  >
-                    {deployment.environment}
-                  </PlatformLink>
+      {/* Described once, rendered as a table on a wide screen and as cards on
+          a phone — see DataList. The date leads a card because it is what
+          identifies a deployment here, and it is what carries the way back to
+          it on the platform. */}
+      <DataList
+        rows={rows}
+        rowKey={(deployment) => deployment.id}
+        columns={[
+          {
+            key: 'when',
+            header: t('deployments.when'),
+            role: 'lead',
+            cell: (deployment) => (
+              <PlatformLink url={deployment.url} title={t('deployments.openDeployment')}>
+                {new Date(deployment.createdAt).toLocaleString()}
+              </PlatformLink>
+            ),
+          },
+          {
+            key: 'repo',
+            header: t('deployments.repo'),
+            cell: (deployment) => deployment.repo,
+          },
+          {
+            // The environment, and what a rule captured about the deployment
+            // that went to it. One cell rather than two: the pills qualify the
+            // environment, and a column of their own would have no header to
+            // put over it.
+            key: 'environment',
+            header: t('deployments.environment'),
+            cell: (deployment) => (
+              <>
+                <PlatformLink
+                  url={deployment.environmentUrl}
+                  title={t('deployments.openEnvironment')}
+                >
+                  {deployment.environment}
+                </PlatformLink>
+                {Object.keys(deployment.attributes).length + deployment.metaEnvironments.length >
+                  0 && (
                   <div className="pills">
                     {Object.entries(deployment.attributes).map(([key, value]) => (
                       <span key={key} className="pill attr">
@@ -139,25 +150,36 @@ export function DeploymentsPage({ sourceId, slug }: { sourceId: string; slug: st
                       </span>
                     ))}
                   </div>
-                </td>
-                <td>
-                  <RefLink name={deployment.ref} url={deployment.refUrl} />
-                </td>
-                <td>
-                  <span className={`pill status-${deployment.status}`}>
-                    {t(`status.${deployment.status}`, deployment.status)}
-                  </span>
-                </td>
-                <td>
-                  <Link className="btn" to={changesLink(slug, deployment, query)}>
-                    {t('deployments.contents')}
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
+                )}
+              </>
+            ),
+          },
+          {
+            key: 'ref',
+            header: t('deployments.ref'),
+            cell: (deployment) => <RefLink name={deployment.ref} url={deployment.refUrl} />,
+          },
+          {
+            key: 'status',
+            header: t('deployments.status'),
+            role: 'aside',
+            cell: (deployment) => (
+              <span className={`pill status-${deployment.status}`}>
+                {t(`status.${deployment.status}`, deployment.status)}
+              </span>
+            ),
+          },
+          {
+            key: 'contents',
+            role: 'full',
+            cell: (deployment) => (
+              <Link className="btn" to={changesLink(slug, deployment, query)}>
+                {t('deployments.contents')}
+              </Link>
+            ),
+          },
+        ]}
+      />
 
       {report && (
         <Pagination

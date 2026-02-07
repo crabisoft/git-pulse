@@ -32,7 +32,15 @@ import {
   type PageQuery,
   type UpdateSourceInput,
 } from '../api';
-import { DeepSyncIcon, DeleteIcon, EditIcon, PlusIcon, SyncIcon, TestIcon } from '../icons';
+import {
+  DeepSyncIcon,
+  DeleteIcon,
+  EditIcon,
+  PlusIcon,
+  StarIcon,
+  SyncIcon,
+  TestIcon,
+} from '../icons';
 import { IconButton } from '../IconButton';
 import { ConfirmDialog, Modal } from '../Modal';
 import { MultiSelect } from '../MultiSelect';
@@ -383,6 +391,21 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
     }
   }
 
+  /**
+   * Makes a source the one the application opens on. At most one holds it, so
+   * the whole list is reloaded rather than the one row: taking it changes the
+   * source that had it, and a list showing two stars is a list that lies.
+   */
+  async function makeDefault(source: SourcePublic) {
+    try {
+      await api.makeDefaultSource(source.id);
+      await refresh();
+    } catch (err) {
+      const { code, params } = apiErrorInfo(err);
+      setMsg({ kind: 'err', text: t(code, params) });
+    }
+  }
+
   async function remove(source: SourcePublic) {
     setDeleting(null);
     try {
@@ -429,6 +452,12 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
                   </div>
                   <div className="source-meta">
                     {s.baseUrl} · {s.scope.owner} · {t('sources.auth')}: {s.authKind} ·{' '}
+                    {/* Said on the row as well as on the star: the star is the
+                        control, and a control is not where a reader looks to
+                        learn what is already true. */}
+                    {s.isDefault && (
+                      <span className="mode-badge default">{t('sources.default.badge')}</span>
+                    )}
                     <span className={`mode-badge ${s.mode}`}>{t(`sources.mode.${s.mode}`)}</span>
                     {s.webhooksEnabled && (
                       <>
@@ -468,6 +497,17 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
                   )}
                 </div>
                 <div className="row-actions">
+                  <IconButton
+                    label={
+                      s.isDefault ? t('sources.default.is') : t('sources.default.make')
+                    }
+                    // Nothing to press on the one that already holds it: the
+                    // star is then a statement, not an offer.
+                    disabled={s.isDefault}
+                    onClick={() => void makeDefault(s)}
+                  >
+                    <StarIcon filled={s.isDefault} />
+                  </IconButton>
                   <IconButton label={t('common.edit')} onClick={() => setEditing({ source: s })}>
                     <EditIcon />
                   </IconButton>

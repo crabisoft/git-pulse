@@ -10,6 +10,7 @@ import {
 import { api, apiErrorInfo, type CreateTrackerInput } from '../api';
 import { DeleteIcon, EditIcon, PlusIcon } from '../icons';
 import { IconButton } from '../IconButton';
+import { DataList } from '../DataList';
 import { ConfirmDialog, Modal } from '../Modal';
 
 const KINDS: TrackerKind[] = ['jira', 'linear', 'github', 'gitlab'];
@@ -67,60 +68,67 @@ export function TrackersPage({ sources }: { sources: SourcePublic[] }) {
         {trackers.length === 0 && <p className="muted">{t('trackers.listEmpty')}</p>}
 
         {trackers.length > 0 && (
-          <table className="data">
-            <thead>
-              <tr>
-                <th>{t('trackers.form.name')}</th>
-                <th>{t('trackers.form.kind')}</th>
-                <th>{t('trackers.form.baseUrl')}</th>
-                <th>{t('trackers.form.sources')}</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {trackers.map((tracker) => (
-                <tr key={tracker.id}>
-                  <td>{tracker.name}</td>
-                  <td>
-                    <span className="pill attr">{tracker.kind}</span>
-                  </td>
-                  <td className="mono">{tracker.baseUrl}</td>
-                  <td>
-                    {/* Read-only: attaching happens from the source. */}
-                    {tracker.sources.length === 0 ? (
-                      <span className="muted">{t('trackers.noSource')}</span>
-                    ) : (
-                      <div className="pills">
-                        {tracker.sources.map((b) => (
-                          <span key={b.sourceId} className="pill attr">
-                            {sourceName(b.sourceId)}
-                            {b.incidents && <b> · {t('trackers.incidentsBadge')}</b>}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                  </td>
-                  <td>
-                    <div className="row-actions">
-                      <IconButton
-                        label={t('common.edit')}
-                        onClick={() => setEditing({ tracker })}
-                      >
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        label={t('common.delete')}
-                        tone="danger"
-                        onClick={() => setDeleting(tracker)}
-                      >
-                        <DeleteIcon />
-                      </IconButton>
+          <DataList
+            rows={trackers}
+            rowKey={(tracker) => tracker.id}
+            columns={[
+              {
+                key: 'name',
+                header: t('trackers.form.name'),
+                role: 'lead',
+                cell: (tracker) => tracker.name,
+              },
+              {
+                key: 'kind',
+                header: t('trackers.form.kind'),
+                role: 'aside',
+                cell: (tracker) => <span className="pill attr">{tracker.kind}</span>,
+              },
+              {
+                key: 'baseUrl',
+                header: t('trackers.form.baseUrl'),
+                className: 'mono',
+                cell: (tracker) => tracker.baseUrl,
+              },
+              {
+                // Read-only: attaching happens from the source.
+                key: 'sources',
+                header: t('trackers.form.sources'),
+                cell: (tracker) =>
+                  tracker.sources.length === 0 ? (
+                    <span className="muted">{t('trackers.noSource')}</span>
+                  ) : (
+                    <div className="pills">
+                      {tracker.sources.map((b) => (
+                        <span key={b.sourceId} className="pill attr">
+                          {sourceName(b.sourceId)}
+                          {b.incidents && <b> · {t('trackers.incidentsBadge')}</b>}
+                        </span>
+                      ))}
                     </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  ),
+              },
+              {
+                key: 'actions',
+                role: 'full',
+                className: 'row-actions',
+                cell: (tracker) => (
+                  <>
+                    <IconButton label={t('common.edit')} onClick={() => setEditing({ tracker })}>
+                      <EditIcon />
+                    </IconButton>
+                    <IconButton
+                      label={t('common.delete')}
+                      tone="danger"
+                      onClick={() => setDeleting(tracker)}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </>
+                ),
+              },
+            ]}
+          />
         )}
       </section>
 
