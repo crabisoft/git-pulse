@@ -26,3 +26,12 @@ back/prisma/manual/
 .vscode/*
 !.vscode/extensions.json
 *.log
+
+# Layout suite output. The screenshots are written on every run and read by
+# whoever is looking at a change; the assertions are what fail, and they leave
+# nothing behind worth versioning.
+front/e2e/screens/
+front/e2e/.results/
+front/playwright-report/
+# Where a run started outside the front package leaves its own.
+test-results/
