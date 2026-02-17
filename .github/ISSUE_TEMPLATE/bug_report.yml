@@ -1,0 +1,84 @@
+name: Bug report
+description: Something behaves differently from what it should
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Never paste a token, a private key, or the contents of `master.key`
+        here. Redact them. Security flaws go through **Security → Report a
+        vulnerability**, not through an issue.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happens
+      description: And what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: How to reproduce
+      placeholder: |
+        1. Settings › Sources → add a GitLab source in stored mode
+        2. Wait for a collection, open the DORA tab
+        3. Deployment frequency stays at 0
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The commit SHA you are running, or the release tag.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: How it is deployed
+      options:
+        - Docker, dev stack (make dev)
+        - Docker, prod stack (make prod)
+        - Local Node, no Docker
+        - Something else — described below
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform being read
+      options:
+        - GitHub.com
+        - GitHub Enterprise Server
+        - GitLab.com
+        - GitLab self-hosted
+        - Not platform-specific
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Source mode
+      description: Settings › Sources. Say "not sure" rather than guessing.
+      options:
+        - live
+        - stored
+        - Not sure
+        - Not relevant
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: >
+        Relevant output from `make logs`, or the failing API response.
+        Redact anything secret.
+      render: text

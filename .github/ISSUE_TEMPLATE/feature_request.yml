@@ -1,0 +1,41 @@
+name: Feature request
+description: Something the dashboard should do and does not
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: >
+        What are you trying to find out, or do, that the dashboard makes hard
+        today? Describe the situation before the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you have in mind
+      description: Optional. A shape for the solution, if you have one.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - DORA metrics
+        - Collection, ingestion, webhooks
+        - Release notes
+        - A new platform connector
+        - Environment classification
+        - UI and navigation
+        - Deployment and operations
+        - Elsewhere
+    validations:
+      required: true
+
+  - type: textarea
+    id: workaround
+    attributes:
+      label: How you cope today
+      description: Optional. Another tool, a manual step, or nothing.

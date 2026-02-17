@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A new push to a branch makes the run in flight pointless.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Typecheck and tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Both sides resolve @repo/shared through its built types.
+      - name: Build shared
+        run: npm run build:shared
+
+      # The back typechecks against the generated Prisma client. No database
+      # is needed to generate it, and none is needed by the tests either.
+      - name: Generate Prisma client
+        run: npm run prisma:generate -w @repo/back
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+  images:
+    name: Production images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The images are how the project is meant to be deployed, so a broken
+      # Dockerfile is a broken release.
+      - name: Build the API image
+        run: docker build -f .docker/Dockerfile.back -t git-dashboard-back:ci .
+
+      - name: Build the web image
+        run: docker build -f .docker/Dockerfile.front -t git-dashboard-front:ci .
