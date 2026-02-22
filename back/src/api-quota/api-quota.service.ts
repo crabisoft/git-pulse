@@ -81,7 +81,7 @@ export class ApiQuotaService implements OnModuleInit, OnModuleDestroy {
         if (origin === 'observed') this.metered.add(subjectKey(subject));
       }
     } catch (e) {
-      this.logger.warn(`Quotas non rechargés au démarrage : ${asMessage(e)}`);
+      this.logger.warn(`Quotas not reloaded at startup: ${asMessage(e)}`);
     }
   }
 
@@ -220,7 +220,7 @@ export class ApiQuotaService implements OnModuleInit, OnModuleDestroy {
         // next one rather than losing the window it measured.
         this.dirty.delete(key);
       } catch (e) {
-        this.logger.warn(`Quota non enregistré pour ${key} : ${asMessage(e)}`);
+        this.logger.warn(`Quota not recorded for ${key}: ${asMessage(e)}`);
       }
     }
   }

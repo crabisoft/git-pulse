@@ -102,7 +102,7 @@ export class SyncService {
         lastError: null,
       })));
       outcome.skipped = true;
-      this.logger.log(`Listings épargnés pour ${sourceId} : événements récents.`);
+      this.logger.log(`Listings skipped for ${sourceId}: recent events kept the store current.`);
       return outcome;
     }
 
@@ -133,12 +133,12 @@ export class SyncService {
     }
 
     this.logger.log(
-      `Synchronisation ${full ? `complète (${depth} j)` : 'incrémentale'} de ${sourceId} : ` +
-        `${outcome.repos} dépôt(s), ${outcome.pullRequests} PR ouverte(s), ${outcome.merged} fusionnée(s), ` +
-        `${outcome.pipelines} pipeline(s), ${outcome.deployments} déploiement(s)` +
-        (outcome.closed > 0 ? `, ${outcome.closed} clôturée(s)` : '') +
-        (outcome.pruned > 0 ? `, ${outcome.pruned} hors périmètre supprimée(s)` : '') +
-        (outcome.failed.length > 0 ? ` — en échec : ${outcome.failed.join(', ')}` : ''),
+      `${full ? `Full (${depth} d)` : 'Incremental'} synchronisation of ${sourceId}: ` +
+        `${outcome.repos} repo(s), ${outcome.pullRequests} open PR(s), ${outcome.merged} merged, ` +
+        `${outcome.pipelines} pipeline(s), ${outcome.deployments} deployment(s)` +
+        (outcome.closed > 0 ? `, ${outcome.closed} closed` : '') +
+        (outcome.pruned > 0 ? `, ${outcome.pruned} dropped as out of scope` : '') +
+        (outcome.failed.length > 0 ? ` — failed: ${outcome.failed.join(', ')}` : ''),
     );
     return outcome;
   }
@@ -237,7 +237,7 @@ export class SyncService {
     } catch (e) {
       outcome.failed.push(resource);
       const message = asMessage(e);
-      this.logger.warn(`Synchronisation de ${resource} échouée (${sourceId}) : ${message}`);
+      this.logger.warn(`Synchronisation of ${resource} failed (${sourceId}): ${message}`);
       await this.mark(sourceId, resource, { lastError: message });
       return null;
     }

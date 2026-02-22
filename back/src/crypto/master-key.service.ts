@@ -32,7 +32,7 @@ export class MasterKeyService implements OnModuleInit {
         );
       }
       this.key = buf;
-      this.logger.log('Master key chargée depuis la variable d\'environnement MASTER_KEY.');
+      this.logger.log('Master key loaded from the MASTER_KEY environment variable.');
       return;
     }
 
@@ -55,7 +55,7 @@ export class MasterKeyService implements OnModuleInit {
         `Fichier master key corrompu (${filePath}) : ${buf.length} octets, ${KEY_LENGTH} attendus.`,
       );
     }
-    this.logger.log(`Master key chargée depuis ${filePath}.`);
+    this.logger.log(`Master key loaded from ${filePath}.`);
     return buf;
   }
 
@@ -66,8 +66,8 @@ export class MasterKeyService implements OnModuleInit {
     // Enforce permissions even if umask interfered.
     chmodSync(filePath, 0o600);
     this.logger.warn(
-      `Aucune master key trouvée : nouvelle clé générée dans ${filePath} (0600). ` +
-        'SAUVEGARDEZ ce fichier — sa perte rend les secrets irrécupérables.',
+      `No master key found: a new one was generated in ${filePath} (0600). ` +
+        'BACK THIS FILE UP — losing it makes every stored secret unrecoverable.',
     );
     return key;
   }

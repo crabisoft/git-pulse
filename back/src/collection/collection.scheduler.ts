@@ -35,7 +35,7 @@ export class CollectionScheduler implements OnModuleInit {
         this.schedule(COLLECT_JOB, s.collectCron),
         this.schedule(PRUNE_JOB, s.pruneCron),
       ]).catch((e) => {
-        this.logger.error(`Replanification échouée : ${asMessage(e)}`);
+        this.logger.error(`Rescheduling failed: ${asMessage(e)}`);
       });
     });
   }
@@ -54,7 +54,7 @@ export class CollectionScheduler implements OnModuleInit {
     // back on its own, and a second attempt would enqueue the whole fan-out
     // twice over.
     await this.queue.add(name, {}, { repeat: { pattern }, ...JOB_HISTORY });
-    this.logger.log(`Tâche "${name}" planifiée (cron "${pattern}").`);
+    this.logger.log(`Job "${name}" scheduled (cron "${pattern}").`);
   }
 }
 

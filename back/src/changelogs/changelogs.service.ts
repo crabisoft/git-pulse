@@ -106,8 +106,8 @@ export class ChangelogsService {
       if (!this.quotas.allowsOptional(subject, quotaReservePct)) {
         outcome.deferred += targets.length - i;
         this.logger.warn(
-          `Archivage des changelogs interrompu pour ${sourceId} : réserve d'API atteinte, ` +
-            `${targets.length - i} déploiement(s) reportés.`,
+          `Changelog archiving stopped for ${sourceId}: API reserve reached, ` +
+            `${targets.length - i} deployment(s) deferred.`,
         );
         break;
       }
@@ -126,13 +126,13 @@ export class ChangelogsService {
           await this.store.record(sourceId, toUnreadable(target, releaseNotesGenerator));
           outcome.unreadable += 1;
           this.logger.warn(
-            `Contenu introuvable pour le déploiement ${target.id} (${target.repo} @ ${target.ref}) : ` +
-              `archivé sans contenu — ${asMessage(e)}`,
+            `Contents unreadable for deployment ${target.id} (${target.repo} @ ${target.ref}): ` +
+              `filed without them — ${asMessage(e)}`,
           );
         } else {
           outcome.failed += 1;
           this.logger.warn(
-            `Changelog non archivé pour le déploiement ${target.id} (${target.repo}) : ${asMessage(e)}`,
+            `Changelog not archived for deployment ${target.id} (${target.repo}): ${asMessage(e)}`,
           );
         }
       }
@@ -140,7 +140,7 @@ export class ChangelogsService {
 
     if (outcome.archived > 0) {
       this.logger.log(
-        `${outcome.archived} changelog(s) de déploiement archivé(s) pour ${sourceId}.`,
+        `${outcome.archived} deployment changelog(s) archived for ${sourceId}.`,
       );
     }
     return outcome;
@@ -148,13 +148,15 @@ export class ChangelogsService {
 
   /**
    * What a deployment carried against its predecessor, or — when that is
-   * nothing — what it carries against the default branch.
+   * nothing — what it carries against the branch it was cut from.
    *
    * Two ordinary cases file an empty comparison: a deployment that went out on
    * a ref its predecessor already ran, and a first deployment, which has no
    * predecessor to compare against at all. Both leave a row reading "0 commits"
    * where a reader is asking what is running on that environment, and the
-   * branch the ref was cut from still answers it.
+   * branch the ref parted from most recently still answers it — see
+   * `nearestBranch`, which falls back to the default branch when the history
+   * names none.
    *
    * Worth the second comparison here and nowhere else: this record is written
    * once and read for months, long after the refs it names have gone. The
@@ -170,24 +172,24 @@ export class ChangelogsService {
     if (carried.entries.length > 0) return carried;
 
     try {
-      const againstDefault = await this.deployments.contentsOf(
+      const againstBranch = await this.deployments.contentsOf(
         sourceId,
         target,
         classified,
-        'default',
+        'nearest',
       );
-      // Kept only if it carries something. A ref that is the default branch, or
-      // one already merged into it, compares empty both ways — and "nothing new
-      // since the last deployment" is the truer of the two readings.
-      return againstDefault.entries.length > 0 ? againstDefault : carried;
+      // Kept only if it carries something. A ref already merged into every
+      // branch that could be near it compares empty whichever way it is read —
+      // and "nothing new since the last deployment" is then the truer reading.
+      return againstBranch.entries.length > 0 ? againstBranch : carried;
     } catch (e) {
       // The predecessor comparison answered, and it is what would have been
-      // filed before this fallback existed. A default branch that will not
-      // compare — deleted, renamed, or a repo the platform has stopped
-      // resolving — is a reason to file that answer, not to lose it.
+      // filed before this fallback existed. A branch that will not compare —
+      // deleted, renamed, or a repo the platform has stopped resolving — is a
+      // reason to file that answer, not to lose it.
       this.logger.warn(
-        `Comparaison avec la branche par défaut impossible pour le déploiement ${target.id} ` +
-          `(${target.repo} @ ${target.ref}) : comparaison vide conservée — ${asMessage(e)}`,
+        `Could not compare deployment ${target.id} against the nearest branch ` +
+          `(${target.repo} @ ${target.ref}): empty comparison kept — ${asMessage(e)}`,
       );
       return carried;
     }

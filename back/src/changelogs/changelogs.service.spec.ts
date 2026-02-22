@@ -153,15 +153,15 @@ describe('archive', () => {
     );
   });
 
-  it('falls back on the default branch when the predecessor carried nothing', async () => {
+  it('falls back on the branch the ref was cut from when the predecessor carried nothing', async () => {
     // Nothing between two deployments of the same ref, and nothing at all before
     // a first one — both file "0 commits" where the reader is asking what is
-    // running there. The branch the ref was cut from still answers it.
+    // running there. The branch the ref parted from still answers it.
     const { changelogs, contentsOf, record } = service({ deployments: [deployment('a')] });
     contentsOf
       .mockResolvedValueOnce(changes({ entries: [], authors: 0, markdown: '' }))
       .mockResolvedValueOnce(
-        changes({ base: 'default', baseRef: 'main', entries: [entry()], authors: 1 }),
+        changes({ base: 'nearest', baseRef: 'release/2026.07.10', entries: [entry()], authors: 1 }),
       );
 
     const outcome = await changelogs.archive('src-1');
@@ -172,18 +172,23 @@ describe('archive', () => {
       'src-1',
       expect.anything(),
       expect.anything(),
-      'default',
+      'nearest',
     );
     expect(record).toHaveBeenCalledWith(
       'src-1',
-      expect.objectContaining({ base: 'default', baseRef: 'main', entries: [entry()], authors: 1 }),
+      expect.objectContaining({
+        base: 'nearest',
+        baseRef: 'release/2026.07.10',
+        entries: [entry()],
+        authors: 1,
+      }),
     );
   });
 
-  it('keeps the predecessor comparison when the default branch adds nothing to it', async () => {
-    // A ref that is the default branch, or one already merged into it, compares
-    // empty both ways: "nothing new since the last deployment" is the truer of
-    // the two readings, and the one that names a base the reader can follow.
+  it('keeps the predecessor comparison when no branch adds anything to it', async () => {
+    // A ref already merged into every branch that could be near it compares
+    // empty whichever way it is read: "nothing new since the last deployment"
+    // is then the truer reading, and the one naming a base to follow.
     const { changelogs, contentsOf, record } = service({ deployments: [deployment('a')] });
     contentsOf.mockResolvedValue(changes({ entries: [], authors: 0 }));
 
@@ -196,7 +201,7 @@ describe('archive', () => {
     );
   });
 
-  it('files the empty comparison rather than losing it to a default branch that will not compare', async () => {
+  it('files the empty comparison rather than losing it to a branch that will not compare', async () => {
     const { changelogs, contentsOf, record } = service({ deployments: [deployment('a')] });
     contentsOf
       .mockResolvedValueOnce(changes({ entries: [] }))

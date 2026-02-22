@@ -94,7 +94,7 @@ export class ReleaseNotesService {
       signal,
     );
     this.logger.log(
-      `Notes de version reformulées par ${answer.provider.name} (${answer.provider.model})`,
+      `Release notes rewritten by ${answer.provider.name} (${answer.provider.model})`,
     );
     return {
       markdown: readRewritten(answer.text),

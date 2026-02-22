@@ -33,7 +33,7 @@ export class ApiBudgetService implements OnModuleInit {
     try {
       await this.reload();
     } catch (e) {
-      this.logger.warn(`Budgets d'API non chargés : ${asMessage(e)}`);
+      this.logger.warn(`API budgets not loaded: ${asMessage(e)}`);
     }
   }
 

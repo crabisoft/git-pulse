@@ -25,7 +25,7 @@ export class IngestProcessor extends WorkerHost {
 
   async process(job: Job): Promise<unknown> {
     if (job.name !== 'ingest-event') {
-      this.logger.warn(`Job inconnu ignoré : ${job.name}`);
+      this.logger.warn(`Unknown job ignored: ${job.name}`);
       return null;
     }
 

@@ -93,8 +93,8 @@ export class RetentionService {
     const removed = Object.values(outcome).reduce((a, b) => a + b, 0);
     if (removed > 0) {
       this.logger.log(
-        `Purge du magasin : ${outcome.pipelines} pipeline(s), ${outcome.deployments} déploiement(s), ` +
-          `${outcome.pullRequests} PR close(s), ${outcome.deliveries} livraison(s).`,
+        `Store swept: ${outcome.pipelines} pipeline(s), ${outcome.deployments} deployment(s), ` +
+          `${outcome.pullRequests} closed PR(s), ${outcome.deliveries} delivery record(s).`,
       );
     }
     return outcome;

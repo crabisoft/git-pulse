@@ -52,7 +52,7 @@ export class WebhookService {
 
     const verdict = verify(source.kind as SourceKind, headers, body, secret);
     if (!verdict.ok) {
-      this.logger.warn(`Livraison refusée pour ${sourceId} : ${verdict.reason}.`);
+      this.logger.warn(`Delivery rejected for ${sourceId}: ${verdict.reason}.`);
       throw new CodedException('errors.webhook.rejected', HttpStatus.UNAUTHORIZED);
     }
 
@@ -92,7 +92,7 @@ export class WebhookService {
     try {
       payload = JSON.parse(body.toString('utf8'));
     } catch {
-      this.logger.warn(`Charge utile illisible sur l'événement ${event}.`);
+      this.logger.warn(`Unreadable payload on the ${event} event.`);
       return null;
     }
     return kind === 'github' ? toGitHubIntent(event, payload) : toGitLabIntent(event, payload);

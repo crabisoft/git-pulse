@@ -70,7 +70,7 @@ export class IncidentsService {
       throwIfAborted(signal);
       // Degraded rather than fatal, like every other listing behind a page:
       // one missing permission on the tracker must not empty the screen.
-      this.logger.warn(`listIncidents échoué (${sourceId}) : ${asMessage(e)}`);
+      this.logger.warn(`listIncidents failed (${sourceId}): ${asMessage(e)}`);
       return [];
     }
   }

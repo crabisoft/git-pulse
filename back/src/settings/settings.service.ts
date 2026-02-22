@@ -138,7 +138,7 @@ export class SettingsService {
       try {
         listener(settings);
       } catch (e) {
-        this.logger.warn(`Listener de réglages en échec : ${asMessage(e)}`);
+        this.logger.warn(`Settings listener failed: ${asMessage(e)}`);
       }
     }
     return settings;
