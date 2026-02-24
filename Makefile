@@ -59,8 +59,13 @@ migrate: ## Create a migration  (usage: make migrate name=add_table)
 	@test -n "$(name)" || { echo "Usage: make migrate name=<description>"; exit 1; }
 	npm run db:migrate -- --name $(name)
 
-deploy: ## Apply pending migrations
-	npm run db:deploy
+# Through the container, unlike the targets below: DATABASE_URL is built by
+# docker-compose for the back service and exists nowhere else, so the host has
+# none unless somebody wrote a root .env by hand (see .env.example). The dev
+# container applies pending migrations at boot anyway — `make restart-back`
+# does this and reloads the API with it.
+deploy: ## Apply pending migrations (in the running back container)
+	$(COMPOSE) $(mode) exec back npm run prisma:deploy -w @repo/back
 
 studio: ## Open Prisma Studio (data browser)
 	npm run db:studio
