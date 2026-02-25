@@ -3,6 +3,7 @@ import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { ListEnvRulesDto } from './list-env-rules.dto';
 import { CreateEnvRuleDto } from './create-env-rule.dto';
+import { UpdateEnvRuleDto } from './update-env-rule.dto';
 import { ClassifyNameDto } from './classify-name.dto';
 
 /**
@@ -77,5 +78,41 @@ describe('CreateEnvRuleDto', () => {
     expect(
       reject(CreateEnvRuleDto, { name: 'r', pattern: '.*', kind: 'simple', priority: -1 }),
     ).toEqual(['priority']);
+  });
+});
+
+describe('forced attributes', () => {
+  const withAttributes = (attributes: unknown) => ({
+    name: 'r',
+    pattern: '^Prod',
+    kind: 'simple',
+    attributes,
+  });
+
+  it('accepts a map of name-shaped keys to non-empty strings', () => {
+    expect(reject(CreateEnvRuleDto, withAttributes({ App: 'Billing' }))).toEqual([]);
+    expect(reject(UpdateEnvRuleDto, { attributes: {} })).toEqual([]);
+  });
+
+  it('rejects a key no named group could carry', () => {
+    // Downstream a forced attribute and a captured one are the same thing, so
+    // they answer to the same key shape.
+    expect(reject(CreateEnvRuleDto, withAttributes({ 'my app': 'Billing' }))).toEqual([
+      'attributes',
+    ]);
+    expect(reject(CreateEnvRuleDto, withAttributes({ '1st': 'Billing' }))).toEqual([
+      'attributes',
+    ]);
+  });
+
+  it('rejects a value that is not a non-empty string', () => {
+    expect(reject(CreateEnvRuleDto, withAttributes({ App: '' }))).toEqual(['attributes']);
+    expect(reject(CreateEnvRuleDto, withAttributes({ App: 3 }))).toEqual(['attributes']);
+    expect(reject(CreateEnvRuleDto, withAttributes({ App: { name: 'x' } }))).toEqual(['attributes']);
+  });
+
+  it('rejects anything that is not a flat map', () => {
+    expect(reject(CreateEnvRuleDto, withAttributes(['App=Billing']))).toEqual(['attributes']);
+    expect(reject(CreateEnvRuleDto, withAttributes('App=Billing'))).toEqual(['attributes']);
   });
 });

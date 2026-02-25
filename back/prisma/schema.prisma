@@ -129,6 +129,11 @@ model EnvRule {
   target     RuleTarget  @default(environment)
   /// Client-defined priority (lower wins).
   priority   Int         @default(100)
+  /// Attributes forced on a match, for the names that carry nothing to capture.
+  attributes Json?
+  /// Pattern the repo must match for the rule to contribute at all. Null means
+  /// every repo, which is what a rule about a naming convention wants.
+  repo       String?
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 

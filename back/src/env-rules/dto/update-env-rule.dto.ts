@@ -1,6 +1,7 @@
 import { IsEnum, IsInt, IsOptional, IsString, Min, MinLength } from 'class-validator';
 import type { EnvRuleKind, RuleTarget } from '@repo/shared';
 import { RULE_TARGETS } from './rule-target';
+import { IsAttributeMap } from './attribute-map';
 
 /** Partial update of a classification rule — only the supplied keys are persisted. */
 export class UpdateEnvRuleDto {
@@ -26,4 +27,14 @@ export class UpdateEnvRuleDto {
   @IsInt()
   @Min(0)
   priority?: number;
+
+  /** Supplied in full — an empty map clears the forced attributes. */
+  @IsOptional()
+  @IsAttributeMap()
+  attributes?: Record<string, string>;
+
+  /** An empty string releases the rule back to every repo. */
+  @IsOptional()
+  @IsString()
+  repo?: string;
 }

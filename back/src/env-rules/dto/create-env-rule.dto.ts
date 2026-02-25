@@ -1,6 +1,7 @@
 import { IsEnum, IsInt, IsOptional, IsString, Min, MinLength } from 'class-validator';
 import type { EnvRuleKind, RuleTarget } from '@repo/shared';
 import { RULE_TARGETS } from './rule-target';
+import { IsAttributeMap } from './attribute-map';
 
 export class CreateEnvRuleDto {
   @IsString()
@@ -23,4 +24,14 @@ export class CreateEnvRuleDto {
   @IsInt()
   @Min(0)
   priority?: number;
+
+  /** Forced on a match, for what the name carries nothing to capture. */
+  @IsOptional()
+  @IsAttributeMap()
+  attributes?: Record<string, string>;
+
+  /** Confines the rule to the repos this matches. Omitted or empty: all of them. */
+  @IsOptional()
+  @IsString()
+  repo?: string;
 }

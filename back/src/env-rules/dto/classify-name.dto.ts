@@ -11,4 +11,9 @@ export class ClassifyNameDto {
   @IsOptional()
   @IsEnum(RULE_TARGETS)
   target?: RuleTarget;
+
+  /** The repo the name was seen in. Omitted, the repo-scoped rules stand down. */
+  @IsOptional()
+  @IsString()
+  repo?: string;
 }

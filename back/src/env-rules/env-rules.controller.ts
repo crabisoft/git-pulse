@@ -34,7 +34,11 @@ export class EnvRulesController {
   @Post('sources/:sourceId/env-rules/classify')
   @HttpCode(200)
   classify(@Param('sourceId') sourceId: string, @Body() dto: ClassifyNameDto) {
-    return this.envRules.classify(sourceId, dto.name, dto.target ?? 'environment');
+    return this.envRules.classify(
+      sourceId,
+      { name: dto.name, repo: dto.repo || undefined },
+      dto.target ?? 'environment',
+    );
   }
 
   @Patch('env-rules/:id')
@@ -55,6 +59,7 @@ export class EnvRulesController {
     return classifyEnvironment(
       dto.name,
       dto.rules.map((r) => ({ ...r, priority: r.priority ?? 100 })),
+      { repo: dto.repo || undefined },
     );
   }
 }
