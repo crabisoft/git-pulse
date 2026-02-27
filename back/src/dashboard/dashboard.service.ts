@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import {
-  ENVIRONMENT_RECENT_MAX,
   type DashboardEnvironment,
   type DashboardLive,
   type Deployment,
@@ -10,7 +9,8 @@ import {
   type SourceMode,
 } from '@repo/shared';
 import { ReaderFactory } from '../ingest/reader.factory';
-import { EnvRulesService } from '../env-rules/env-rules.service';
+import { EnvRulesService, subjectKey } from '../env-rules/env-rules.service';
+import { foldEnvironments, type DimensionedDeployment } from './environments';
 import { TicketRulesService } from '../ticket-rules/ticket-rules.service';
 import { SettingsService } from '../settings/settings.service';
 import { paginate, toWindow } from '../common/pagination';
@@ -27,7 +27,8 @@ export interface CollectedSource {
   repos: string[];
   pullRequests: PullRequest[];
   pipelines: Pipeline[];
-  deployments: Deployment[];
+  /** Each carrying its own classification — see `DimensionedDeployment`. */
+  deployments: DimensionedDeployment[];
   environments: DashboardEnvironment[];
   mode: SourceMode;
   syncedAt: string | null;
@@ -127,22 +128,23 @@ export class DashboardService {
       warnings.push({ code: 'dashboard.warn.neverSynced', params: {} });
     }
 
+    // Classified once, then folded: the overview folds the same deployments a
+    // second time over a narrower set, and both foldings have to mean the same
+    // thing by construction.
+    const dimensioned = await this.dimension(sourceId, deployments);
+
     return {
       repos: allRepos,
       pullRequests: await this.withTickets(sourceId, reader.scope.owner, pullRequests),
       pipelines,
-      deployments,
-      environments: await this.toEnvironments(sourceId, deployments),
+      deployments: dimensioned,
+      environments: foldEnvironments(dimensioned),
       mode: reader.mode,
       syncedAt: syncedAt?.toISOString() ?? null,
       warnings,
     };
   }
 
-  /**
-   * Environments observed in the deployments, resolved against the source's
-   * rules. Names no rule matches are kept as-is, without attributes.
-   */
   /** Resolves the ticket references of a batch of PRs — rules read once. */
   private async withTickets(
     sourceId: string,
@@ -157,42 +159,32 @@ export class DashboardService {
     return prs.map((pr, i) => ({ ...pr, tickets: refs[i] }));
   }
 
-  private async toEnvironments(
+  /**
+   * Resolves each deployment's environment against the source's rules.
+   *
+   * Per deployment rather than per name, because the repo is half of what
+   * decides a classification. The rows are folded from these, so an
+   * environment deployed from one repo carries what a rule confined to that
+   * repo says — which is the whole of what such a rule is for.
+   */
+  private async dimension(
     sourceId: string,
     deployments: Deployment[],
-  ): Promise<DashboardEnvironment[]> {
-    const byName = new Map<string, Deployment[]>();
-    for (const d of deployments) {
-      const bucket = byName.get(d.environment);
-      if (bucket) bucket.push(d);
-      else byName.set(d.environment, [d]);
-    }
-
-    const entries = [...byName.entries()];
-    const classified = await this.envRules.classifyMany(
+  ): Promise<DimensionedDeployment[]> {
+    const classified = await this.envRules.classifyByPair(
       sourceId,
-      entries.map(([name]) => name),
+      deployments.map((d) => ({ name: d.environment, repo: d.repo })),
     );
-    return entries
-      .map(([, items], i) => {
-        const env = classified[i];
-        // Sorted once, then read from both ends: the newest deployment states
-        // what is running, and the tail of the same order is the heartbeat.
-        const byDate = [...items].sort((a, b) => msOf(a.createdAt) - msOf(b.createdAt));
-        const latest = byDate[byDate.length - 1];
-        return {
-          name: env.name,
-          attributes: env.attributes,
-          metaEnvironments: env.metaEnvironments,
-          repos: [...new Set(items.map((d) => d.repo))].sort(),
-          deployments: items.length,
-          lastDeployAt: latest.createdAt,
-          lastStatus: latest.status,
-          ref: latest.ref,
-          recent: byDate.slice(-ENVIRONMENT_RECENT_MAX).map((d) => d.status),
-        };
-      })
-      .sort((a, b) => msOf(b.lastDeployAt) - msOf(a.lastDeployAt));
+    return deployments.map((deployment) => {
+      const env = classified.get(
+        subjectKey({ name: deployment.environment, repo: deployment.repo }),
+      );
+      return {
+        ...deployment,
+        attributes: env?.attributes ?? {},
+        metaEnvironments: env?.metaEnvironments ?? [],
+      };
+    });
   }
 }
 

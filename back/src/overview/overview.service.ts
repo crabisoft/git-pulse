@@ -9,6 +9,7 @@ import type {
   OverviewReport,
 } from '@repo/shared';
 import { DashboardService, type CollectedSource } from '../dashboard/dashboard.service';
+import { foldEnvironments, type DimensionedDeployment } from '../dashboard/environments';
 import { DoraService } from '../dora/dora.service';
 import { CollectorService } from '../collection/collector.service';
 import { JobsService } from '../jobs/jobs.service';
@@ -58,21 +59,26 @@ export class OverviewService {
     const collected = await this.dashboard.collect(sourceId, query.repos, signal);
     const { results, period } = await this.doraFor(sourceId, query, dimensionFilter);
 
-    const environments = collected.environments.filter(
-      (env) => matches(env.attributes, dimensionFilter) && carriesMeta(env, query.meta),
+    // Filtered as deployments, then folded — never the other way round. A row
+    // spans repos that need not classify alike, so narrowing it after the fold
+    // would leave it counting deployments it no longer describes, and would
+    // hide an attribute only one of its repos carries.
+    const kept = collected.deployments.filter(
+      (d) => matches(d.attributes, dimensionFilter) && carriesMeta(d.metaEnvironments, query.meta),
     );
+    const environments = foldEnvironments(kept);
     const { stalePrHours } = await this.settings.get();
 
     return {
       sourceId,
       environments,
-      dimensions: vocabulary(collected.environments),
-      metaEnvironments: metaNames(collected.environments),
+      dimensions: vocabulary(collected.deployments),
+      metaEnvironments: metaNames(collected.deployments),
       repos: collected.repos,
       flow: await this.flowFor(sourceId, results, dimensionFilter, period),
       friction: friction(collected, results, stalePrHours),
       health: await this.health(collected, signedIn),
-      events: events(collected, environments),
+      events: events(kept),
       period,
       warnings: collected.warnings,
     };
@@ -176,19 +182,23 @@ function matches(attributes: Record<string, string>, filter: Record<string, stri
   return Object.entries(filter).every(([key, value]) => attributes[key] === value);
 }
 
-function carriesMeta(env: DashboardEnvironment, meta?: string): boolean {
-  return !meta || env.metaEnvironments.includes(meta);
+function carriesMeta(metaEnvironments: string[], meta?: string): boolean {
+  return !meta || metaEnvironments.includes(meta);
 }
 
 /**
- * Dimension key → observed values, over every environment rather than the
+ * Dimension key → observed values, over every deployment rather than the
  * filtered ones. A key an environment does not carry is still a key: the
  * filter has to offer it, or a classification gap becomes invisible.
+ *
+ * Read from the deployments, not from the folded rows: a value only one repo
+ * of a shared environment name carries is absent from the row — deliberately,
+ * since the row is not true of it — and would otherwise be unpickable.
  */
-function vocabulary(environments: DashboardEnvironment[]): Record<string, string[]> {
+function vocabulary(deployments: DimensionedDeployment[]): Record<string, string[]> {
   const seen = new Map<string, Set<string>>();
-  for (const env of environments) {
-    for (const [key, value] of Object.entries(env.attributes)) {
+  for (const deployment of deployments) {
+    for (const [key, value] of Object.entries(deployment.attributes)) {
       const values = seen.get(key) ?? new Set<string>();
       values.add(value);
       seen.set(key, values);
@@ -199,8 +209,8 @@ function vocabulary(environments: DashboardEnvironment[]): Record<string, string
   );
 }
 
-function metaNames(environments: DashboardEnvironment[]): string[] {
-  return [...new Set(environments.flatMap((env) => env.metaEnvironments))].sort();
+function metaNames(deployments: DimensionedDeployment[]): string[] {
+  return [...new Set(deployments.flatMap((d) => d.metaEnvironments))].sort();
 }
 
 /** What is in the way, counted over everything collected rather than a page. */
@@ -226,15 +236,18 @@ function friction(
 }
 
 /**
- * The deployments of the last day, carrying the attributes of the environment
- * they went to — that is what lets the page draw one lane per client, or per
+ * The deployments of the last day, already filtered, each carrying its own
+ * attributes — that is what lets the page draw one lane per client, or per
  * app, without a second request.
+ *
+ * Its own, not its environment's: two repos deploying to the same environment
+ * name can classify differently, and the lane an event belongs to is decided
+ * by what that deployment is, not by what its row could agree on.
  */
-function events(collected: CollectedSource, environments: DashboardEnvironment[]): OverviewEvent[] {
-  const kept = new Map(environments.map((env) => [env.name, env.attributes]));
+function events(deployments: DimensionedDeployment[]): OverviewEvent[] {
   const since = Date.now() - EVENT_WINDOW_MS;
-  return collected.deployments
-    .filter((d) => kept.has(d.environment) && new Date(d.createdAt).getTime() >= since)
+  return deployments
+    .filter((d) => new Date(d.createdAt).getTime() >= since)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .map((d) => ({
       at: d.createdAt,
@@ -242,6 +255,6 @@ function events(collected: CollectedSource, environments: DashboardEnvironment[]
       repo: d.repo,
       ref: d.ref,
       status: d.status,
-      attributes: kept.get(d.environment) ?? {},
+      attributes: d.attributes,
     }));
 }

@@ -1,36 +1,32 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { DashboardEnvironment, Deployment, PipelineStatus, PullRequest } from '@repo/shared';
+import type { PipelineStatus, PullRequest } from '@repo/shared';
 import { OverviewService } from './overview.service';
 import type { CollectedSource } from '../dashboard/dashboard.service';
+import type { DimensionedDeployment } from '../dashboard/environments';
 
-function environment(
-  name: string,
+/**
+ * A deployment already resolved against the rules — what the overview folds
+ * environments from. Rows no longer come in ready-made: a row is what its
+ * deployments have in common, which is the only way filtering one dimension
+ * can narrow the repos a row covers.
+ */
+function deployment(
+  environmentName: string,
   attributes: Record<string, string>,
-  metaEnvironments: string[] = [],
-): DashboardEnvironment {
+  over: Partial<DimensionedDeployment> = {},
+): DimensionedDeployment {
   return {
-    name,
-    attributes,
-    metaEnvironments,
-    repos: ['acme/api'],
-    deployments: 3,
-    lastDeployAt: '2026-07-30T10:00:00.000Z',
-    lastStatus: 'success',
-    ref: 'v2.14.1',
-    recent: ['success', 'failed', 'success'],
-  };
-}
-
-function deployment(environmentName: string, at: string, status: PipelineStatus = 'success'): Deployment {
-  return {
-    id: `${environmentName}-${at}`,
+    id: `${environmentName}-${over.repo ?? 'acme/api'}-${over.createdAt ?? '1'}`,
     repo: 'acme/api',
     environment: environmentName,
     ref: 'v2.14.1',
-    status,
-    createdAt: at,
+    status: 'success' as PipelineStatus,
+    createdAt: '2026-07-30T10:00:00.000Z',
     environmentUrl: null,
     url: null,
+    attributes,
+    metaEnvironments: [],
+    ...over,
   };
 }
 
@@ -93,10 +89,10 @@ describe('OverviewService', () => {
     // The vocabulary is what the dropdowns are built from: narrowing on one
     // client must not remove the client you would widen back to.
     const { service } = build({
-      environments: [
-        environment('prod-acme-api', { type: 'prod', client: 'acme', app: 'api' }),
-        environment('prod-globex-web', { type: 'prod', client: 'globex', app: 'web' }),
-        environment('qa-web', { app: 'web' }),
+      deployments: [
+        deployment('prod-acme-api', { type: 'prod', client: 'acme', app: 'api' }),
+        deployment('prod-globex-web', { type: 'prod', client: 'globex', app: 'web' }),
+        deployment('qa-web', { app: 'web' }),
       ],
     });
 
@@ -114,9 +110,9 @@ describe('OverviewService', () => {
     // Hiding it would hide the rule that is missing, which is the one thing
     // the reader could act on.
     const { service } = build({
-      environments: [
-        environment('prod-acme-api', { type: 'prod', client: 'acme' }),
-        environment('qa-web', { type: 'qa' }),
+      deployments: [
+        deployment('prod-acme-api', { type: 'prod', client: 'acme' }),
+        deployment('qa-web', { type: 'qa' }),
       ],
     });
 
@@ -128,9 +124,9 @@ describe('OverviewService', () => {
 
   it('narrows on a meta-environment as well as on an attribute', async () => {
     const { service } = build({
-      environments: [
-        environment('prod-acme-api', { type: 'prod' }, ['production']),
-        environment('preprod-acme-api', { type: 'preprod' }, ['préproduction']),
+      deployments: [
+        deployment('prod-acme-api', { type: 'prod' }, { metaEnvironments: ['production'] }),
+        deployment('preprod-acme-api', { type: 'preprod' }, { metaEnvironments: ['préproduction'] }),
       ],
     });
 
@@ -138,6 +134,58 @@ describe('OverviewService', () => {
 
     expect(report.environments.map((e) => e.name)).toEqual(['prod-acme-api']);
     expect(report.metaEnvironments).toEqual(['production', 'préproduction']);
+  });
+
+  it('carries an attribute only one repo of the source produced', async () => {
+    // The case a repo-scoped rule exists for: `Prod` is deployed from one repo
+    // here, so what that repo's rules say about it is what the environment is.
+    const { service } = build({
+      deployments: [deployment('Prod', { App: 'Billing' }, { repo: 'contoso-billing' })],
+    });
+
+    const report = await service.report('src-1', {}, true);
+
+    expect(report.dimensions).toEqual({ App: ['Billing'] });
+    expect(report.environments[0].attributes).toEqual({ App: 'Billing' });
+  });
+
+  describe('an environment two repos deploy to, classified differently', () => {
+    const shared = () =>
+      build({
+        deployments: [
+          deployment('Prod', { Env: 'Prod', App: 'Billing' }, { repo: 'contoso-billing' }),
+          deployment('Prod', { Env: 'Prod', App: 'Portal' }, { repo: 'fabrikam-portal' }),
+          deployment('Prod', { Env: 'Prod', App: 'Portal' }, { repo: 'fabrikam-portal' }),
+        ],
+      });
+
+    it('offers both values, so neither is unpickable', async () => {
+      const report = await shared().service.report('src-1', {}, true);
+
+      expect(report.dimensions).toEqual({ App: ['Billing', 'Portal'], Env: ['Prod'] });
+    });
+
+    it('claims only what its repos agree on, unfiltered', async () => {
+      const report = await shared().service.report('src-1', {}, true);
+
+      // Saying App=Portal on a row that also covers Billing would be true
+      // of neither repo; Env is the same either side, so it stays.
+      const [row] = report.environments;
+      expect(row.attributes).toEqual({ Env: 'Prod' });
+      expect(row.repos).toEqual(['contoso-billing', 'fabrikam-portal']);
+      expect(row.deployments).toBe(3);
+    });
+
+    it('narrows to the applicable repos once the attribute is picked', async () => {
+      const report = await shared().service.report('src-1', { dimension: ['App:Portal'] }, true);
+
+      const [row] = report.environments;
+      // Repos, count and attributes all follow the filter: the row now
+      // describes exactly the deployments it counts.
+      expect(row.repos).toEqual(['fabrikam-portal']);
+      expect(row.deployments).toBe(2);
+      expect(row.attributes).toEqual({ Env: 'Prod', App: 'Portal' });
+    });
   });
 
   it('counts the friction over everything collected, not over a page', async () => {
@@ -162,11 +210,14 @@ describe('OverviewService', () => {
   it('keeps the last day of deployments, most recent first', async () => {
     vi.setSystemTime(new Date('2026-07-30T12:00:00.000Z'));
     const { service } = build({
-      environments: [environment('prod-acme-api', { type: 'prod' })],
       deployments: [
-        deployment('prod-acme-api', '2026-07-28T12:00:00.000Z'),
-        deployment('prod-acme-api', '2026-07-30T08:00:00.000Z'),
-        deployment('prod-acme-api', '2026-07-30T11:00:00.000Z', 'failed'),
+        deployment('prod-acme-api', { type: 'prod' }, { createdAt: '2026-07-28T12:00:00.000Z' }),
+        deployment('prod-acme-api', { type: 'prod' }, { createdAt: '2026-07-30T08:00:00.000Z' }),
+        deployment(
+          'prod-acme-api',
+          { type: 'prod' },
+          { createdAt: '2026-07-30T11:00:00.000Z', status: 'failed' },
+        ),
       ],
     });
 
