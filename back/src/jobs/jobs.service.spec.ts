@@ -80,6 +80,117 @@ describe('JobsService.snapshot', () => {
   });
 });
 
+describe('JobsService.running', () => {
+  const at = (iso: string) => Date.parse(iso);
+  /** An in-flight job as BullMQ hands it back — only the mapped fields. */
+  const job = (over: Partial<Job> = {}): Job =>
+    ({
+      id: '1',
+      name: 'collect-source',
+      data: { sourceId: 'src-1' },
+      attemptsMade: 1,
+      timestamp: at('2026-07-30T09:00:00Z'),
+      ...over,
+    }) as Job;
+
+  const inFlight = (over: Partial<Record<keyof Queue, unknown>> = {}) =>
+    queue({
+      getActive: vi.fn().mockResolvedValue([]),
+      getWaiting: vi.fn().mockResolvedValue([]),
+      getDelayed: vi.fn().mockResolvedValue([]),
+      ...over,
+    });
+
+  it('puts what is running before what is queued, oldest first within a state', async () => {
+    const { jobs } = service(
+      inFlight({
+        getActive: vi
+          .fn()
+          .mockResolvedValue([
+            job({ id: 'a-new', processedOn: at('2026-07-30T09:10:00Z') }),
+            job({ id: 'a-old', processedOn: at('2026-07-30T09:02:00Z') }),
+          ]),
+        getWaiting: vi.fn().mockResolvedValue([job({ id: 'w1' })]),
+        getDelayed: vi.fn().mockResolvedValue([job({ id: 'd1', delay: 600_000 })]),
+      }),
+      inFlight(),
+    );
+
+    const page = await jobs.running(undefined, { limit: 10, offset: 0 });
+
+    // The one that has been running longest heads the list: that is the one
+    // that is either working hard or not finishing at all.
+    expect(page.items.map((j) => j.id)).toEqual(['a-old', 'a-new', 'w1', 'd1']);
+    expect(page.items.map((j) => j.state)).toEqual(['active', 'active', 'waiting', 'delayed']);
+  });
+
+  it('reads a running job as when it started and what it carries', async () => {
+    const { jobs } = service(
+      inFlight({
+        getActive: vi
+          .fn()
+          .mockResolvedValue([job({ processedOn: at('2026-07-30T09:02:00Z'), progress: 40 })]),
+      }),
+    );
+
+    const [first] = (await jobs.running('collection', { limit: 10, offset: 0 })).items;
+
+    expect(first).toMatchObject({
+      queue: 'collection',
+      id: '1',
+      name: 'collect-source',
+      state: 'active',
+      startedAt: '2026-07-30T09:02:00.000Z',
+      enqueuedAt: '2026-07-30T09:00:00.000Z',
+      scheduledFor: null,
+      progress: 40,
+      data: { sourceId: 'src-1' },
+    });
+  });
+
+  it('turns a delay into the date it comes due, which is what is read', async () => {
+    const { jobs } = service(
+      inFlight({ getDelayed: vi.fn().mockResolvedValue([job({ delay: 900_000 })]) }),
+    );
+
+    const [first] = (await jobs.running('collection', { limit: 10, offset: 0 })).items;
+
+    expect(first.scheduledFor).toBe('2026-07-30T09:15:00.000Z');
+    expect(first.startedAt).toBeNull();
+  });
+
+  it('keeps a progress that is not a number out of the payload', async () => {
+    const { jobs } = service(
+      inFlight({ getActive: vi.fn().mockResolvedValue([job({ progress: { step: 'repos' } })]) }),
+    );
+
+    const [first] = (await jobs.running('collection', { limit: 10, offset: 0 })).items;
+
+    expect(first.progress).toBeNull();
+  });
+
+  it('reads back only the queue that was named', async () => {
+    const collection = inFlight();
+    const ingest = inFlight();
+    const { jobs } = service(collection, ingest);
+
+    await jobs.running('ingest', { limit: 10, offset: 0 });
+
+    expect(ingest.getActive).toHaveBeenCalled();
+    expect(collection.getActive).not.toHaveBeenCalled();
+  });
+
+  it('reports an unreachable Redis as a coded error', async () => {
+    const { jobs } = service(
+      inFlight({ getActive: vi.fn().mockRejectedValue(new Error('connect ECONNREFUSED')) }),
+    );
+
+    await expect(jobs.running(undefined, { limit: 10, offset: 0 })).rejects.toSatisfy(
+      (e: unknown) => codeOf(e) === 'errors.jobs.unreachable',
+    );
+  });
+});
+
 describe('JobsService.failures', () => {
   it('merges the queues newest first, and windows what it merged', async () => {
     const at = (iso: string) => Date.parse(iso);

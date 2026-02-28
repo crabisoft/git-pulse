@@ -29,6 +29,8 @@ const PAGES = [
   { name: 'users', path: '/settings/users', ready: 'table, .card-list' },
   { name: 'sources', path: '/settings/sources', ready: '.source-row' },
   { name: 'settings-general', path: '/settings', ready: '.blocks' },
+  // The widest table the settings hold: six columns of what is in flight.
+  { name: 'settings-jobs', path: '/settings/jobs', ready: 'table.data, .card-list' },
   { name: 'account', path: '/account', ready: '.account-head' },
 ];
 

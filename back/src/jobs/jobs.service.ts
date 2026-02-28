@@ -7,6 +7,7 @@ import {
   QUEUE_NAMES,
   type CodedMessage,
   type JobFailure,
+  type JobRunning,
   type JobState,
   type JobStatus,
   type JobWarning,
@@ -75,6 +76,40 @@ export class JobsService {
   async failures(queue: QueueName | undefined, window: PageWindow): Promise<Page<JobFailure>> {
     const failed = await this.scan(queue, (q) => q.getFailed(0, JOB_SCAN_DEPTH - 1), toFailure);
     return paginate(failed, window);
+  }
+
+  /**
+   * What is in flight: running first, then what is queued behind it.
+   *
+   * The counts alone cannot tell a queue that is working from one that is
+   * stuck — both read as "2 active". Ordered oldest first within each state,
+   * so the job that is not finishing sits at the top rather than scrolling
+   * away among the ones that are.
+   */
+  async running(queue: QueueName | undefined, window: PageWindow): Promise<Page<JobRunning>> {
+    const names = queue ? [queue] : [...QUEUE_NAMES];
+    try {
+      const perQueue = await Promise.all(
+        names.map(async (name) => {
+          const q = this.queues[name];
+          // Three reads rather than one: BullMQ keeps a list per state, and
+          // `getJobs` over several of them cannot be windowed per state.
+          const [active, waiting, delayed] = await Promise.all([
+            q.getActive(0, JOB_SCAN_DEPTH - 1),
+            q.getWaiting(0, JOB_SCAN_DEPTH - 1),
+            q.getDelayed(0, JOB_SCAN_DEPTH - 1),
+          ]);
+          return [
+            ...active.map((job) => toRunning(name, 'active', job)),
+            ...waiting.map((job) => toRunning(name, 'waiting', job)),
+            ...delayed.map((job) => toRunning(name, 'delayed', job)),
+          ];
+        }),
+      );
+      return paginate(perQueue.flat().sort(byInFlight), window);
+    } catch (e) {
+      throw unreachable(e);
+    }
   }
 
   /**
@@ -252,6 +287,39 @@ function toRepeatable(job: {
     nextRunAt: job.next ? new Date(job.next).toISOString() : null,
   };
 }
+
+/** Shapes one in-flight job for the page — see JobRunning. */
+export function toRunning(queue: QueueName, state: JobRunning['state'], job: Job): JobRunning {
+  const delay = typeof job.delay === 'number' ? job.delay : 0;
+  return {
+    queue,
+    id: String(job.id),
+    name: job.name,
+    state,
+    startedAt: job.processedOn ? new Date(job.processedOn).toISOString() : null,
+    enqueuedAt: new Date(job.timestamp).toISOString(),
+    // BullMQ stores the delay, not the due date; the due date is what a reader
+    // waiting on it actually wants.
+    scheduledFor:
+      state === 'delayed' && delay > 0 ? new Date(job.timestamp + delay).toISOString() : null,
+    // Typed as unknown by BullMQ: anything a job cared to report. Only a number
+    // means anything to a caller drawing a bar.
+    progress: typeof job.progress === 'number' ? job.progress : null,
+    attemptsMade: job.attemptsMade,
+    data: (job.data ?? {}) as Record<string, unknown>,
+  };
+}
+
+/** Running before queued, and within a state the one waiting longest first. */
+function byInFlight(a: JobRunning, b: JobRunning): number {
+  const rank = IN_FLIGHT_ORDER[a.state] - IN_FLIGHT_ORDER[b.state];
+  if (rank !== 0) return rank;
+  const left = a.startedAt ?? a.enqueuedAt;
+  const right = b.startedAt ?? b.enqueuedAt;
+  return left === right ? 0 : left < right ? -1 : 1;
+}
+
+const IN_FLIGHT_ORDER: Record<JobRunning['state'], number> = { active: 0, waiting: 1, delayed: 2 };
 
 /** Shapes one completed-but-degraded run — see JobWarning. */
 export function toWarning(queue: QueueName, job: Job): JobWarning {

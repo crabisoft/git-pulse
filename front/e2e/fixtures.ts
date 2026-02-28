@@ -143,6 +143,75 @@ export const CHANGELOGS = {
   lastArchivedAt: '2026-07-31T02:00:00Z',
 };
 
+/** A `JobsSnapshot`: both queues, one of them on a schedule. */
+export const JOBS = {
+  observedAt: '2026-07-31T10:00:00Z',
+  unreachable: null,
+  queues: [
+    {
+      name: 'collection',
+      counts: { waiting: 3, active: 2, completed: 412, failed: 1, delayed: 1 },
+      repeatables: [
+        { name: 'collect-all', pattern: '*/15 * * * *', nextRunAt: '2026-07-31T10:15:00Z' },
+      ],
+      paused: false,
+    },
+    {
+      name: 'ingest',
+      counts: { waiting: 0, active: 0, completed: 88, failed: 0, delayed: 0 },
+      repeatables: [],
+      paused: false,
+    },
+  ],
+};
+
+/**
+ * A page of `JobRunning`, with the three states and a payload worth folding
+ * away. Wide on purpose: this is the widest table the settings hold, and a
+ * phone is where it either fits or does not.
+ */
+export const RUNNING = {
+  items: [
+    {
+      queue: 'collection',
+      id: '1041',
+      name: 'collect-source',
+      state: 'active',
+      startedAt: '2026-07-31T09:52:00Z',
+      enqueuedAt: '2026-07-31T09:51:58Z',
+      scheduledFor: null,
+      progress: null,
+      attemptsMade: 2,
+      data: { sourceId: 'src-1', force: true },
+    },
+    {
+      queue: 'ingest',
+      id: '1042',
+      name: 'ingest-event',
+      state: 'waiting',
+      startedAt: null,
+      enqueuedAt: '2026-07-31T09:58:30Z',
+      scheduledFor: null,
+      progress: null,
+      attemptsMade: 1,
+      data: { sourceId: 'src-1', intent: { kind: 'deployment', repo: 'acme/checkout-service' } },
+    },
+    {
+      queue: 'collection',
+      id: '1043',
+      name: 'collect-source',
+      state: 'delayed',
+      startedAt: null,
+      enqueuedAt: '2026-07-31T09:59:00Z',
+      scheduledFor: '2026-07-31T10:14:00Z',
+      progress: null,
+      attemptsMade: 1,
+      data: { sourceId: 'src-1' },
+    },
+  ],
+  page: { total: 3, limit: 20, offset: 0, hasMore: false },
+};
+
 /**
  * Every route the screens touch, most specific first — the collections hang off
  * `/sources/:id/…`, so a pattern for `sources` would swallow them if it came
@@ -159,7 +228,8 @@ export const ROUTES: Array<[RegExp, unknown]> = [
   [/\/api\/budgets/, []],
   [/\/api\/env-rules/, EMPTY_PAGE],
   [/\/api\/trackers/, EMPTY_PAGE],
+  [/\/api\/jobs\/running/, RUNNING],
   [/\/api\/jobs\/(failures|degraded)/, EMPTY_PAGE],
-  [/\/api\/jobs/, { queues: [], observedAt: '2026-07-31T10:00:00Z', unreachable: null }],
+  [/\/api\/jobs/, JOBS],
   [/\/api\/users/, { items: [USER], page: { total: 1, limit: 25, offset: 0 } }],
 ];

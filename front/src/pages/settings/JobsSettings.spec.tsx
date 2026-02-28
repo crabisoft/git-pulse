@@ -1,13 +1,21 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { JobFailure, JobWarning, JobsSnapshot, Page, SourcePublic } from '@repo/shared';
-import { JobsSettings, subject } from './JobsSettings';
+import type {
+  JobFailure,
+  JobRunning,
+  JobWarning,
+  JobsSnapshot,
+  Page,
+  SourcePublic,
+} from '@repo/shared';
+import { JobsSettings, inFlightAge, subject } from './JobsSettings';
 
 vi.mock('../../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../api')>()),
   api: {
     jobs: vi.fn(),
+    runningJobs: vi.fn(),
     failedJobs: vi.fn(),
     degradedJobs: vi.fn(),
     retryJob: vi.fn(),
@@ -62,8 +70,25 @@ function page<T>(items: T[]): Page<T> {
   return { items, page: { total: items.length, limit: 20, offset: 0, hasMore: false } };
 }
 
+function inFlight(over: Partial<JobRunning> = {}): JobRunning {
+  return {
+    queue: 'collection',
+    id: '9',
+    name: 'collect-source',
+    state: 'active',
+    startedAt: '2026-07-30T09:58:00Z',
+    enqueuedAt: '2026-07-30T09:57:00Z',
+    scheduledFor: null,
+    progress: null,
+    attemptsMade: 1,
+    data: { sourceId: 'src-1' },
+    ...over,
+  };
+}
+
 beforeEach(() => {
   vi.mocked(api.jobs).mockResolvedValue(snapshot());
+  vi.mocked(api.runningJobs).mockResolvedValue(page<JobRunning>([]));
   vi.mocked(api.failedJobs).mockResolvedValue(page<JobFailure>([]));
   vi.mocked(api.degradedJobs).mockResolvedValue(page<JobWarning>([]));
   vi.mocked(api.retryJob).mockResolvedValue(undefined);
@@ -143,6 +168,84 @@ describe('JobsSettings', () => {
     expect(await screen.findByText(/errors.collect.ingest/)).toHaveTextContent('timeout');
     // Nothing failed, so there is nothing to put back in a queue.
     expect(screen.queryByRole('button', { name: 'jobs.retry' })).not.toBeInTheDocument();
+  });
+});
+
+describe('the jobs in flight', () => {
+  it('says what a running job is working on, not just that one is running', async () => {
+    vi.mocked(api.runningJobs).mockResolvedValue(page([inFlight()]));
+
+    render(<JobsSettings sources={SOURCES} />);
+
+    // The whole point of the panel: the tile says "1 active", this says which
+    // source it is reading and for how long.
+    expect(await screen.findByText('Acme GitLab')).toBeInTheDocument();
+    expect(screen.getByText('jobs.running.states.active')).toBeInTheDocument();
+    // Two minutes before the instant the API observed the queues.
+    expect(screen.getByText('2m')).toBeInTheDocument();
+  });
+
+  it('folds a payload away, and shows none where the subject already said it all', async () => {
+    vi.mocked(api.runningJobs).mockResolvedValue(
+      page([
+        inFlight({ id: 'a', data: { sourceId: 'src-1' } }),
+        inFlight({ id: 'b', data: { sourceId: 'src-1', intent: { kind: 'deployment' } } }),
+      ]),
+    );
+
+    render(<JobsSettings sources={SOURCES} />);
+
+    // One payload carries an intent, the other carries only the source the
+    // subject column already resolved.
+    const payloads = await screen.findAllByText('jobs.running.payload');
+    expect(payloads).toHaveLength(1);
+  });
+
+  it('says so plainly when there is nothing in flight', async () => {
+    render(<JobsSettings sources={SOURCES} />);
+
+    expect(await screen.findByText('jobs.running.empty')).toBeInTheDocument();
+  });
+});
+
+describe('inFlightAge', () => {
+  const t = ((key: string, params?: Record<string, unknown>) =>
+    params ? `${key}:${JSON.stringify(params)}` : key) as never;
+  const now = Date.parse('2026-07-30T10:00:00Z');
+
+  it('measures a running job from when it was picked up', () => {
+    expect(inFlightAge(inFlight({ startedAt: '2026-07-30T09:30:00Z' }), now, t)).toBe('30m');
+  });
+
+  it('measures a queued one from when it was enqueued, not from a start it has none of', () => {
+    const queued = inFlight({
+      state: 'waiting',
+      startedAt: null,
+      enqueuedAt: '2026-07-30T09:45:00Z',
+    });
+    expect(inFlightAge(queued, now, t)).toBe('15m');
+  });
+
+  it('counts down to a delayed job rather than up from its enqueueing', () => {
+    const delayed = inFlight({
+      state: 'delayed',
+      startedAt: null,
+      scheduledFor: '2026-07-30T10:10:00Z',
+    });
+    expect(inFlightAge(delayed, now, t)).toContain('10m');
+  });
+
+  it('says a past-due job is imminent rather than counting up from a negative', () => {
+    const overdue = inFlight({
+      state: 'delayed',
+      startedAt: null,
+      scheduledFor: '2026-07-30T09:50:00Z',
+    });
+    expect(inFlightAge(overdue, now, t)).toBe('jobs.running.due');
+  });
+
+  it('reads a job that has just started as a second, not as nothing', () => {
+    expect(inFlightAge(inFlight({ startedAt: '2026-07-30T10:00:00Z' }), now, t)).toBe('1s');
   });
 });
 

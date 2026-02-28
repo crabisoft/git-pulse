@@ -25,6 +25,12 @@ export class JobsController {
     return this.jobs.snapshot();
   }
 
+  /** What is running, and what is queued behind it. */
+  @Get('running')
+  async running(@Query() query: FailuresQueryDto) {
+    return this.jobs.running(query.queue, toWindow(query, await this.settings.pageSize()));
+  }
+
   /** Failed jobs, newest first, merged across the queues unless one is named. */
   @Get('failures')
   async failures(@Query() query: FailuresQueryDto) {

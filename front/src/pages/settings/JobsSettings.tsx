@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type {
   JobFailure,
+  JobRunning,
   JobWarning,
   JobsSnapshot,
   Page,
@@ -14,6 +15,7 @@ import { useCancellableLoad } from '../../hooks';
 import { DeleteIcon, SyncIcon } from '../../icons';
 import { IconButton } from '../../IconButton';
 import { DataList } from '../../DataList';
+import { humanizeDuration } from '../../doraFormat';
 import { ConfirmDialog } from '../../Modal';
 
 /**
@@ -38,6 +40,7 @@ const LIST_LIMIT = 20;
 export function JobsSettings({ sources }: { sources: SourcePublic[] }) {
   const { t } = useTranslation();
   const [snapshot, setSnapshot] = useState<JobsSnapshot | null>(null);
+  const [running, setRunning] = useState<Page<JobRunning> | null>(null);
   const [failures, setFailures] = useState<Page<JobFailure> | null>(null);
   const [degraded, setDegraded] = useState<Page<JobWarning> | null>(null);
   const [msg, setMsg] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
@@ -45,12 +48,14 @@ export function JobsSettings({ sources }: { sources: SourcePublic[] }) {
   const [acting, setActing] = useState<string | null>(null);
 
   const load = useCallback(async (signal: AbortSignal) => {
-    const [next, failed, warned] = await Promise.all([
+    const [next, inFlight, failed, warned] = await Promise.all([
       api.jobs(signal),
+      api.runningJobs({ limit: LIST_LIMIT }, signal),
       api.failedJobs({ limit: LIST_LIMIT }, signal),
       api.degradedJobs({ limit: LIST_LIMIT }, signal),
     ]);
     setSnapshot(next);
+    setRunning(inFlight);
     setFailures(failed);
     setDegraded(warned);
   }, []);
@@ -83,6 +88,11 @@ export function JobsSettings({ sources }: { sources: SourcePublic[] }) {
 
   const totals = (key: keyof QueueSummary['counts']) =>
     (snapshot?.queues ?? []).reduce((sum, queue) => sum + queue.counts[key], 0);
+
+  // Ages are measured against the instant the API observed the queues, not the
+  // browser clock: the two can be minutes apart, and a job that started in the
+  // future is the kind of thing that makes a page look broken.
+  const now = snapshot ? Date.parse(snapshot.observedAt) : Date.now();
 
   return (
     <>
@@ -177,6 +187,79 @@ export function JobsSettings({ sources }: { sources: SourcePublic[] }) {
           </section>
         </>
       )}
+
+      <section className="panel">
+        <h2>{t('jobs.running.title')}</h2>
+        <p className="muted subtabs-hint">{t('jobs.running.hint')}</p>
+
+        {running && running.items.length === 0 && <p className="muted">{t('jobs.running.empty')}</p>}
+
+        {running && running.items.length > 0 && (
+          <DataList
+            rows={running.items}
+            rowKey={(job) => `${job.queue}:${job.id}`}
+            rowClass={(job) => (job.state === 'active' ? 'is-active' : undefined)}
+            columns={[
+              {
+                key: 'job',
+                header: t('jobs.job'),
+                role: 'lead',
+                cell: (job) => (
+                  <>
+                    <span className="pill attr">{job.name}</span>
+                    {/* Only worth a word when it is not the first go: an attempt
+                        above one means this already failed and came back. */}
+                    {job.attemptsMade > 1 && (
+                      <span className="pill status-pending">
+                        {t('jobs.running.attempt', { n: job.attemptsMade })}
+                      </span>
+                    )}
+                  </>
+                ),
+              },
+              {
+                key: 'state',
+                header: t('jobs.running.stateHeader'),
+                role: 'aside',
+                cell: (job) => (
+                  <span className={`pill job-state ${job.state}`}>
+                    {t(`jobs.running.states.${job.state}`)}
+                  </span>
+                ),
+              },
+              {
+                key: 'subject',
+                header: t('jobs.subject'),
+                cell: (job) => subject(job.data, sourceName),
+              },
+              {
+                key: 'queue',
+                header: t('jobs.queue'),
+                cell: (job) => t(`jobs.queueName.${job.queue}`),
+              },
+              {
+                key: 'since',
+                header: t('jobs.running.since'),
+                className: 'num',
+                cell: (job) => inFlightAge(job, now, t),
+              },
+              {
+                key: 'progress',
+                header: t('jobs.running.progress'),
+                className: 'num',
+                // Nothing reports one today; rendered where a job does rather
+                // than a column of dashes pretending it might.
+                cell: (job) => (job.progress === null ? null : `${Math.round(job.progress)}%`),
+              },
+              {
+                key: 'payload',
+                role: 'full',
+                cell: (job) => <JobPayload data={job.data} />,
+              },
+            ]}
+          />
+        )}
+      </section>
 
       <section className="panel">
         <h2>{t('jobs.failures.title')}</h2>
@@ -329,6 +412,44 @@ export function subject(
     parts.push(String((intent as { kind: unknown }).kind));
   }
   return parts.length > 0 ? parts.join(' · ') : '—';
+}
+
+/**
+ * How long a job has been where it is — running, or waiting to.
+ *
+ * Recomputed at each poll rather than ticking on its own: this is read to tell
+ * a job that is working from one that is stuck, and neither answer changes in
+ * the five seconds between two readings.
+ */
+export function inFlightAge(job: JobRunning, now: number, t: TFunction): string {
+  if (job.state === 'delayed') {
+    if (!job.scheduledFor) return '—';
+    const left = (Date.parse(job.scheduledFor) - now) / 1000;
+    // Past due and not yet picked up: BullMQ promotes it on its own tick, so
+    // counting up from a negative number would say more than we know.
+    if (left <= 0) return t('jobs.running.due');
+    return t('jobs.running.dueIn', { duration: humanizeDuration(left) });
+  }
+  const since = job.state === 'active' ? (job.startedAt ?? job.enqueuedAt) : job.enqueuedAt;
+  // Floored at a second: humanizeDuration answers "—" for zero, and a job that
+  // started just now has been running, not nothing.
+  return humanizeDuration(Math.max(1, (now - Date.parse(since)) / 1000));
+}
+
+/**
+ * The payload itself, for what `subject` deliberately does not read: the intent
+ * of an ingestion, the `force` of a re-read somebody asked for by hand. Closed
+ * by default, and absent entirely when the subject line already said it all.
+ */
+function JobPayload({ data }: { data: Record<string, unknown> }) {
+  const { t } = useTranslation();
+  if (Object.keys(data).filter((key) => key !== 'sourceId').length === 0) return null;
+  return (
+    <details className="job-reason">
+      <summary>{t('jobs.running.payload')}</summary>
+      <pre>{JSON.stringify(data, null, 2)}</pre>
+    </details>
+  );
 }
 
 /** A queue's repeatables as one line: the pattern, and when it next fires. */
