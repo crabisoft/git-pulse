@@ -60,38 +60,44 @@ export function DataList<T>({
 
   if (!narrow) {
     return (
-      <table className="data">
-        <thead>
-          <tr>
-            {columns.map((column) => (
-              <th key={column.key} className={column.className}>
-                {column.header}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const detail = expanded?.(row);
-            return (
-              <Fragment key={rowKey(row)}>
-                <tr className={rowClass?.(row)}>
-                  {columns.map((column) => (
-                    <td key={column.key} className={column.className}>
-                      {column.cell(row)}
-                    </td>
-                  ))}
-                </tr>
-                {detail && (
-                  <tr className="detail-row">
-                    <td colSpan={columns.length}>{detail}</td>
+      // The scroll belongs to the wrapper, not to the table. A table made a
+      // block to scroll keeps its box the full width while its rows shrink to
+      // their content, which is how a list ended up hugging the left of a panel
+      // twice its width.
+      <div className="data-scroll">
+        <table className="data">
+          <thead>
+            <tr>
+              {columns.map((column) => (
+                <th key={column.key} className={column.className}>
+                  {column.header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const detail = expanded?.(row);
+              return (
+                <Fragment key={rowKey(row)}>
+                  <tr className={rowClass?.(row)}>
+                    {columns.map((column) => (
+                      <td key={column.key} className={column.className}>
+                        {column.cell(row)}
+                      </td>
+                    ))}
                   </tr>
-                )}
-              </Fragment>
-            );
-          })}
-        </tbody>
-      </table>
+                  {detail && (
+                    <tr className="detail-row">
+                      <td colSpan={columns.length}>{detail}</td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     );
   }
 

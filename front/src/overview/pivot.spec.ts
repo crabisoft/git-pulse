@@ -62,6 +62,48 @@ describe('pivotEnvironments', () => {
     expect(cells[0].environment?.name).toBe('prod-acme-api-green');
   });
 
+  it('hands the cell what it is standing in front of, newest first', () => {
+    // Four dimensions crossed two at a time leaves two collapsed: without
+    // this, picking a pair of axes hides environments and says nothing.
+    const { cells } = pivotEnvironments(
+      [
+        env('ProdContosoBilling', { Env: 'Prod', App: 'Billing' }, '2026-07-28T10:00:00.000Z'),
+        env('ProdGlobexBilling', { Env: 'Prod', App: 'Billing' }, '2026-07-30T10:00:00.000Z'),
+        env('ProdFabrikamBilling', { Env: 'Prod', App: 'Billing' }, '2026-07-29T10:00:00.000Z'),
+      ],
+      'Env',
+      'App',
+    );
+
+    expect(cells[0].environment?.name).toBe('ProdGlobexBilling');
+    expect(cells[0].others.map((e) => e.name)).toEqual([
+      'ProdFabrikamBilling',
+      'ProdContosoBilling',
+    ]);
+  });
+
+  it('leaves a crossing of one with nothing behind it', () => {
+    const { cells } = pivotEnvironments(
+      [env('prod-acme-api', { client: 'acme', app: 'api' })],
+      'client',
+      'app',
+    );
+    expect(cells[0].others).toEqual([]);
+  });
+
+  it('separates them again once a discriminating axis is crossed', () => {
+    const { cells } = pivotEnvironments(
+      [
+        env('ProdContosoBilling', { Customer: 'Contoso', App: 'Billing' }),
+        env('ProdGlobexBilling', { Customer: 'Globex', App: 'Billing' }),
+      ],
+      'Customer',
+      'App',
+    );
+
+    expect(cells.every((c) => c.others.length === 0)).toBe(true);
+  });
+
   it('puts what the rules did not classify last, and keeps it', () => {
     const { rows } = pivotEnvironments(
       [env('qa-web', { app: 'web' }), env('prod-acme-web', { client: 'acme', app: 'web' })],

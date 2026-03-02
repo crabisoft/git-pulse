@@ -5,6 +5,7 @@ import type { DashboardLive, PipelineStatus, TicketRef } from '@repo/shared';
 import { api, type PageQuery } from '../api';
 import { useCancellableLoad } from '../hooks';
 import { Pagination } from '../Pagination';
+import { sinceLabel } from './parts';
 
 /**
  * The exhaustive lists, under the summary that replaced them.
@@ -141,9 +142,12 @@ function DetailBody({
             { key: 'author', header: t('dashboard.cols.author'), cell: (pr) => pr.author },
             {
               key: 'age',
-              header: t('dashboard.cols.ageH'),
+              header: t('dashboard.cols.age'),
               className: 'num',
-              cell: (pr) => pr.ageHours,
+              // The same reading as the control room gives an environment: a
+              // bare hour count made a four-day-old PR and a four-hour-old one
+              // look like neighbours, and said nothing at all under one hour.
+              cell: (pr) => sinceLabel(pr.createdAt),
             },
           ]}
         />

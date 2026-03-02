@@ -254,6 +254,20 @@ describe('OverviewPage', () => {
     expect(screen.getByText('dora.tier.elite')).toBeInTheDocument();
   });
 
+  it('says how many environments a crossing is standing in front of', async () => {
+    // Crossing type × app collapses the client: without a word, picking those
+    // axes would show one of the two and hide the other.
+    vi.mocked(api.overview).mockResolvedValue(
+      report({ dimensions: { app: ['api'], type: ['prod', 'preprod'] } }),
+    );
+    renderPage('instrument');
+
+    await waitFor(() => expect(screen.getByText('overview.matrix.title')).toBeInTheDocument());
+    // One shown, one behind it — and the badge names what it is hiding.
+    expect(screen.getByText(/overview\.matrix\.more/)).toHaveTextContent('"count":1');
+    expect(screen.getByTitle(/prod-acme-api/)).toBeInTheDocument();
+  });
+
   it('says what is missing rather than drawing an empty grid', async () => {
     // One dimension cannot be crossed with itself.
     vi.mocked(api.overview).mockResolvedValue(report({ dimensions: { type: ['prod'] } }));

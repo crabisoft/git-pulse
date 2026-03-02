@@ -184,7 +184,8 @@ function Row({
     <>
       <div className="matrix-row-head">{row || t('overview.unclassified')}</div>
       {columns.map((column) => {
-        const env = byColumn.get(column)?.environment ?? null;
+        const cell = byColumn.get(column);
+        const env = cell?.environment ?? null;
         if (!env) {
           return (
             <div key={column} className="matrix-cell empty">
@@ -192,9 +193,25 @@ function Row({
             </div>
           );
         }
+        const others = cell?.others ?? [];
         return (
           <div key={column} className={`matrix-cell ${toneOf(env.lastStatus)}`} title={env.name}>
-            <span className="matrix-ref mono">{env.ref}</span>
+            <span className="matrix-ref mono">
+              {env.ref}
+              {/* The cell shows what is running here now. Two dimensions are
+                  crossed and the rules may extract more, so others can share
+                  the crossing — unsaid, the axes would hide them. */}
+              {others.length > 0 && (
+                <span
+                  className="matrix-more"
+                  title={t('overview.matrix.alsoHere', {
+                    names: others.map((o) => o.name).join(', '),
+                  })}
+                >
+                  {t('overview.matrix.more', { count: others.length })}
+                </span>
+              )}
+            </span>
             <span className={`state ${toneOf(env.lastStatus)} matrix-sub`}>
               {t(`status.${env.lastStatus}`)} · {sinceLabel(env.lastDeployAt)}
             </span>

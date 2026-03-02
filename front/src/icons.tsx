@@ -231,14 +231,36 @@ export function SyncIcon(props: IconProps) {
 }
 
 /**
- * The same circular arrows over a stack: re-reading the whole history a source
- * keeps, rather than what moved since the last run.
+ * A clock wound backwards: re-reading the history a source keeps, rather than
+ * what moved since the last run.
+ *
+ * Deliberately not another ring of arrows. It sits next to the collect button
+ * at 16px, where a glyph is read by its silhouette alone — the two rings this
+ * replaced were told apart only by where their arrowheads pointed, which is to
+ * say not at all.
  */
 export function DeepSyncIcon(props: IconProps) {
   return (
     <Svg {...props}>
-      <path d="M20 9a8 8 0 0 0-13.6-3.4L3 9M4 15a8 8 0 0 0 13.6 3.4L21 15" />
-      <path d="M3 5v4h4M21 19v-4h-4" />
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M12 7v5l4 2" />
+    </Svg>
+  );
+}
+
+/**
+ * Bars on a baseline: recomputing the measurements themselves.
+ *
+ * Deliberately not a third ring. It sits between the collect button and the
+ * history one, and at 16px a glyph is read by its outline — two arcs and a
+ * clock face are already as close as two icons should get.
+ */
+export function RebuildMetricsIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M3 21h18" />
+      <path d="M7 21V11M12 21V4M17 21v-7" />
     </Svg>
   );
 }
