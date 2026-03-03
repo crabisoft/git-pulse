@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DoraMetric, DoraResult } from '@repo/shared';
 import { foldByMetric, foldMetric } from './aggregate';
+import { median, type MeasuredResult } from './dora-metrics';
 
 function result(
   metric: DoraMetric,
@@ -10,6 +11,18 @@ function result(
   samples: DoraResult['samples'] = [],
 ): DoraResult {
   return { metric, value, unit, dimensions: {}, sampleSize, samples };
+}
+
+/** A combination that still carries the population behind its median. */
+function measured(metric: DoraMetric, values: number[]): MeasuredResult {
+  return {
+    ...result(metric, median(values), values.length),
+    population: values.map((value, i) => ({
+      label: `event ${i}`,
+      at: '2026-07-30T10:00:00.000Z',
+      value,
+    })),
+  };
 }
 
 describe('foldMetric', () => {
@@ -24,12 +37,46 @@ describe('foldMetric', () => {
     expect(folded).toMatchObject({ value: 8, sampleSize: 8 });
   });
 
-  it('weighs durations by how many events they were measured on', () => {
-    // One slice of 300 events at 1h, one of 3 events at 11h: the plain mean
-    // would read 6h, which describes neither.
+  it('takes a median of everything measured, not a mean of the medians', () => {
+    // The reading the page names. Six values, so the median is the mean of the
+    // two middle ones — 60 and 3600 — which no averaging of 30 and 3600 gives.
+    const folded = foldMetric([
+      measured('lead_time', [10, 30, 60]),
+      measured('lead_time', [3600, 7200, 10_800]),
+    ]);
+
+    expect(folded?.value).toBe(1830);
+    expect(folded?.sampleSize).toBe(6);
+  });
+
+  it('is not dragged by a heavy slice of near-zero values the way a mean is', () => {
+    // The report this fixes: a pre-production deployed on merge contributes
+    // hundreds of two-second landings, and the reading sank to two seconds
+    // while every visible row was in hours.
+    const staging = measured('deploy_time', Array.from({ length: 200 }, () => 2));
+    const production = measured('deploy_time', Array.from({ length: 60 }, () => 14_400));
+
+    const folded = foldMetric([staging, production]);
+
+    // Still low — most landings really are the fast ones — but it is now a
+    // value half the population sits above, which is what a median promises.
+    expect(folded?.value).toBe(2);
+    expect(folded?.sampleSize).toBe(260);
+  });
+
+  it('weighs durations by sample size when the population is gone', () => {
+    // A reading rebuilt from a stored snapshot keeps a value and no events;
+    // the mean it always used is the only thing left to fold with.
     const folded = foldMetric([result('lead_time', 3600, 300), result('lead_time', 39_600, 3)]);
     expect(folded?.value).toBeCloseTo((3600 * 300 + 39_600 * 3) / 303, 6);
     expect(folded?.sampleSize).toBe(303);
+  });
+
+  it('states how many combinations it folded, so a reader can tell', () => {
+    expect(foldMetric([result('lead_time', 3600, 2)])?.combinations).toBe(1);
+    expect(
+      foldMetric([result('lead_time', 3600, 2), result('lead_time', 7200, 2)])?.combinations,
+    ).toBe(2);
   });
 
   it('falls back to the plain mean when nothing was sampled', () => {

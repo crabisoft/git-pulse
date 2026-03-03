@@ -230,13 +230,44 @@ describe('deployTime', () => {
   it('groups by where the change landed, not by where it came from', () => {
     // The pull request carries repo dimensions; what matters is the environment
     // it reached, so `type=Prod` answers "time to production" on its own.
-    const merged = pr({ mergedAt: '2026-01-02T00:00:00Z', dimensions: { app: 'Extranet' } });
+    const merged = pr({ mergedAt: '2026-01-02T00:00:00Z', dimensions: { app: 'Portal' } });
     const [result] = deployTime([merged], deployments);
     expect(result.dimensions).toEqual(PROD);
   });
 
   it('leaves out a change that never reached anywhere', () => {
     expect(deployTime([pr({ mergedAt: '2026-01-09T00:00:00Z' })], deployments)).toEqual([]);
+  });
+
+  describe('a repo that stages before it ships', () => {
+    // The regression this covers: taking the earliest deployment outright made
+    // every pull request a pre-production sample, and "time to production"
+    // answered with the few that happened to reach production first.
+    const staged = [
+      deploy('2026-01-02T01:00:00Z', 'success', STAGING, 'staging'),
+      deploy('2026-01-02T06:00:00Z', 'success', PROD, 'prod'),
+      // A later run to the same environment: the first landing is what counts.
+      deploy('2026-01-02T09:00:00Z', 'success', PROD, 'prod'),
+    ];
+    const merged = pr({ mergedAt: '2026-01-02T00:00:00Z' });
+
+    it('measures each destination on its own', () => {
+      const byType = Object.fromEntries(
+        deployTime([merged], staged).map((r) => [r.dimensions.type, r.value]),
+      );
+
+      expect(byType).toEqual({ Staging: 3600, Prod: 21600 });
+    });
+
+    it('counts landings rather than pull requests', () => {
+      const sizes = deployTime([merged], staged).map((r) => r.sampleSize);
+      expect(sizes).toEqual([1, 1]);
+    });
+
+    it('still blames the first landing anywhere for an incident', () => {
+      // Attribution is not measurement: a change entered the world once.
+      expect(deploymentCarrying(merged, staged)?.environment).toBe('staging');
+    });
   });
 });
 

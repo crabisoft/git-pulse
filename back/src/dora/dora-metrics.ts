@@ -3,6 +3,23 @@ import type { DoraMetric, DoraResult, DoraSample, FailureSource, TicketRef } fro
 /** Most recent contributing events kept per result for the detail view. */
 const MAX_SAMPLES = 50;
 
+/**
+ * A reading, with the population it was computed on.
+ *
+ * Server-side only: `population` is never persisted and never crosses the wire
+ * whole — the snapshots name their columns, and the fold builds a fresh object.
+ * It earns its keep twice: folding several combinations takes a median of
+ * everything measured rather than a mean of the medians, and a reader paging
+ * through the events gets all of them rather than the most recent handful.
+ */
+export interface MeasuredResult extends DoraResult {
+  /**
+   * Every event behind the reading. `samples` is a window on this — the most
+   * recent few, for a page that shows a list without paging through it.
+   */
+  population: DoraSample[];
+}
+
 /** A deployment, already classified into dimensions by the env engine. */
 export interface DeploymentEvent {
   environment: string;
@@ -221,32 +238,57 @@ export function mttr(
       dimensions: (deploys[0] ?? related[0]).dimensions,
       sampleSize: restores.length,
       samples: takeRecent(samples),
+      population: samples,
     };
   });
 }
 
 /**
- * The deployment that first carried a merged pull request.
+ * The first deployment to carry a merged pull request **to each environment**.
  *
- * Correlation is by repository and time — the earliest successful deployment of
- * that repo after the merge. The connectors expose a deployment's ref, never
- * the commits it contains, so time is the only signal available: a PR merged
- * just before a deployment that did not include it is attributed to it anyway.
- * Read `deploy_time` as an upper bound on how quickly changes reach an
- * environment, not as a per-commit truth.
+ * One per environment, because reaching pre-production and reaching production
+ * are two different measurements. Taking the earliest deployment outright
+ * reported whichever came first and filed it under that environment's
+ * dimensions — so on a repo that stages before it ships, `type=Prod` answered
+ * with the handful of pull requests whose first landing happened to be
+ * production, and called it the time to production.
+ *
+ * Correlation is by repository and time. The connectors expose a deployment's
+ * ref, never the commits it contains, so time is the only signal available: a
+ * PR merged just before a deployment that did not include it is attributed to
+ * it anyway. Read `deploy_time` as an upper bound on how quickly changes reach
+ * an environment, not as a per-commit truth.
+ */
+export function deploymentsCarrying(
+  pr: MergedPrEvent,
+  deployments: DeploymentEvent[],
+): DeploymentEvent[] {
+  const mergedAt = msOf(pr.mergedAt);
+  const earliest = new Map<string, DeploymentEvent>();
+  for (const d of deployments) {
+    if (d.repo !== pr.repo || d.status !== 'success') continue;
+    if (msOf(d.createdAt) < mergedAt) continue;
+    const held = earliest.get(d.environment);
+    if (!held || msOf(d.createdAt) < msOf(held.createdAt)) earliest.set(d.environment, d);
+  }
+  return [...earliest.values()];
+}
+
+/**
+ * The very first place a change landed, whichever environment that was.
+ *
+ * What blame attribution needs — an incident is tied to the deployment that
+ * put the change in the world — as opposed to `deploymentsCarrying`, which
+ * measures each destination separately.
  */
 export function deploymentCarrying(
   pr: MergedPrEvent,
   deployments: DeploymentEvent[],
 ): DeploymentEvent | null {
-  const mergedAt = msOf(pr.mergedAt);
-  let earliest: DeploymentEvent | null = null;
-  for (const d of deployments) {
-    if (d.repo !== pr.repo || d.status !== 'success') continue;
-    if (msOf(d.createdAt) < mergedAt) continue;
-    if (!earliest || msOf(d.createdAt) < msOf(earliest.createdAt)) earliest = d;
-  }
-  return earliest;
+  return deploymentsCarrying(pr, deployments).reduce<DeploymentEvent | null>(
+    (earliest, d) => (!earliest || msOf(d.createdAt) < msOf(earliest.createdAt) ? d : earliest),
+    null,
+  );
 }
 
 /**
@@ -274,14 +316,18 @@ export function leadTimeBreakdown(prs: MergedPrEvent[]): DoraResult[] {
       }
     }
     const dims = items[0].dimensions;
-    const point = (metric: DoraMetric, samples: DoraSample[]): DoraResult => ({
-      metric,
-      value: median(samples.map((s) => s.value ?? 0)),
-      unit: 'seconds',
-      dimensions: dims,
-      sampleSize: samples.length,
-      samples: takeRecent(samples),
-    });
+    const point = (metric: DoraMetric, samples: DoraSample[]): MeasuredResult => {
+      const values = samples.map((s) => s.value ?? 0);
+      return {
+        metric,
+        value: median(values),
+        unit: 'seconds',
+        dimensions: dims,
+        sampleSize: samples.length,
+        samples: takeRecent(samples),
+        population: samples,
+      };
+    };
     return [
       point('coding_time', coding),
       point('pickup_time', pickup),
@@ -297,34 +343,45 @@ export function leadTimeBreakdown(prs: MergedPrEvent[]): DoraResult[] {
  * Grouped by the **deployment's** dimensions rather than the pull request's:
  * how long a change takes to reach somewhere is a property of where it lands,
  * so slicing on `type=Prod` answers "time to production" with no extra setting.
+ * Which only holds because each destination is measured on its own — see
+ * `deploymentsCarrying`. A pull request that lands in two environments
+ * contributes a sample to each, so the sample sizes here count landings rather
+ * than pull requests.
  */
 export function deployTime(prs: MergedPrEvent[], deployments: DeploymentEvent[]): DoraResult[] {
   const samplesByKey = new Map<string, { dimensions: Record<string, string>; samples: DoraSample[] }>();
 
   for (const pr of prs) {
-    const deployment = deploymentCarrying(pr, deployments);
-    if (!deployment) continue;
-    const key = dimensionKey(deployment.dimensions);
-    const bucket = samplesByKey.get(key) ?? { dimensions: deployment.dimensions, samples: [] };
-    bucket.samples.push({
-      ...prSample(pr, clamp(seconds(pr.mergedAt, deployment.createdAt))),
-      details: {
-        openedAt: pr.openedAt,
-        environment: deployment.environment,
-        deployedAt: deployment.createdAt,
-      },
-    });
-    samplesByKey.set(key, bucket);
+    // One sample per environment the change reached: a pull request that goes
+    // to pre-production and then to production took two different times, and
+    // both are worth a reading.
+    for (const deployment of deploymentsCarrying(pr, deployments)) {
+      const key = dimensionKey(deployment.dimensions);
+      const bucket = samplesByKey.get(key) ?? { dimensions: deployment.dimensions, samples: [] };
+      bucket.samples.push({
+        ...prSample(pr, clamp(seconds(pr.mergedAt, deployment.createdAt))),
+        details: {
+          openedAt: pr.openedAt,
+          environment: deployment.environment,
+          deployedAt: deployment.createdAt,
+        },
+      });
+      samplesByKey.set(key, bucket);
+    }
   }
 
-  return [...samplesByKey.values()].map(({ dimensions, samples }) => ({
-    metric: 'deploy_time' as DoraMetric,
-    value: median(samples.map((s) => s.value ?? 0)),
-    unit: 'seconds' as const,
-    dimensions,
-    sampleSize: samples.length,
-    samples: takeRecent(samples),
-  }));
+  return [...samplesByKey.values()].map(({ dimensions, samples }) => {
+    const values = samples.map((s) => s.value ?? 0);
+    return {
+      metric: 'deploy_time' as DoraMetric,
+      value: median(values),
+      unit: 'seconds' as const,
+      dimensions,
+      sampleSize: samples.length,
+      samples: takeRecent(samples),
+      population: samples,
+    };
+  });
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────
@@ -420,7 +477,8 @@ function clamp(value: number): number {
   return value < 0 ? 0 : value;
 }
 
-function median(values: number[]): number {
+/** Shared with the fold, which takes one over every combination at once. */
+export function median(values: number[]): number {
   if (values.length === 0) return 0;
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
