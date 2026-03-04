@@ -42,7 +42,7 @@ export class DoraQueryDto {
 
   /**
    * Slices the computed results by dimension, as `key:value` pairs — e.g.
-   * `?dimension=app:extranet&dimension=type:Prod`. Repeated keys are not
+   * `?dimension=app:portal&dimension=type:Prod`. Repeated keys are not
    * combined: the last one wins.
    */
   @IsOptional()

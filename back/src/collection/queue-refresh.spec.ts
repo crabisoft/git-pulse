@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Queue } from 'bullmq';
-import { CollectorService, refreshJobId } from './collector.service';
+import { CollectorService, rebuildJobId, refreshJobId } from './collector.service';
 import type { SourcesService } from '../sources/sources.service';
 import type { PrismaService } from '../prisma/prisma.service';
 import type { DashboardService } from '../dashboard/dashboard.service';
@@ -49,6 +49,14 @@ describe('queueRefresh', () => {
     // Three attempts against an unreachable platform would be three whole API
     // budgets spent re-reading the same year.
     expect(options.attempts).toBe(1);
+  });
+
+  it('names the job something the queue will accept', () => {
+    // BullMQ builds its Redis keys around `:` and throws `Custom Id cannot
+    // contain :` when a custom one carries it — at creation, so every deep
+    // re-read answered 500 and the tests above, asserting the id against
+    // itself, agreed with the broken one all the way down.
+    expect(refreshJobId(SOURCE_ID)).not.toContain(':');
   });
 
   it('writes the depth on the source before the run', async () => {
@@ -124,5 +132,52 @@ describe('queueRefresh', () => {
 
     expect(failed.remove).toHaveBeenCalledOnce();
     expect(add).toHaveBeenCalledOnce();
+  });
+});
+
+describe('queueRebuild', () => {
+  it('enqueues one replay under an id of its own, with the depth asked for', async () => {
+    const { collector, add } = service();
+
+    const handle = await collector.queueRebuild(SOURCE_ID, 90);
+
+    expect(handle).toEqual({ queue: 'collection', id: rebuildJobId(SOURCE_ID) });
+    const [name, data, options] = add.mock.calls[0];
+    expect(name).toBe('rebuild-metrics');
+    expect(data).toEqual({ sourceId: SOURCE_ID, days: 90 });
+    expect(options.jobId).toBe(rebuildJobId(SOURCE_ID));
+  });
+
+  it('has an id the queue will accept, and never the re-read\'s', async () => {
+    // Sharing an id would make one refuse to start while the other runs, and
+    // they answer two different needs — a rule change costs no listing.
+    expect(rebuildJobId(SOURCE_ID)).not.toContain(':');
+    expect(rebuildJobId(SOURCE_ID)).not.toBe(refreshJobId(SOURCE_ID));
+  });
+
+  it('refuses a second replay while one is running', async () => {
+    const { collector, add } = service(jobIn('active'));
+
+    await expect(collector.queueRebuild(SOURCE_ID, 30)).rejects.toThrow();
+    expect(add).not.toHaveBeenCalled();
+  });
+
+  it('replaces a replay that has finished', async () => {
+    const finished = jobIn('completed');
+    const { collector, add } = service(finished);
+
+    await collector.queueRebuild(SOURCE_ID, 30);
+
+    expect(finished.remove).toHaveBeenCalled();
+    expect(add).toHaveBeenCalled();
+  });
+
+  it('leaves the depth of the source alone', async () => {
+    // A replay says how far back to restate readings, not how deep to ingest.
+    const { collector, setHistoryDays } = service();
+
+    await collector.queueRebuild(SOURCE_ID, 90);
+
+    expect(setHistoryDays).not.toHaveBeenCalled();
   });
 });

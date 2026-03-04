@@ -20,6 +20,24 @@ export function toSearchParams(query: DoraQuery): URLSearchParams {
   return params;
 }
 
+/**
+ * The same, as the DORA pages read them: a period and a dimension slice, never
+ * a repo scope.
+ *
+ * The DORA pages have no repo filter, and dropping one arriving by hand-edited
+ * URL is what keeps them honest. A value narrowed to two repos would sit above
+ * a trend drawn from every repo — the snapshots record a metric and its
+ * dimensions, never which repo it came from, so no history can be narrowed
+ * that way. Reporting over everything is the only reading the two agree on.
+ *
+ * The overview keeps its own repo filter and its own reading, which is why the
+ * scope stays in the vocabulary above rather than being removed from it.
+ */
+export function fromDoraParams(params: URLSearchParams): DoraQuery {
+  const { repos: _scope, ...rest } = fromSearchParams(params);
+  return rest;
+}
+
 /** The reverse, for a page that was linked to rather than navigated from. */
 export function fromSearchParams(params: URLSearchParams): DoraQuery {
   const windowDays = params.get('windowDays');

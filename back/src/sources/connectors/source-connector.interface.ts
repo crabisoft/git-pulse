@@ -58,6 +58,13 @@ export interface ConnectorContext {
   allowsOptionalCalls?: () => boolean;
 }
 
+/** A commit a ref points at, or the one two refs last had in common. */
+export interface RefCommit {
+  sha: string;
+  /** Null on a platform that answered the commit without dating it. */
+  committedAt: string | null;
+}
+
 /**
  * Common contract for every source. Each platform (GitHub, GitLab, …) provides
  * an implementation that normalizes its data into the shared types. Adding a
@@ -123,6 +130,28 @@ export interface SourceConnector {
 
   /** The branch a repo defaults to, when no range bound is given. */
   defaultBranch(ctx: ConnectorContext, repo: string): Promise<string>;
+
+  /**
+   * The commit a ref points at. Null when the platform will not resolve it,
+   * which is the ordinary fate of a deployed branch that has been deleted.
+   */
+  refCommit(ctx: ConnectorContext, repo: string, ref: string): Promise<RefCommit | null>;
+
+  /**
+   * The last commit two refs have in common, with the date it was made.
+   *
+   * The date is the whole point: comparing two candidates asks which of them
+   * parted from a ref most recently, and only a date answers that — a sha
+   * orders nothing. Null when the platform will not resolve one of the two,
+   * which is an answer here rather than a failure: a candidate that cannot be
+   * compared is simply not the nearest one.
+   */
+  mergeBase(
+    ctx: ConnectorContext,
+    repo: string,
+    ref: string,
+    other: string,
+  ): Promise<RefCommit | null>;
 
   /**
    * The pull/merge request each of these commits came in on, keyed by sha. A

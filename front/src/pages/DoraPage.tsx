@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import {
@@ -13,7 +13,6 @@ import { toSearchParams } from '../doraQuery';
 import { useCancellableLoad } from '../hooks';
 import { doraCodec, useUrlQuery } from '../urlQuery';
 import { HelpTip } from '../HelpTip';
-import { RepoFilter } from '../RepoFilter';
 import { DimensionFilter, PeriodFilter } from '../Filters';
 import { Sparkline } from '../Sparkline';
 
@@ -80,7 +79,6 @@ export function DoraPage({ sourceId, slug }: { sourceId: string; slug: string })
   const filter = (partial: Partial<DoraQuery>) => setQuery((q) => ({ ...q, ...partial }));
 
   const results = report?.results ?? null;
-  const selectedRepos = useMemo(() => new Set(query.repos), [query.repos]);
   /** What every block opens: the filters in effect, unaltered. */
   const search = toSearchParams(settled).toString();
 
@@ -114,14 +112,6 @@ export function DoraPage({ sourceId, slug }: { sourceId: string; slug: string })
           onChange={(next) => filter(next)}
           disabled={loading}
         />
-        {report && report.repos.length > 1 && (
-          <RepoFilter
-            repos={report.repos}
-            selected={selectedRepos}
-            onChange={(next) => filter({ repos: [...next].sort() })}
-            disabled={loading}
-          />
-        )}
         {report && (
           <DimensionFilter
             vocabulary={report.dimensions}
@@ -174,7 +164,6 @@ export function DoraPage({ sourceId, slug }: { sourceId: string; slug: string })
           })}
         </div>
       )}
-
     </div>
   );
 }

@@ -1,5 +1,16 @@
-import { Transform } from 'class-transformer';
-import { IsArray, IsISO8601, IsOptional, IsString, Matches, MinLength } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import {
+  IsArray,
+  IsInt,
+  IsISO8601,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  Min,
+  MinLength,
+} from 'class-validator';
+import { DORA_WINDOW_MAX, DORA_WINDOW_MIN } from '@repo/shared';
 
 /** Accepts `?dimension=a:1&dimension=b:2` as well as `?dimension=a:1,b:2`. */
 function toList({ value }: { value: unknown }): string[] | undefined {
@@ -34,4 +45,19 @@ export class MetricSeriesDto {
   @IsOptional()
   @IsISO8601()
   to?: string;
+
+  /**
+   * Rolling window, exactly as the DORA endpoint takes it.
+   *
+   * Without it a chart could only be bounded by explicit dates, and a reader
+   * who picked "the last 90 days" — which sets no bounds at all — got a line
+   * drawn over every snapshot ever taken, beside a value computed over ninety
+   * days. The two have to be resolved the same way to mean anything together.
+   */
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(DORA_WINDOW_MIN)
+  @Max(DORA_WINDOW_MAX)
+  windowDays?: number;
 }

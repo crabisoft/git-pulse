@@ -1,23 +1,29 @@
 import { Injectable, Logger, HttpStatus } from '@nestjs/common';
+import { DORA_METRICS } from '@repo/shared';
 import type {
   Deployment,
+  DoraMetric,
   DoraPeriod,
   DoraReport,
   DoraResult,
+  DoraSample,
+  FailureSource,
   Incident,
   MergedPullRequest,
+  Page,
   PipelineStatus,
   RuleTarget,
 } from '@repo/shared';
 import { CodedException } from '../common/coded-exception';
 
 import { resolvePeriod, within } from '../common/period';
+import { paginate, type PageWindow } from '../common/pagination';
 import { foldByMetric } from './aggregate';
 import { throwIfAborted } from '../common/request-abort';
 import { PrismaService } from '../prisma/prisma.service';
 import { SourcesService } from '../sources/sources.service';
 import { ReaderFactory } from '../ingest/reader.factory';
-import { EnvRulesService } from '../env-rules/env-rules.service';
+import { EnvRulesService, subjectKey, type ClassifySubject } from '../env-rules/env-rules.service';
 import { IncidentProviderFactory } from '../incidents/incident-provider.factory';
 import { TrackersService } from '../trackers/trackers.service';
 import { TicketRulesService } from '../ticket-rules/ticket-rules.service';
@@ -32,6 +38,7 @@ import {
   orphanIncidentDimensions,
   type DeploymentEvent,
   type IncidentEvent,
+  type MeasuredResult,
   type MergedPrEvent,
 } from './dora-metrics';
 
@@ -53,6 +60,27 @@ export interface DoraQuery extends DoraRange {
 
 /** A resolved period — both bounds are ISO strings, `from` <= `to`. */
 type ResolvedRange = DoraPeriod;
+
+/** What a replay of the metric history did — see `rebuild`. */
+export interface MetricRebuild {
+  from: string;
+  to: string;
+  /** Days that produced at least one reading; the empty ones write nothing. */
+  days: number;
+  written: number;
+  replaced: number;
+  /** Snapshots left untouched before the range, classified as they were then. */
+  keptBefore: number;
+}
+
+/** One read of a source, classified once and reusable over any period. */
+interface GatheredEvents {
+  deploymentEvents: DeploymentEvent[];
+  prEvents: MergedPrEvent[];
+  incidentEvents: IncidentEvent[];
+  allRepos: string[];
+  failureSource: FailureSource;
+}
 
 @Injectable()
 export class DoraService {
@@ -97,18 +125,73 @@ export class DoraService {
     return { results: foldByMetric(sliced), repos, dimensions, period };
   }
 
+  /**
+   * The events behind one metric, over the same period and slice as its value,
+   * paginated — all of them, not the handful the reading carries.
+   *
+   * A separate route rather than a bigger report: the reading needs a fixed few
+   * events to show without paging, while somebody auditing a figure wants every
+   * one of them, and sending thousands of events to every reader of the metric
+   * list to serve the occasional audit is the wrong trade both ways.
+   */
+  async samples(
+    sourceId: string,
+    query: DoraQuery,
+    metric: DoraMetric,
+    window: PageWindow,
+    signal?: AbortSignal,
+  ): Promise<Page<DoraSample>> {
+    const { results } = await this.build(sourceId, query, signal);
+    const events = results
+      .filter((r) => r.metric === metric && matchesDimensions(r.dimensions, query.dimensions))
+      // A combination computed before this feature — or one whose metric keeps
+      // no population — still answers with what its reading carries.
+      .flatMap((r) => ('population' in r ? r.population : r.samples));
+
+    // Newest first, like every list in the product; the fold that produced the
+    // reading sorted its own window the same way.
+    events.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+    return paginate(events, window);
+  }
+
   /** Fetches and computes everything, before any slicing. */
   private async build(
     sourceId: string,
     query: DoraQuery,
     signal?: AbortSignal,
-  ): Promise<{ results: DoraResult[]; repos: string[]; period: ResolvedRange }> {
-    const reader = await this.readers.for(sourceId, signal);
+  ): Promise<{ results: (DoraResult | MeasuredResult)[]; repos: string[]; period: ResolvedRange }> {
     const period = await this.resolveRange(query);
+    const gathered = await this.gather(sourceId, period.from, query.repos, signal);
+    return {
+      results: this.computeOver(gathered, period, {
+        failureSource: gathered.failureSource,
+        sourceId,
+      }),
+      // The full list stays the filter vocabulary, exactly like the dashboard.
+      repos: gathered.allRepos,
+      period,
+    };
+  }
+
+  /**
+   * Every event of a source, classified, from `since` onward.
+   *
+   * Period-free on purpose — see `computeOver`. `since` bounds what the
+   * platform is asked for, never what the caller may compute over: the pull
+   * requests and the incidents are listed from it, the deployments come as
+   * they come.
+   */
+  private async gather(
+    sourceId: string,
+    since: string,
+    repoFilter: string[] | undefined,
+    signal?: AbortSignal,
+  ): Promise<GatheredEvents> {
+    const reader = await this.readers.for(sourceId, signal);
     const allRepos = await reader.listRepositories();
     // Scoping here rather than after the fact: the connectors iterate repo by
     // repo, so a narrower list is also fewer API calls.
-    const repos = filterRepos(allRepos, query.repos);
+    const repos = filterRepos(allRepos, repoFilter);
 
     const { failureSource, incidentLabels } = await this.settings.get();
     // Which tracker the incidents come from is a property of the source, not of
@@ -117,8 +200,8 @@ export class DoraService {
       failureSource === 'pipelines' ? null : await this.trackers.incidentTrackerFor(sourceId);
     if (failureSource !== 'pipelines' && !incidentTracker) {
       this.logger.warn(
-        `Aucun tracker d'incidents désigné pour ${sourceId} : le taux d'échec et le MTTR ` +
-          `ne compteront que les pipelines.`,
+        `No incident tracker set for ${sourceId}: change failure rate and MTTR ` +
+          `will count pipelines only.`,
       );
     }
 
@@ -134,12 +217,12 @@ export class DoraService {
     const [deployments, mergedPrs, incidents] = await Promise.all([
       reader.listDeployments(repos).catch((e) => {
         throwIfAborted(signal);
-        this.logger.warn(`listDeployments échoué (${sourceId}) : ${asMessage(e)}`);
+        this.logger.warn(`listDeployments failed (${sourceId}): ${asMessage(e)}`);
         return [] as Deployment[];
       }),
-      reader.listMergedPullRequests(repos, period.from).catch((e) => {
+      reader.listMergedPullRequests(repos, since).catch((e) => {
         throwIfAborted(signal);
-        this.logger.warn(`listMergedPullRequests échoué (${sourceId}) : ${asMessage(e)}`);
+        this.logger.warn(`listMergedPullRequests failed (${sourceId}): ${asMessage(e)}`);
         return [] as MergedPullRequest[];
       }),
       // Not fetched at all while failures come from pipelines only: the issues
@@ -148,20 +231,48 @@ export class DoraService {
         ? Promise.resolve([] as Incident[])
         : this.incidents
             .for(incidentTracker.kind)
-            .listIncidents({ access: ctx, repos, labels: incidentLabels }, period)
+            .listIncidents(
+              { access: ctx, repos, labels: incidentLabels },
+              { from: since, to: new Date().toISOString() },
+            )
             .catch((e) => {
               throwIfAborted(signal);
-              this.logger.warn(`listIncidents échoué (${sourceId}) : ${asMessage(e)}`);
+              this.logger.warn(`listIncidents failed (${sourceId}): ${asMessage(e)}`);
               return [] as Incident[];
             }),
     ]);
 
     const owner = reader.scope.owner;
     const [deploymentEvents, prEvents, incidentEvents] = await Promise.all([
-      this.toDeploymentEvents(sourceId, deployments, period),
-      this.toMergedPrEvents(sourceId, owner, mergedPrs, period),
-      this.toIncidentEvents(sourceId, owner, incidents, period),
+      this.toDeploymentEvents(sourceId, deployments),
+      this.toMergedPrEvents(sourceId, owner, mergedPrs),
+      this.toIncidentEvents(sourceId, owner, incidents),
     ]);
+
+    return { deploymentEvents, prEvents, incidentEvents, allRepos, failureSource };
+  }
+
+  /**
+   * The metrics over one period, from events already gathered and classified.
+   *
+   * Separate from the gathering on purpose: classifying a deployment does not
+   * depend on the period, so one read can answer many of them. That is what
+   * lets `rebuild` replay ninety days without ninety collections — and it is
+   * the only reason the period is applied here rather than at the source.
+   */
+  private computeOver(
+    events: {
+      deploymentEvents: DeploymentEvent[];
+      prEvents: MergedPrEvent[];
+      incidentEvents: IncidentEvent[];
+    },
+    period: ResolvedRange,
+    context: { failureSource: FailureSource; sourceId: string },
+  ): (DoraResult | MeasuredResult)[] {
+    const deploymentEvents = events.deploymentEvents.filter((d) => within(d.createdAt, period));
+    const prEvents = events.prEvents.filter((p) => within(p.mergedAt, period));
+    const incidentEvents = events.incidentEvents.filter((i) => within(i.openedAt, period));
+    const { failureSource, sourceId } = context;
 
     // A shared ticket between an incident and a merged pull request says which
     // deployment broke what — the question the failure rate actually asks.
@@ -172,22 +283,105 @@ export class DoraService {
     const orphans = orphanIncidentDimensions(deploymentEvents, incidentEvents, linked);
     if (orphans.length > 0) {
       this.logger.warn(
-        `${orphans.length} combinaison(s) de dimensions ont des incidents sans déploiement ` +
-          `(${sourceId}) : ${orphans.map((d) => JSON.stringify(d)).join(', ')}`,
+        `${orphans.length} dimension combination(s) carry incidents but no deployment ` +
+          `(${sourceId}): ${orphans.map((d) => JSON.stringify(d)).join(', ')}`,
       );
     }
 
+    return [
+      ...deploymentFrequency(deploymentEvents),
+      ...changeFailureRate(deploymentEvents, incidentEvents, failureSource, linked),
+      ...mttr(deploymentEvents, incidentEvents, failureSource, linked),
+      ...leadTimeBreakdown(prEvents),
+      ...deployTime(prEvents, deploymentEvents),
+    ];
+  }
+
+  /**
+   * Replays the metric history from what has already been ingested.
+   *
+   * One read, then one computation per day: classifying an event does not
+   * depend on the period, so replaying ninety days costs one collection rather
+   * than ninety. Each day is computed over the **rolling window ending that
+   * day** — the same one the scheduled collection uses, without which the
+   * replayed points would not mean what the points around them mean.
+   *
+   * Stops at the end of yesterday. Today belongs to the next collection, and
+   * writing it here would put two captures on one day for the same run.
+   *
+   * The replayed range is deleted before being written, which is what makes
+   * this safe to run twice: the daily fold keeps the last capture of a day, so
+   * leaving the old ones in place would make the result depend on insertion
+   * order. Only the DORA metrics are swept — the summary series shares this
+   * table and is a reading of the present, which no replay can reconstruct.
+   * Snapshots older than the range are left alone, and counted so the caller
+   * can say they are still classified the way they were.
+   */
+  async rebuild(sourceId: string, days?: number, signal?: AbortSignal): Promise<MetricRebuild> {
+    const { doraWindowDays } = await this.settings.get();
+    // Omitted means the window the metrics are read over — the readings worth
+    // restating first, and the default the settings own.
+    const depth = days ?? doraWindowDays;
+    const endOfYesterday = endOfDay(addDays(new Date(), -1));
+    const firstDay = startOfDay(addDays(endOfYesterday, -(depth - 1)));
+
+    // Each day looks a whole window back, so the read has to start there.
+    const gathered = await this.gather(
+      sourceId,
+      addDays(firstDay, -doraWindowDays).toISOString(),
+      undefined,
+      signal,
+    );
+
+    const rows: Array<{ metric: string; value: number; dimensions: object; capturedAt: Date }> = [];
+    let daysWritten = 0;
+    for (let day = new Date(firstDay); day <= endOfYesterday; day = addDays(day, 1)) {
+      throwIfAborted(signal);
+      const capturedAt = endOfDay(day);
+      const period: ResolvedRange = {
+        from: addDays(capturedAt, -doraWindowDays).toISOString(),
+        to: capturedAt.toISOString(),
+        windowDays: doraWindowDays,
+      };
+      const results = this.computeOver(gathered, period, {
+        failureSource: gathered.failureSource,
+        sourceId,
+      });
+      // A day with no event produces no result, so it writes no row: an empty
+      // window must leave a gap in the series, never a flat zero somebody
+      // would read as a measurement.
+      if (results.length === 0) continue;
+      daysWritten++;
+      for (const r of results) {
+        rows.push({ metric: r.metric, value: r.value, dimensions: r.dimensions, capturedAt });
+      }
+    }
+
+    const range = { gte: firstDay, lte: endOfYesterday };
+    const [removed] = await this.prisma.$transaction([
+      this.prisma.metricSnapshot.deleteMany({
+        where: { sourceId, metric: { in: [...DORA_METRICS] }, capturedAt: range },
+      }),
+      this.prisma.metricSnapshot.createMany({
+        data: rows.map((r) => ({ sourceId, ...r, dimensions: r.dimensions as never })),
+      }),
+    ]);
+
+    const kept = await this.prisma.metricSnapshot.count({
+      where: { sourceId, metric: { in: [...DORA_METRICS] }, capturedAt: { lt: firstDay } },
+    });
+
+    this.logger.log(
+      `DORA history replayed for ${sourceId}: ${rows.length} reading(s) over ${daysWritten} day(s), ` +
+        `${removed.count} replaced, ${kept} kept before ${firstDay.toISOString()}.`,
+    );
     return {
-      results: [
-        ...deploymentFrequency(deploymentEvents),
-        ...changeFailureRate(deploymentEvents, incidentEvents, failureSource, linked),
-        ...mttr(deploymentEvents, incidentEvents, failureSource, linked),
-        ...leadTimeBreakdown(prEvents),
-        ...deployTime(prEvents, deploymentEvents),
-      ],
-      // The full list stays the filter vocabulary, exactly like the dashboard.
-      repos: allRepos,
-      period,
+      from: firstDay.toISOString(),
+      to: endOfYesterday.toISOString(),
+      days: daysWritten,
+      written: rows.length,
+      replaced: removed.count,
+      keptBefore: kept,
     };
   }
 
@@ -224,21 +418,19 @@ export class DoraService {
   private async toDeploymentEvents(
     sourceId: string,
     deployments: Deployment[],
-    period: ResolvedRange,
   ): Promise<DeploymentEvent[]> {
-    const inWindow = deployments.filter((d) => within(d.createdAt, period));
     const dimensionsByEnv = await this.dimensionsFor(
       sourceId,
-      inWindow.map((d) => d.environment),
+      deployments.map((d) => ({ name: d.environment, repo: d.repo })),
       'environment',
     );
 
-    return inWindow.map((d) => ({
+    return deployments.map((d) => ({
       environment: d.environment,
       repo: d.repo,
       status: toEventStatus(d.status),
       createdAt: d.createdAt,
-      dimensions: dimensionsByEnv.get(d.environment) ?? {},
+      dimensions: dimensionsByEnv.get(subjectKey({ name: d.environment, repo: d.repo })) ?? {},
     }));
   }
 
@@ -251,12 +443,15 @@ export class DoraService {
     sourceId: string,
     owner: string,
     prs: MergedPullRequest[],
-    period: ResolvedRange,
   ): Promise<MergedPrEvent[]> {
-    // The connector already filtered on `from`; only the upper bound is left.
-    const inWindow = prs.filter((p) => within(p.mergedAt, period));
+    const inWindow = prs;
     const [dimensionsByRepo, tickets] = await Promise.all([
-      this.dimensionsFor(sourceId, inWindow.map((p) => p.repo), 'repository'),
+      // The subject is the repo name, so the repo is known by construction.
+      this.dimensionsFor(
+        sourceId,
+        inWindow.map((p) => ({ name: p.repo, repo: p.repo })),
+        'repository',
+      ),
       this.ticketRules.extractMany(
         sourceId,
         inWindow.map((p) => ({ branch: p.headRef, title: p.title })),
@@ -273,7 +468,7 @@ export class DoraService {
       firstReviewAt: p.firstReviewAt,
       mergedAt: p.mergedAt,
       tickets: tickets[i],
-      dimensions: dimensionsByRepo.get(p.repo) ?? {},
+      dimensions: dimensionsByRepo.get(subjectKey({ name: p.repo, repo: p.repo })) ?? {},
     }));
   }
 
@@ -291,11 +486,14 @@ export class DoraService {
     sourceId: string,
     owner: string,
     incidents: Incident[],
-    period: ResolvedRange,
   ): Promise<IncidentEvent[]> {
-    const inWindow = incidents.filter((i) => within(i.openedAt, period));
+    const inWindow = incidents;
     const [dimensionsByLabel, tickets] = await Promise.all([
-      this.dimensionsFor(sourceId, inWindow.flatMap((i) => i.labels), 'incident'),
+      this.dimensionsFor(
+        sourceId,
+        inWindow.flatMap((i) => i.labels.map((name) => ({ name }))),
+        'incident',
+      ),
       // Read from the title and the labels, the two places a tracker lets one
       // write a reference. The same rules as pull requests, so a key spelled
       // once is recognised on both sides.
@@ -309,7 +507,9 @@ export class DoraService {
     return inWindow.map((i, index) => {
       const dimensions: Record<string, string> = {};
       for (const label of [...i.labels].sort()) {
-        for (const [key, value] of Object.entries(dimensionsByLabel.get(label) ?? {})) {
+        for (const [key, value] of Object.entries(
+          dimensionsByLabel.get(subjectKey({ name: label })) ?? {},
+        )) {
           if (!(key in dimensions)) dimensions[key] = value;
         }
       }
@@ -326,15 +526,18 @@ export class DoraService {
     });
   }
 
-  /** Classifies each distinct name once; the rules are read in a single query. */
+  /**
+   * Classifies each distinct subject once; the rules are read in a single
+   * query. Distinct on the repo as much as on the name — a rule confined to a
+   * repo makes one name classify two ways.
+   */
   private async dimensionsFor(
     sourceId: string,
-    names: string[],
+    subjects: ClassifySubject[],
     target: RuleTarget,
   ): Promise<Map<string, Record<string, string>>> {
-    const distinct = [...new Set(names)];
-    const classified = await this.envRules.classifyMany(sourceId, distinct, target);
-    return new Map(distinct.map((name, i) => [name, classified[i].attributes]));
+    const classified = await this.envRules.classifyByPair(sourceId, subjects, target);
+    return new Map([...classified].map(([key, env]) => [key, env.attributes]));
   }
 }
 
@@ -379,6 +582,30 @@ function matchesDimensions(
  */
 
 /** Inclusive on both bounds. */
+
+/**
+ * Day arithmetic for the replay, in UTC.
+ *
+ * UTC because that is the boundary the daily fold reads a snapshot's date on
+ * (`capturedAt.toISOString().slice(0, 10)`): computing a day here on a local
+ * boundary would file readings under a day the chart draws them on a different
+ * one.
+ */
+function addDays(date: Date, days: number): Date {
+  return new Date(date.getTime() + days * 86_400_000);
+}
+
+function startOfDay(date: Date): Date {
+  const day = new Date(date);
+  day.setUTCHours(0, 0, 0, 0);
+  return day;
+}
+
+function endOfDay(date: Date): Date {
+  const day = new Date(date);
+  day.setUTCHours(23, 59, 59, 999);
+  return day;
+}
 
 function asMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);

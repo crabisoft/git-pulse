@@ -5,14 +5,14 @@ import { META_KEY, applyFilters, byMostRecent, previousDeployment, vocabularies 
 function deployment(over: Partial<ClassifiedDeployment> = {}): ClassifiedDeployment {
   return {
     id: 'd1',
-    repo: 'extranet-api',
+    repo: 'portal-api',
     environment: 'prod-eu',
     ref: 'main',
     status: 'success',
     createdAt: '2026-01-10T10:00:00.000Z',
     environmentUrl: null,
     url: null,
-    refUrl: 'https://github.com/acme/extranet-api/tree/main',
+    refUrl: 'https://github.com/acme/portal-api/tree/main',
     attributes: { type: 'Prod', region: 'eu' },
     metaEnvironments: ['Production'],
     ...over,

@@ -4,6 +4,7 @@ import { Queue, Job } from 'bullmq';
 import { CollectorService } from './collector.service';
 import { SourcesService } from '../sources/sources.service';
 import { RetentionService } from '../ingest/retention.service';
+import { DoraService } from '../dora/dora.service';
 import { JOB_DEFAULTS } from '../common/job-options';
 
 /**
@@ -20,6 +21,7 @@ export class CollectionProcessor extends WorkerHost {
     private readonly collector: CollectorService,
     private readonly sources: SourcesService,
     private readonly retention: RetentionService,
+    private readonly dora: DoraService,
     @InjectQueue('collection') private readonly queue: Queue,
   ) {
     super();
@@ -55,7 +57,14 @@ export class CollectionProcessor extends WorkerHost {
       return { sourceId, count: snapshots.length, warnings };
     }
 
-    this.logger.warn(`Job inconnu ignoré : ${job.name}`);
+    if (job.name === 'rebuild-metrics') {
+      // Nothing best-effort here: a replay that half ran would leave a range
+      // it deleted and did not rewrite, which is worse than not having run.
+      const { sourceId, days } = job.data as { sourceId: string; days: number };
+      return this.dora.rebuild(sourceId, days);
+    }
+
+    this.logger.warn(`Unknown job ignored: ${job.name}`);
     return null;
   }
 }

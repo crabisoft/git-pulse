@@ -69,7 +69,7 @@ export class DeploymentChangesDto {
    * branch — where comparing against that branch yields nothing.
    */
   @IsOptional()
-  @IsIn(['previous', 'default', 'ref'])
+  @IsIn(['previous', 'default', 'ref', 'nearest'])
   base?: DeploymentBase;
 
   /**

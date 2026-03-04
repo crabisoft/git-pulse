@@ -2,7 +2,11 @@ import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateA
 import { useSearchParams } from 'react-router-dom';
 import type { PipelineStatus } from '@repo/shared';
 import type { ChangelogsQuery, DeploymentsQuery, DoraQuery, OverviewQuery } from './api';
-import { fromSearchParams as doraFrom, toSearchParams as doraTo } from './doraQuery';
+import {
+  fromDoraParams,
+  fromSearchParams as doraFrom,
+  toSearchParams as doraTo,
+} from './doraQuery';
 import { FILTER_DEBOUNCE_MS, useDebounced } from './hooks';
 import { WALL_PARAM } from './wall';
 
@@ -84,9 +88,12 @@ function writeList(params: URLSearchParams, key: string, values: readonly string
   for (const value of values) params.append(key, value);
 }
 
-/** Period, repo scope and dimension slice — the vocabulary the rest extend. */
+/**
+ * Period and dimension slice. No repo scope: see `fromDoraParams` — a value
+ * narrowed to a repo would sit above a trend that cannot be.
+ */
 export const doraCodec: UrlCodec<DoraQuery> = {
-  parse: doraFrom,
+  parse: fromDoraParams,
   serialize: doraTo,
 };
 

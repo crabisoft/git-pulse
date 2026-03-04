@@ -46,8 +46,8 @@ describe('DoraQueryDto', () => {
 
 describe('toDimensionFilter', () => {
   it('turns the pairs into the record the service slices on', () => {
-    expect(toDimensionFilter(['app:Extranet', 'type:Prod'])).toEqual({
-      app: 'Extranet',
+    expect(toDimensionFilter(['app:Portal', 'type:Prod'])).toEqual({
+      app: 'Portal',
       type: 'Prod',
     });
   });

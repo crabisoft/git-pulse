@@ -91,7 +91,33 @@ export class CollectorService {
     }
 
     await this.queue.add('collect-source', { sourceId, force: true }, { ...JOB_ONESHOT, jobId: id });
-    this.logger.log(`Relecture complète de ${sourceId} mise en file (${id}).`);
+    this.logger.log(`Deep re-read of ${sourceId} queued (${id}).`);
+    return { queue: 'collection', id };
+  }
+
+  /**
+   * Queues a replay of the metric history over the last `days` days.
+   *
+   * Queued like a re-read, and deduplicated the same way: it walks a window a
+   * day at a time and must outlive the request that asked for it. Unlike a
+   * re-read it calls no platform listing beyond the one gathering — what it
+   * costs is computation and rows, not budget.
+   */
+  async queueRebuild(sourceId: string, days?: number): Promise<JobHandle> {
+    await this.sources.readSpec(sourceId);
+
+    const id = rebuildJobId(sourceId);
+    const existing = await this.queue.getJob(id);
+    if (existing) {
+      const state = await existing.getState();
+      if (!settled(state)) {
+        throw new CodedException('errors.collect.rebuildInFlight', HttpStatus.CONFLICT, { state });
+      }
+      await existing.remove();
+    }
+
+    await this.queue.add('rebuild-metrics', { sourceId, days }, { ...JOB_ONESHOT, jobId: id });
+    this.logger.log(`DORA history replay queued for ${sourceId} (${id}).`);
     return { queue: 'collection', id };
   }
 
@@ -109,9 +135,22 @@ export class CollectorService {
     const warnings: CodedMessage[] = [];
 
     await this.sync.syncIfStored(sourceId, options).catch((e) => {
-      this.logger.warn(`Ingestion échouée pour ${sourceId} : ${asMessage(e)}`);
+      this.logger.warn(`Ingestion failed for ${sourceId}: ${asMessage(e)}`);
       warnings.push({ code: 'errors.collect.ingest', params: { error: asMessage(e) } });
     });
+
+    // Only on a deep re-read. What just changed is the past — a deeper store,
+    // or the same one read again — and the readings taken over it no longer
+    // describe it. A scheduled run has nothing to restate: it adds a day to a
+    // history the run before it already agreed with, and replaying on every
+    // cron tick would rewrite that history every few minutes for nothing.
+    if (options.force) {
+      const { historyDays } = await this.sources.readSpec(sourceId);
+      await this.dora.rebuild(sourceId, historyDays ?? undefined).catch((e) => {
+        this.logger.warn(`DORA history replay failed for ${sourceId}: ${asMessage(e)}`);
+        warnings.push({ code: 'errors.collect.rebuild', params: { error: asMessage(e) } });
+      });
+    }
 
     const live = await this.dashboard.live(sourceId);
     const capturedAt = new Date();
@@ -132,7 +171,7 @@ export class CollectorService {
     // DORA collection is heavier (many API calls) and best-effort: a failure
     // here must not drop the summary snapshots above.
     await this.dora.snapshot(sourceId).catch((e) => {
-      this.logger.warn(`Snapshot DORA échoué pour ${sourceId} : ${asMessage(e)}`);
+      this.logger.warn(`DORA snapshot failed for ${sourceId}: ${asMessage(e)}`);
       warnings.push({ code: 'errors.collect.dora', params: { error: asMessage(e) } });
     });
 
@@ -140,7 +179,7 @@ export class CollectorService {
     // cannot be made up later: a deployment nobody filed before its environment
     // was torn down is a changelog no future run can produce.
     const archive = await this.changelogs.archive(sourceId).catch((e) => {
-      this.logger.warn(`Archivage des changelogs échoué pour ${sourceId} : ${asMessage(e)}`);
+      this.logger.warn(`Changelog archiving failed for ${sourceId}: ${asMessage(e)}`);
       warnings.push({ code: 'errors.collect.changelogs', params: { error: asMessage(e) } });
       return null;
     });
@@ -283,9 +322,19 @@ function asMessage(e: unknown): string {
  * Prefixed rather than being the source id alone: the queue also carries this
  * source's scheduled collections, which BullMQ names for it, and two kinds of
  * work sharing an id would make each of them cancel the other.
+ *
+ * Separated by a dash and not by the colon this kind of key usually takes:
+ * BullMQ builds its own Redis keys around `:` and refuses a custom id carrying
+ * one — `Custom Id cannot contain :`, raised where the job is created and
+ * nowhere earlier, so the whole deep re-read answered 500.
  */
 export function refreshJobId(sourceId: string): string {
-  return `refresh:${sourceId}`;
+  return `refresh-${sourceId}`;
+}
+
+/** Same constraint, same shape — one replay per source at a time. */
+export function rebuildJobId(sourceId: string): string {
+  return `rebuild-${sourceId}`;
 }
 
 /**

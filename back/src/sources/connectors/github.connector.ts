@@ -17,6 +17,7 @@ import type {
 import type {
   CommitPullRequest,
   ConnectorContext,
+  RefCommit,
   SourceConnector,
 } from './source-connector.interface';
 import { githubQuota, type HeaderBag, type QuotaSink } from '../../api-quota/rate-limit-headers';
@@ -243,7 +244,7 @@ export class GitHubConnector implements SourceConnector {
     }
     if (skipped > 0) {
       this.logger.warn(
-        `Statut non lu pour ${skipped} déploiement(s) : budget d'API sous la réserve.`,
+        `Status not read for ${skipped} deployment(s): API budget under the reserve.`,
       );
     }
     return out;
@@ -313,8 +314,8 @@ export class GitHubConnector implements SourceConnector {
     }
     if (skipped > 0) {
       this.logger.warn(
-        `Segments de lead time non collectés pour ${skipped} pull request(s) : ` +
-          `budget d'API sous la réserve.`,
+        `Lead-time segments not collected for ${skipped} pull request(s): ` +
+          `API budget under the reserve.`,
       );
     }
     return out;
@@ -359,7 +360,7 @@ export class GitHubConnector implements SourceConnector {
     }
     if (!done) {
       this.logger.warn(
-        `Historique tronqué pour ${repo} : ${MAX_PAGES} pages lues sans atteindre ${since}.`,
+        `History truncated for ${repo}: ${MAX_PAGES} pages read without reaching ${since}.`,
       );
     }
     return out.filter((item) => !older(item));
@@ -386,7 +387,7 @@ export class GitHubConnector implements SourceConnector {
       return byTagDate((answer.repository?.refs.nodes ?? []).map(toTag));
     } catch (e) {
       this.logger.warn(
-        `Tags de ${repo} lus sans leur date (GraphQL indisponible) : ${asMessage(e)}`,
+        `Tags of ${repo} read without their date (GraphQL unavailable): ${asMessage(e)}`,
       );
       const tags = await gh.rest.repos.listTags({ owner: ctx.scope.owner, repo, per_page: 100 });
       return tags.data.map((tag) => ({ name: tag.name, sha: tag.commit.sha, taggedAt: null }));
@@ -487,8 +488,8 @@ export class GitHubConnector implements SourceConnector {
 
     if (commits.length < total) {
       this.logger.warn(
-        `Comparaison ${from}...${to} tronquée dans ${repo} : ${commits.length} commit(s) lus sur ${total} ` +
-          `(GitHub plafonne une comparaison à ${COMPARE_CAP}).`,
+        `Comparison ${from}...${to} truncated in ${repo}: ${commits.length} commit(s) read of ${total} ` +
+          `(GitHub caps a comparison at ${COMPARE_CAP}).`,
       );
     }
     return commits;
@@ -498,6 +499,46 @@ export class GitHubConnector implements SourceConnector {
     const gh = this.client(ctx);
     const info = await gh.rest.repos.get({ owner: ctx.scope.owner, repo });
     return info.data.default_branch;
+  }
+
+  async refCommit(ctx: ConnectorContext, repo: string, ref: string): Promise<RefCommit | null> {
+    const gh = this.client(ctx);
+    try {
+      const commit = await gh.rest.repos.getCommit({ owner: ctx.scope.owner, repo, ref });
+      return { sha: commit.data.sha, committedAt: commit.data.commit.committer?.date ?? null };
+    } catch (e) {
+      if (isNotFound(e)) return null;
+      throw e;
+    }
+  }
+
+  /**
+   * Read off the comparison endpoint, which names the merge base of any two
+   * refs — GitHub has no endpoint for the base alone. A single page is asked
+   * for: the commits of the range are not what this is after.
+   */
+  async mergeBase(
+    ctx: ConnectorContext,
+    repo: string,
+    ref: string,
+    other: string,
+  ): Promise<RefCommit | null> {
+    const gh = this.client(ctx);
+    try {
+      const answer = await gh.rest.repos.compareCommitsWithBasehead({
+        owner: ctx.scope.owner,
+        repo,
+        basehead: `${other}...${ref}`,
+        per_page: 1,
+      });
+      const base = answer.data.merge_base_commit;
+      return base ? { sha: base.sha, committedAt: base.commit.committer?.date ?? null } : null;
+    } catch (e) {
+      // A ref the platform will not resolve is a candidate that loses, not a
+      // run that stops — the caller is asking several of these in a row.
+      if (isNotFound(e)) return null;
+      throw e;
+    }
   }
 
   async commitPullRequests(
@@ -544,7 +585,7 @@ export class GitHubConnector implements SourceConnector {
 
     if (skipped > 0) {
       this.logger.warn(
-        `Réserve d'API atteinte : pull request non résolue pour ${skipped} commit(s) de ${repo}`,
+        `API reserve reached: pull request not resolved for ${skipped} commit(s) of ${repo}`,
       );
     }
     return requests;
@@ -586,7 +627,7 @@ export class GitHubConnector implements SourceConnector {
 
     if (skipped > 0) {
       this.logger.warn(
-        `Réserve d'API atteinte : commits non lus pour ${skipped} pull request(s) de ${repo}`,
+        `API reserve reached: commits not read for ${skipped} pull request(s) of ${repo}`,
       );
     }
     return commits;
@@ -628,14 +669,24 @@ export class GitHubConnector implements SourceConnector {
     pullNumber: number,
   ): Promise<string | null> {
     try {
+      // One page, and the oldest date in it rather than its first row. The
+      // endpoint answers oldest-first, but the whole metric rested on that
+      // being true and nothing would have said otherwise; a minimum over a
+      // hundred commits costs the same single call and needs no such promise.
       const commits = await gh.rest.pulls.listCommits({
         owner,
         repo,
         pull_number: pullNumber,
-        per_page: 1,
+        per_page: 100,
       });
-      const commit = commits.data[0]?.commit;
-      return commit?.author?.date ?? commit?.committer?.date ?? null;
+      // Authored, not committed: a rebase rewrites the second and keeps the
+      // first, and the coding time is about when the work was written.
+      const dates = commits.data
+        .map((c) => c.commit?.author?.date ?? c.commit?.committer?.date)
+        .filter((date): date is string => Boolean(date))
+        .map((date) => new Date(date).getTime())
+        .filter((ms) => Number.isFinite(ms));
+      return dates.length > 0 ? new Date(Math.min(...dates)).toISOString() : null;
     } catch {
       return null;
     }

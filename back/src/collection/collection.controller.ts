@@ -3,9 +3,11 @@ import type { JobHandle } from '@repo/shared';
 import { CollectorService } from './collector.service';
 import { MetricsQueryDto } from './dto/metrics-query.dto';
 import { RefreshSourceDto } from './dto/refresh-source.dto';
+import { RebuildMetricsDto } from './dto/rebuild-metrics.dto';
 import { MetricSeriesDto } from './dto/metric-series.dto';
 import { toDimensionFilter } from '../dora/dto/dora-query.dto';
 import { toWindow } from '../common/pagination';
+import { resolvePeriod } from '../common/period';
 import { SettingsService } from '../settings/settings.service';
 import { Viewer } from '../auth/access.decorator';
 
@@ -43,15 +45,36 @@ export class CollectionController {
     return this.collector.queueRefresh(id, dto.historyDays);
   }
 
-  /** One metric over a period, folded over the filter and bucketed by day. */
+  /**
+   * Queues a replay of the DORA metric history over the requested depth.
+   *
+   * Admin like the re-read above, and destructive in the same measure: it
+   * replaces the readings of the range it covers. What it does not touch —
+   * anything older, and the summary series — is reported back by the job.
+   */
+  @Post('sources/:id/dora/rebuild')
+  @HttpCode(202)
+  rebuild(@Param('id') id: string, @Body() dto: RebuildMetricsDto): Promise<JobHandle> {
+    return this.collector.queueRebuild(id, dto.days);
+  }
+
+  /**
+   * One metric over a period, folded over the filter and bucketed by day.
+   *
+   * The period is resolved here, through the same function the DORA report
+   * uses and against the same default: the chart and the value beside it are
+   * two readings of one window, and a window stated as "the last 90 days"
+   * carries no bounds for a query to filter on until somebody resolves it.
+   */
   @Viewer()
   @Get('sources/:id/metrics/series')
-  series(@Param('id') id: string, @Query() query: MetricSeriesDto) {
+  async series(@Param('id') id: string, @Query() query: MetricSeriesDto) {
+    const period = resolvePeriod(query, (await this.settings.get()).doraWindowDays);
     return this.collector.series(id, {
       metric: query.metric,
       dimensions: toDimensionFilter(query.dimension),
-      from: query.from,
-      to: query.to,
+      from: period.from,
+      to: period.to,
     });
   }
 

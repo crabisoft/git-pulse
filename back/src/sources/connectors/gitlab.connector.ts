@@ -16,6 +16,7 @@ import type {
 import type {
   CommitPullRequest,
   ConnectorContext,
+  RefCommit,
   SourceConnector,
 } from './source-connector.interface';
 import { gitlabQuota, type HeaderBag, type QuotaSink } from '../../api-quota/rate-limit-headers';
@@ -277,8 +278,8 @@ export class GitLabConnector implements SourceConnector {
     }
     if (skipped > 0) {
       this.logger.warn(
-        `Segments de lead time non collectés pour ${skipped} merge request(s) : ` +
-          `budget d'API sous la réserve.`,
+        `Lead-time segments not collected for ${skipped} merge request(s): ` +
+          `API budget under the reserve.`,
       );
     }
     return out;
@@ -345,6 +346,47 @@ export class GitLabConnector implements SourceConnector {
     return (project.default_branch as string) ?? 'main';
   }
 
+  async refCommit(ctx: ConnectorContext, repo: string, ref: string): Promise<RefCommit | null> {
+    const gl = this.client(ctx);
+    try {
+      const commit = (await gl.Commits.show(repo, ref)) as Record<string, unknown>;
+      const sha = commit.id as string | undefined;
+      return sha
+        ? { sha, committedAt: (commit.committed_date as string | undefined) ?? null }
+        : null;
+    } catch (e) {
+      if (isNotFound(e)) return null;
+      throw e;
+    }
+  }
+
+  /**
+   * GitLab answers the base itself, so this asks for nothing else — no range,
+   * no commits, just the commit the two refs last had in common.
+   */
+  async mergeBase(
+    ctx: ConnectorContext,
+    repo: string,
+    ref: string,
+    other: string,
+  ): Promise<RefCommit | null> {
+    const gl = this.client(ctx);
+    try {
+      const base = (await gl.Repositories.mergeBase(repo, [other, ref])) as
+        | Record<string, unknown>
+        | undefined;
+      const sha = base?.id as string | undefined;
+      return sha
+        ? { sha, committedAt: (base?.committed_date as string | undefined) ?? null }
+        : null;
+    } catch (e) {
+      // A ref the instance will not resolve is a candidate that loses, not a
+      // run that stops — the caller is asking several of these in a row.
+      if (isNotFound(e)) return null;
+      throw e;
+    }
+  }
+
   async commitPullRequests(
     ctx: ConnectorContext,
     repo: string,
@@ -385,7 +427,7 @@ export class GitLabConnector implements SourceConnector {
 
     if (skipped > 0) {
       this.logger.warn(
-        `Réserve d'API atteinte : merge request non résolue pour ${skipped} commit(s) de ${repo}`,
+        `API reserve reached: merge request not resolved for ${skipped} commit(s) of ${repo}`,
       );
     }
     return requests;
@@ -423,7 +465,7 @@ export class GitLabConnector implements SourceConnector {
 
     if (skipped > 0) {
       this.logger.warn(
-        `Réserve d'API atteinte : commits non lus pour ${skipped} merge request(s) de ${repo}`,
+        `API reserve reached: commits not read for ${skipped} merge request(s) of ${repo}`,
       );
     }
     return commits;
@@ -461,9 +503,12 @@ export class GitLabConnector implements SourceConnector {
     try {
       const commits = await gl.MergeRequests.allCommits(repo, iid);
       if (commits.length === 0) return null;
+      // `authored_date`, not `created_at`: the latter mirrors the committed
+      // date, which a rebase rewrites. GitHub reads the authored one, and a
+      // metric that means two things depending on the platform means neither.
       const oldest = commits.reduce((min, c) => {
-        const t = new Date(c.created_at as string).getTime();
-        return t < min ? t : min;
+        const t = new Date((c.authored_date ?? c.created_at) as string).getTime();
+        return Number.isFinite(t) && t < min ? t : min;
       }, Number.POSITIVE_INFINITY);
       return Number.isFinite(oldest) ? new Date(oldest).toISOString() : null;
     } catch {

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DataList } from '../DataList';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
@@ -11,10 +11,10 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import type { DoraMetric, DoraResult, MetricSeries } from '@repo/shared';
+import type { DoraMetric, DoraResult, DoraSample, MetricSeries, Page } from '@repo/shared';
 import { api } from '../api';
 import { formatDate, formatValue, humanizeDuration, SampleDetails, SampleStatus } from '../doraFormat';
-import { fromSearchParams, toSearchParams } from '../doraQuery';
+import { fromDoraParams, toSearchParams } from '../doraQuery';
 import { FILTER_DEBOUNCE_MS, useCancellableLoad, useDebounced } from '../hooks';
 import { HelpTip } from '../HelpTip';
 import { Pagination } from '../Pagination';
@@ -42,8 +42,9 @@ export function DoraMetricPage({ sourceId, slug }: { sourceId: string; slug: str
     null,
   );
   const [page, setPage] = useState<PageQuery>({ limit: PAGE_SIZE, offset: 0 });
+  const [events, setEvents] = useState<Page<DoraSample> | null>(null);
 
-  const query = useMemo(() => fromSearchParams(searchParams), [searchParams]);
+  const query = useMemo(() => fromDoraParams(searchParams), [searchParams]);
   const settled = useDebounced(query, FILTER_DEBOUNCE_MS);
 
   const load = useCallback(
@@ -54,9 +55,18 @@ export function DoraMetricPage({ sourceId, slug }: { sourceId: string; slug: str
         // depends on the period and the scope, so it cannot be recomputed in
         // isolation — and the report already folds it over the filter.
         api.dora(sourceId, settled, signal),
+        // The same three the report is given: a period picked as a rolling
+        // window has no bounds to pass, and the chart would have covered every
+        // snapshot ever taken beside a value covering ninety days.
         api.metricSeries(
           sourceId,
-          { metric, dimensions: settled.dimensions, from: settled.from, to: settled.to },
+          {
+            metric,
+            dimensions: settled.dimensions,
+            from: settled.from,
+            to: settled.to,
+            windowDays: settled.windowDays,
+          },
           signal,
         ),
       ]);
@@ -69,12 +79,35 @@ export function DoraMetricPage({ sourceId, slug }: { sourceId: string; slug: str
   );
   const { reload, loading, error } = useCancellableLoad(load);
 
+  /**
+   * The events, paged by the server.
+   *
+   * A load of its own, keyed on the page as well: turning a page must not
+   * recompute the report, which is where the connector calls are. The reading
+   * carries its own most recent few, but a list somebody pages through has to
+   * be the whole population.
+   */
+  const loadSamples = useCallback(
+    async (signal: AbortSignal) => {
+      if (!metric) return;
+      setEvents(
+        await api.doraSamples(sourceId, { ...settled, metric: metric as DoraMetric }, page, signal),
+      );
+    },
+    [sourceId, metric, settled, page],
+  );
+  useCancellableLoad(loadSamples);
+
+  // Back to the first page whenever the filters change: an offset into another
+  // population is an offset into nothing.
+  useEffect(() => {
+    setPage((p) => ({ ...p, offset: 0 }));
+  }, [settled, metric]);
+
   const backTo = `/dora/${slug}?${toSearchParams(query)}`;
   const dimensions = Object.entries(query.dimensions ?? {});
   const result = report?.result ?? null;
-  const samples = result?.samples ?? [];
-  const offset = page.offset ?? 0;
-  const shown = samples.slice(offset, offset + (page.limit ?? PAGE_SIZE));
+  const shown = events?.items ?? [];
 
   return (
     <div>
@@ -113,6 +146,14 @@ export function DoraMetricPage({ sourceId, slug }: { sourceId: string; slug: str
           <div className="metric-current">
             <span className="dora-value">{formatValue(result)}</span>
             <span className="muted">{t('dora.sample', { count: result.sampleSize })}</span>
+            {/* A reading over several combinations is not about any one of
+                them. Left unsaid, the value looks wrong against a list that
+                shows a handful of rows from across the lot. */}
+            {(result.combinations ?? 1) > 1 && (
+              <span className="muted">
+                · {t('dora.detail.folded', { count: result.combinations })}
+              </span>
+            )}
           </div>
           <MetricTrend series={report!.series} unit={result.unit} metric={metric as DoraMetric} />
         </section>
@@ -122,22 +163,16 @@ export function DoraMetricPage({ sourceId, slug }: { sourceId: string; slug: str
         <section className="panel">
           <div className="panel-head">
             <h3>{t('dora.detail.title')}</h3>
+            {/* The whole population is reachable now, so the count is a page
+                of a total rather than a warning about what is missing. */}
             <span className="muted">
-              {t('dora.detail.shown', { shown: samples.length, total: result.sampleSize })}
+              {t('dora.detail.shown', { shown: shown.length, total: events?.page.total ?? 0 })}
             </span>
           </div>
           <SampleTable samples={shown} isDuration={result.unit === 'seconds'} />
-          <Pagination
-            info={{
-              total: samples.length,
-              limit: page.limit ?? PAGE_SIZE,
-              offset,
-              hasMore: offset + shown.length < samples.length,
-            }}
-            value={page}
-            onChange={setPage}
-            disabled={loading}
-          />
+          {events && (
+            <Pagination info={events.page} value={page} onChange={setPage} disabled={loading} />
+          )}
         </section>
       )}
 

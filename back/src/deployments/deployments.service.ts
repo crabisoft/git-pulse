@@ -21,10 +21,11 @@ import type {
   SourceConnector,
 } from '../sources/connectors/source-connector.interface';
 import { ReaderFactory } from '../ingest/reader.factory';
-import { EnvRulesService } from '../env-rules/env-rules.service';
+import { EnvRulesService, subjectKey } from '../env-rules/env-rules.service';
 import { refUrl } from '../sources/connectors/ref-url';
 import { ReleaseNotesService } from '../release-notes/release-notes.service';
 import { isValidGitRef } from './git-ref';
+import { candidateBranches, nearestBranch } from './nearest-branch';
 import {
   applyFilters,
   byMostRecent,
@@ -236,7 +237,9 @@ export class DeploymentsService {
         when: log.archivedAt,
       });
     }
-    const [env] = await this.envRules.classifyMany(sourceId, [log.environment]);
+    const [env] = await this.envRules.classifyMany(sourceId, [
+      { name: log.environment, repo: log.repo },
+    ]);
     return {
       deployment: {
         id: log.deploymentId,
@@ -264,9 +267,9 @@ export class DeploymentsService {
   }
 
   /**
-   * The ref a comparison starts from. Only `default` costs a call, and only
-   * when it is the one asked for — a named ref needs nothing looked up, and a
-   * previous deployment is already in the list loaded above.
+   * The ref a comparison starts from. Only `default` and `nearest` cost calls,
+   * and only when they are the one asked for — a named ref needs nothing looked
+   * up, and a previous deployment is already in the list loaded above.
    */
   private async resolveBase(
     connector: SourceConnector,
@@ -289,7 +292,40 @@ export class DeploymentsService {
       return customRef;
     }
     if (base === 'default') return connector.defaultBranch(ctx, repo);
+    if (base === 'nearest') return this.nearestBase(connector, ctx, repo, target.ref);
     return previousDeployment(classified, target)?.ref ?? null;
+  }
+
+  /**
+   * The branch the deployed ref last parted from, or the default branch when
+   * the history names none.
+   *
+   * A platform records nothing about where a branch was cut from, so it is read
+   * back out of the merge bases: one call per candidate, which is why the
+   * candidates are ranked and capped before any of them is spent — see
+   * `candidateBranches`. Under the API reserve it is not attempted at all: this
+   * is a nicety on a comparison that already has an answer, and the reserve
+   * exists for the calls that do not.
+   */
+  private async nearestBase(
+    connector: SourceConnector,
+    ctx: ConnectorContext,
+    repo: string,
+    ref: string,
+  ): Promise<string | null> {
+    if (ctx.allowsOptionalCalls?.() === false) return connector.defaultBranch(ctx, repo);
+
+    const candidates = candidateBranches(await connector.listBranches(ctx, repo), ref);
+    if (candidates.length === 0) return connector.defaultBranch(ctx, repo);
+
+    const tip = await connector.refCommit(ctx, repo, ref);
+    const bases = await Promise.all(
+      candidates.map(async (candidate) => ({
+        ...candidate,
+        base: await connector.mergeBase(ctx, repo, ref, candidate.branch),
+      })),
+    );
+    return nearestBranch(bases, tip) ?? connector.defaultBranch(ctx, repo);
   }
 
   /** The period's deployments over the given repos, classified. */
@@ -316,14 +352,19 @@ export class DeploymentsService {
     sourceId: string,
     deployments: Deployment[],
   ): Promise<ClassifiedDeployment[]> {
-    const names = [...new Set(deployments.map((d) => d.environment))];
+    // Once per (repo, environment) rather than per name: a rule confined to a
+    // repo makes the same name classify differently from one repo to the next.
     const [classified, spec] = await Promise.all([
-      this.envRules.classifyMany(sourceId, names),
+      this.envRules.classifyByPair(
+        sourceId,
+        deployments.map((d) => ({ name: d.environment, repo: d.repo })),
+      ),
       this.sources.readSpec(sourceId),
     ]);
-    const byName = new Map(classified.map((env) => [env.name, env]));
     return deployments.map((deployment) => {
-      const env = byName.get(deployment.environment);
+      const env = classified.get(
+        subjectKey({ name: deployment.environment, repo: deployment.repo }),
+      );
       return {
         ...deployment,
         attributes: env?.attributes ?? {},
