@@ -22,14 +22,14 @@ describe('DORA query serialisation', () => {
     const fetchMock = stubFetch();
     await api.dora('s1', {
       repos: ['api', 'web'],
-      dimensions: { app: 'Extranet', type: 'Prod' },
+      dimensions: { app: 'Portal', type: 'Prod' },
     });
 
     const params = urlOf(fetchMock).searchParams;
     // The API reads a repeated parameter; a single joined string would land in
     // one repo literally named "api,web".
     expect(params.getAll('repos')).toEqual(['api', 'web']);
-    expect(params.getAll('dimension')).toEqual(['app:Extranet', 'type:Prod']);
+    expect(params.getAll('dimension')).toEqual(['app:Portal', 'type:Prod']);
   });
 
   it('drops what was left undefined instead of sending it empty', async () => {
@@ -109,10 +109,10 @@ describe('isAbort', () => {
 describe('release notes and rewriting', () => {
   it('carries the range in the query, dropping the bounds left to default', async () => {
     const fetchMock = stubFetch();
-    await api.releaseNotes('s1', { repo: 'extranet-api', to: 'v2.1.0' });
+    await api.releaseNotes('s1', { repo: 'portal-api', to: 'v2.1.0' });
 
     const params = urlOf(fetchMock).searchParams;
-    expect(params.get('repo')).toBe('extranet-api');
+    expect(params.get('repo')).toBe('portal-api');
     expect(params.get('to')).toBe('v2.1.0');
     // Omitted means "the tag below `to`", which an empty string would not.
     expect(params.has('from')).toBe(false);

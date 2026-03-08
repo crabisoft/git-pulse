@@ -5,7 +5,7 @@ import type { DeploymentBase, DeploymentChanges } from '@repo/shared';
 import { api } from '../api';
 import { useCancellableLoad } from '../hooks';
 import { PlatformLink } from '../PlatformLink';
-import { RefLink } from '../RefLink';
+import { BaseRef, RefLink } from '../RefLink';
 import { CommitList } from '../CommitList';
 import { CopyButton } from '../CopyButton';
 import { FilterField } from '../Filters';
@@ -180,8 +180,10 @@ function Changes({ changes }: { changes: DeploymentChanges }) {
   return (
     <>
       <p className="muted">
-        {t('deployments.against')}{' '}
-        <RefLink name={changes.baseRef} url={changes.baseRefUrl} />
+        {/* The base is named rather than assumed: a comparison read back from
+            the archive was made against what the archiver found, which is not
+            always what the picker above is showing. */}
+        <BaseRef base={changes.base} name={changes.baseRef} url={changes.baseRefUrl} />
         {/* Said rather than shown silently: this comparison was made when the
             refs still existed, and nothing here could make it again today. */}
         {changes.archivedAt && (

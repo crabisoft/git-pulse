@@ -380,7 +380,7 @@ function TicketRuleTestDialog({ onClose }: { onClose: () => void }) {
             className="mono-input"
             value={repo}
             onChange={(e) => setRepo(e.target.value)}
-            placeholder="extranet-api"
+            placeholder="portal-api"
             spellCheck={false}
           />
         </label>

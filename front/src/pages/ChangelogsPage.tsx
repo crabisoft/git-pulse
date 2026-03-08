@@ -8,7 +8,7 @@ import { ChoiceFilter, FilterField } from '../Filters';
 import { RepoFilter } from '../RepoFilter';
 import { Pagination } from '../Pagination';
 import { PlatformLink } from '../PlatformLink';
-import { RefLink } from '../RefLink';
+import { BaseRef, RefLink } from '../RefLink';
 import { DataList } from '../DataList';
 import { CommitList } from '../CommitList';
 import { CopyButton } from '../CopyButton';
@@ -153,7 +153,7 @@ export function ChangelogsPage({ sourceId }: { sourceId: string }) {
                   <RefLink name={log.ref} url={log.refUrl} />
                   {log.baseRef && (
                     <div className="muted">
-                      {t('deployments.against')} <RefLink name={log.baseRef} url={log.baseRefUrl} />
+                      <BaseRef base={log.base} name={log.baseRef} url={log.baseRefUrl} />
                     </div>
                   )}
                 </>

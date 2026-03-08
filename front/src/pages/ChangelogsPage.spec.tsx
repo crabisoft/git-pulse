@@ -110,6 +110,23 @@ describe('ChangelogsPage', () => {
     expect(api.changelog).toHaveBeenCalledWith('src-1', 'gh:widget:1', expect.anything());
   });
 
+  it('says what the base it compares against is, and not only its name', async () => {
+    // "Against develop" reads as a complete sentence and answers nothing:
+    // develop could be the last thing deployed here, the branch this one was
+    // cut from, or the repo's default. The record knows which; the row says it.
+    vi.mocked(api.changelogs).mockResolvedValue(
+      report({
+        changelogs: {
+          items: [summary({ base: 'nearest', baseRef: 'develop' })],
+          page: { total: 1, limit: 25, offset: 0, hasMore: false },
+        },
+      }),
+    );
+    renderPage();
+
+    expect(await screen.findByText('deployments.againstKind.nearest')).toBeInTheDocument();
+  });
+
   it('tells an archive that has never run from one whose filters match nothing', async () => {
     vi.mocked(api.changelogs).mockResolvedValue(
       report({
