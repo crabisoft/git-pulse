@@ -26,8 +26,11 @@ import type {
   DeploymentChangelog,
   DeploymentChanges,
   DeploymentReport,
+  DoraMetric,
   DoraReport,
+  DoraSample,
   JobFailure,
+  JobRunning,
   JobHandle,
   JobStatus,
   JobWarning,
@@ -251,6 +254,10 @@ export interface CreateEnvRuleInput {
   /** Omitted means `environment`. */
   target?: RuleTarget;
   priority?: number;
+  /** Forced on a match, for what the name carries nothing to capture. */
+  attributes?: Record<string, string>;
+  /** Confines the rule to the repos this matches. Empty means all of them. */
+  repo?: string;
 }
 
 /** Every field is optional; omitted ones keep their stored value. */
@@ -386,6 +393,19 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(historyDays === undefined ? {} : { historyDays }),
     }),
+  /**
+   * Queues a replay of the DORA metric history over `days` days.
+   *
+   * Omitting the depth falls back to the DORA window. Rejects with 409 while a
+   * replay of the same source is still in flight. Unlike a re-read, the depth
+   * is not written on the source: it says how far back to restate readings,
+   * not how deep to ingest.
+   */
+  rebuildMetrics: (id: string, days?: number) =>
+    request<JobHandle>(`/sources/${id}/dora/rebuild`, {
+      method: 'POST',
+      body: JSON.stringify(days === undefined ? {} : { days }),
+    }),
   /** Where a queued job got to. `unknown` once the queue has evicted it. */
   jobStatus: (handle: JobHandle, signal?: AbortSignal) =>
     request<JobStatus>(`/jobs/${handle.queue}/${handle.id}`, { signal }),
@@ -413,16 +433,20 @@ export const api = {
   updateEnvRule: (id: string, input: UpdateEnvRuleInput) =>
     request<EnvRulePublic>(`/env-rules/${id}`, { method: 'PATCH', body: JSON.stringify(input) }),
   deleteEnvRule: (id: string) => request<void>(`/env-rules/${id}`, { method: 'DELETE' }),
-  classifyEnv: (sourceId: string, name: string, target: RuleTarget) =>
+  classifyEnv: (sourceId: string, name: string, target: RuleTarget, repo?: string) =>
     request<ClassifiedEnvironment>(`/sources/${sourceId}/env-rules/classify`, {
       method: 'POST',
-      body: JSON.stringify({ name, target }),
+      body: JSON.stringify({ name, target, repo }),
     }),
-  /** Stateless classification: a name against an ad-hoc rule set. */
-  previewEnvRules: (name: string, rules: CreateEnvRuleInput[]) =>
+  /**
+   * Stateless classification: a name against an ad-hoc rule set. The repo is
+   * what the rules confined to one are matched against; without it they stand
+   * down, exactly as in the views that classify a name across repos.
+   */
+  previewEnvRules: (name: string, rules: CreateEnvRuleInput[], repo?: string) =>
     request<ClassifiedEnvironment>('/env-rules/preview', {
       method: 'POST',
-      body: JSON.stringify({ name, rules }),
+      body: JSON.stringify({ name, rules, repo }),
     }),
 
   /** Every rule; each names the tracker it belongs to. */
@@ -446,6 +470,9 @@ export const api = {
 
   /** Queue counts, schedules and reachability, read at the instant. */
   jobs: (signal?: AbortSignal) => request<JobsSnapshot>('/jobs', { signal }),
+  /** What is running, and what is queued behind it. */
+  runningJobs: (query?: FailedJobsQuery, signal?: AbortSignal) =>
+    request<Page<JobRunning>>(`/jobs/running${qs({ ...query })}`, { signal }),
   /** Failed jobs, newest first, across the queues unless one is named. */
   failedJobs: (query?: FailedJobsQuery, signal?: AbortSignal) =>
     request<Page<JobFailure>>(`/jobs/failures${qs({ ...query })}`, { signal }),
@@ -655,6 +682,29 @@ export const api = {
         }),
       { signal },
     ),
+  /**
+   * The events behind one metric, paginated — all of them, over the same period
+   * and slice as the value. The reading itself carries only its most recent
+   * few, which is what a list somebody pages through cannot be.
+   */
+  doraSamples: (
+    sourceId: string,
+    query: DoraQuery & { metric: DoraMetric },
+    page?: PageQuery,
+    signal?: AbortSignal,
+  ) =>
+    request<Page<DoraSample>>(
+      `/sources/${sourceId}/dora/samples` +
+        qs({
+          metric: query.metric,
+          from: query.from,
+          to: query.to,
+          windowDays: query.windowDays,
+          dimension: Object.entries(query.dimensions ?? {}).map(([k, v]) => `${k}:${v}`),
+          ...page,
+        }),
+      { signal },
+    ),
   /** One metric over a period, folded over the filter and bucketed by day. */
   metricSeries: (
     sourceId: string,
@@ -663,6 +713,8 @@ export const api = {
       dimensions?: Record<string, string>;
       from?: string;
       to?: string;
+      /** The rolling window, when the period was picked as one — usually. */
+      windowDays?: number;
     },
     signal?: AbortSignal,
   ) =>
@@ -673,6 +725,7 @@ export const api = {
           dimension: Object.entries(query.dimensions ?? {}).map(([k, v]) => `${k}:${v}`),
           from: query.from,
           to: query.to,
+          windowDays: query.windowDays,
         }),
       { signal },
     ),

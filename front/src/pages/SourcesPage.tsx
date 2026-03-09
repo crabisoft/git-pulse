@@ -34,6 +34,7 @@ import {
 } from '../api';
 import {
   DeepSyncIcon,
+  RebuildMetricsIcon,
   DeleteIcon,
   EditIcon,
   PlusIcon,
@@ -214,6 +215,7 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
   const [webhookSetup, setWebhookSetup] = useState<IssuedWebhook | null>(null);
   /** Source whose deep re-read is being set up, before it is asked for. */
   const [refreshing, setRefreshing] = useState<SourcePublic | null>(null);
+  const [rebuilding, setRebuilding] = useState<SourcePublic | null>(null);
   /** Queued re-reads being followed, per source. Dropped once they settle. */
   const [jobs, setJobs] = useState<Record<string, JobHandle>>({});
 
@@ -392,6 +394,24 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
   }
 
   /**
+   * Replays the metric history of a source.
+   *
+   * Unlike the re-read above, the depth given here is not written on the
+   * source: it says how far back to restate readings, not how deep to ingest.
+   * Nothing to reload afterwards — what changed is a history no list shows.
+   */
+  async function startRebuild(source: SourcePublic, days?: number) {
+    setRebuilding(null);
+    setCollected((cur) => ({ ...cur, [source.id]: 'pending' }));
+    try {
+      const handle = await api.rebuildMetrics(source.id, days);
+      setJobs((cur) => ({ ...cur, [source.id]: handle }));
+    } catch (err) {
+      setCollected((cur) => ({ ...cur, [source.id]: { ok: false, message: apiErrorInfo(err) } }));
+    }
+  }
+
+  /**
    * Makes a source the one the application opens on. At most one holds it, so
    * the whole list is reloaded rather than the one row: taking it changes the
    * source that had it, and a list showing two stars is a list that lies.
@@ -541,6 +561,15 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
                       <DeepSyncIcon />
                     </IconButton>
                   )}
+                  {/* Replaying costs no listing, so it is offered whatever the
+                      mode: what it needs is already collected. */}
+                  <IconButton
+                    label={t('sources.rebuild.action')}
+                    disabled={cs === 'pending'}
+                    onClick={() => setRebuilding(s)}
+                  >
+                    <RebuildMetricsIcon />
+                  </IconButton>
                   <IconButton label={t('common.delete')} tone="danger" onClick={() => setDeleting(s)}>
                     <DeleteIcon />
                   </IconButton>
@@ -588,6 +617,14 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
           source={refreshing}
           onConfirm={(days) => void startRefresh(refreshing, days)}
           onClose={() => setRefreshing(null)}
+        />
+      )}
+
+      {rebuilding && (
+        <RebuildDialog
+          source={rebuilding}
+          onConfirm={(days) => void startRebuild(rebuilding, days)}
+          onClose={() => setRebuilding(null)}
         />
       )}
 
@@ -644,6 +681,9 @@ function RefreshDialog({
       }
     >
       <p>{t('sources.refresh.explain')}</p>
+      {/* Said before the click: this used to only add rows, and now it
+          replaces the readings of the depth it covers. */}
+      <p className="field-note">{t('sources.refresh.rebuilds')}</p>
       <label>
         {t('sources.refresh.depth')}
         <select value={depth} onChange={(e) => setDepth(e.target.value)}>
@@ -662,6 +702,76 @@ function RefreshDialog({
           {depth ? t('sources.refresh.depthPersists') : t('sources.refresh.depthUnchanged')}
         </span>
       </label>
+    </Modal>
+  );
+}
+
+/**
+ * Confirms a replay of the metric history, and is where its depth is chosen.
+ *
+ * A dialog rather than a button that just runs, for a different reason than the
+ * re-read beside it: this one **replaces** the readings of the range it covers.
+ * The depth defaults to the DORA window — the period the metrics are read over,
+ * and the one whose history is worth restating first — and it is not written on
+ * the source: it says how far back to restate, not how deep to ingest.
+ */
+function RebuildDialog({
+  source,
+  onConfirm,
+  onClose,
+}: {
+  source: SourcePublic;
+  onConfirm: (days?: number) => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  // Empty means the DORA window, which the server applies — the page has no
+  // business restating a default the settings own.
+  const [depth, setDepth] = useState('');
+  const title = t('sources.rebuild.title', { name: source.name });
+
+  return (
+    <Modal
+      title={title}
+      label={title}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" type="button" onClick={onClose}>
+            {t('common.cancel')}
+          </button>
+          <button
+            className="btn primary"
+            type="button"
+            onClick={() => onConfirm(depth ? Number(depth) : undefined)}
+            autoFocus
+          >
+            {t('sources.rebuild.confirm')}
+          </button>
+        </>
+      }
+    >
+      <p>{t('sources.rebuild.explain')}</p>
+      <label>
+        {t('sources.rebuild.depth')}
+        <select value={depth} onChange={(e) => setDepth(e.target.value)}>
+          <option value="">{t('sources.rebuild.defaultDays')}</option>
+          {SOURCE_HISTORY_PRESETS.map((days) => (
+            <option key={days} value={days}>
+              {t('sources.form.historyOption', { count: days })}
+            </option>
+          ))}
+        </select>
+        <span className="hint">{t('sources.rebuild.depthHint')}</span>
+      </label>
+      {/* The two notions the depth is read as one of: how many days are
+          rewritten, and what each of them measures. The second is a setting,
+          not a choice made here. */}
+      <p className="field-note">{t('sources.rebuild.windowNote')}</p>
+      {/* Said before the click, not after: what is older keeps the
+          classification it was written with, and the two eras will sit on one
+          curve without anything on it saying so. */}
+      <p className="field-note">{t('sources.rebuild.olderKept')}</p>
     </Modal>
   );
 }

@@ -405,10 +405,15 @@ export interface DeploymentReport {
  *   the only questions — "since the release we rolled back from" is a tag, and
  *   "since that fix" is a sha.
  *
- * The platforms record nothing about which branch a branch was cut from, so
- * `default` is as close to a fork point as anything can honestly get.
+ * - `nearest`: the branch the deployed ref last shared a commit with — the
+ *   closest thing to a fork point the history can be made to say. The platforms
+ *   record nothing about which branch a branch was cut from, so it is read back
+ *   out of the merge bases: whichever branch parted from this ref most recently
+ *   is the one it grew out of. It costs a comparison per candidate, which is
+ *   why the archive asks for it only when the previous deployment carried
+ *   nothing and there is otherwise nothing to show.
  */
-export type DeploymentBase = 'previous' | 'default' | 'ref';
+export type DeploymentBase = 'previous' | 'default' | 'ref' | 'nearest';
 
 /** What a deployment carried, against the base that was asked for. */
 export interface DeploymentChanges {
@@ -562,6 +567,20 @@ export interface MergedPullRequest {
   /** Source branch, for ticket extraction. */
   headRef: string;
   openedAt: string;
+  /**
+   * When the oldest commit of the branch was **written** — the authored date,
+   * on both platforms, never the committed one.
+   *
+   * The two diverge the moment a branch is rebased: rebasing rewrites when a
+   * commit was deposited and preserves when it was written. Reading the
+   * deposited date would restart the coding time at every rebase, and would
+   * mean something different on each platform — which it did, GitHub reading
+   * one and GitLab the other.
+   *
+   * Null where the platform was not asked: these are the first calls given up
+   * under the API reserve, and a pull request without one leaves the coding and
+   * lead time samples rather than entering them at zero.
+   */
   firstCommitAt: string | null;
   firstReviewAt: string | null;
   mergedAt: string;
@@ -806,6 +825,21 @@ export interface EnvRulePublic {
   kind: EnvRuleKind;
   target: RuleTarget;
   priority: number;
+  /**
+   * Attributes the rule forces when its pattern matches, on top of whatever its
+   * named groups capture. A group can only ever yield text the name contains;
+   * these exist for the names that carry nothing to capture — `ProdContoso`
+   * says which customer it serves but never which application. Empty for the
+   * rules that only capture.
+   */
+  attributes: Record<string, string>;
+  /**
+   * Pattern the repo must match for the rule to contribute anything — groups
+   * and forced attributes alike. Strictly: a rule that names a repo stands down
+   * wherever the repo is unknown, which is every view that folds a name across
+   * repos. Null, the common case, means the rule applies everywhere.
+   */
+  repo: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -852,15 +886,19 @@ export type FailureSource = 'pipelines' | 'incidents' | 'both';
 
 // ─── DORA ────────────────────────────────────────────────────────────
 
-export type DoraMetric =
-  | 'deployment_frequency'
-  | 'lead_time'
-  | 'change_failure_rate'
-  | 'mttr'
-  | 'coding_time'
-  | 'pickup_time'
-  | 'review_time'
-  | 'deploy_time';
+/** Every metric the report computes — the list a route validates against. */
+export const DORA_METRICS = [
+  'deployment_frequency',
+  'lead_time',
+  'change_failure_rate',
+  'mttr',
+  'coding_time',
+  'pickup_time',
+  'review_time',
+  'deploy_time',
+] as const;
+
+export type DoraMetric = (typeof DORA_METRICS)[number];
 
 /** One event contributing to a metric value, shown in the detail view. */
 export interface DoraSample {
@@ -940,6 +978,17 @@ export interface DoraResult {
   sampleSize: number;
   /** Most recent contributing events, capped — sampleSize keeps the real total. */
   samples: DoraSample[];
+  /**
+   * How many dimension combinations this reading folds together. Absent on a
+   * result that is one combination, which is what every producer returns.
+   *
+   * Worth stating because a fold is where a reading stops being about one
+   * thing: a value over three combinations was computed across all their
+   * events, while the sample list below shows the most recent of the lot. Being
+   * unable to find the value in the visible rows is expected, and a page that
+   * does not say so leaves the reader to discover it as a contradiction.
+   */
+  combinations?: number;
 }
 
 /**
@@ -1273,8 +1322,17 @@ export const RETENTION_MARGIN_MAX = 365;
  */
 export interface DashboardEnvironment {
   name: string;
-  /** Attributes from named capture groups — empty when no rule matches. */
+  /**
+   * What the deployments folded into this row say, minus what they contradict
+   * each other about — empty when no rule matches any of them. A row can span
+   * several repos, and one environment name can mean different things in two of
+   * them: a key they answer *differently* is dropped rather than picked between,
+   * since a row claiming either would be true of neither. A key only one of them
+   * answers is kept — silence is not disagreement. Narrow the set (by filtering
+   * on a dimension) and the row says more, because less is left to contradict it.
+   */
   attributes: Record<string, string>;
+  /** Every membership the row's deployments carry — a set contradicts nothing. */
   metaEnvironments: string[];
   /** Repos having deployed to this environment over the window. */
   repos: string[];
@@ -1535,6 +1593,33 @@ export interface JobFailure {
   failedAt: string | null;
   /** ISO date the job was enqueued. */
   enqueuedAt: string;
+  data: Record<string, unknown>;
+}
+
+/**
+ * A job in flight: running, or queued behind one that is.
+ *
+ * The counts alone answer "three things are happening" and nothing else, which
+ * is unreadable exactly when it matters — a queue that is not draining looks
+ * the same as one that is. This carries what each job is working on and how
+ * long it has been at it.
+ */
+export interface JobRunning {
+  queue: QueueName;
+  id: string;
+  name: string;
+  /** `active` is running; `waiting` and `delayed` are lined up behind it. */
+  state: Extract<JobState, 'active' | 'waiting' | 'delayed'>;
+  /** ISO date the worker picked it up; null for one that has not started. */
+  startedAt: string | null;
+  /** ISO date it was enqueued — how long a waiting job has been waiting. */
+  enqueuedAt: string;
+  /** ISO date a delayed job is due to run; null when it is not delayed. */
+  scheduledFor: string | null;
+  /** 0-100 where the job reports it, null where it reports nothing. */
+  progress: number | null;
+  /** Which attempt is in flight: above 1, this one already failed once. */
+  attemptsMade: number;
   data: Record<string, unknown>;
 }
 

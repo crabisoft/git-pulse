@@ -89,7 +89,7 @@
       "uiTitle": "Interface",
       "saved": "Settings saved.",
       "doraWindowDays": "DORA window",
-      "doraWindowDaysHint": "default lookback period, overridable from the DORA page",
+      "doraWindowDaysHint": "the DORA page's default period, which any filter there overrides — and the window every historised reading is computed over, which nothing overrides",
       "stalePrHours": "Stale PR threshold (hours)",
       "stalePrHoursHint": "beyond this age a PR/MR is flagged as stale",
       "pageSize": "Items per page",
@@ -187,13 +187,13 @@
         "tab": "Environments",
         "listTitle": "Environment rules",
         "hint": "Matched against deployment environment names. Feeds the dashboard classification and the deployment metrics breakdown.",
-        "placeholder": "e.g. AcmeProdExtranetBack"
+        "placeholder": "e.g. AcmeProdPortalBack"
       },
       "repository": {
         "tab": "Repositories",
         "listTitle": "Repository rules",
         "hint": "Matched against repo names. A pull request has no environment, so this is what breaks lead time down by application or customer.",
-        "placeholder": "e.g. extranet-api"
+        "placeholder": "e.g. portal-api"
       },
       "incident": {
         "tab": "Incidents",
@@ -209,6 +209,14 @@
       "kind": "Kind",
       "priority": "Priority",
       "priorityHint": "lower wins on attribute conflicts",
+      "attributes": "Forced attributes",
+      "attributesHint": "set on a match, for what the name does not spell out",
+      "attributeKey": "key, e.g. App",
+      "attributeValue": "value, e.g. Billing",
+      "addAttribute": "Add an attribute",
+      "repo": "Repo",
+      "repoHint": "RegEx; empty applies to every repo. The rule stays silent wherever the repo is unknown.",
+      "repoPlaceholder": "e.g. ^contoso-billing$",
       "submit": "Add rule",
       "submitting": "Saving…"
     },
@@ -219,9 +227,14 @@
       "ruleHint": "Classify a name against this rule only.",
       "placeholder": "e.g. prod-acme",
       "classify": "Classify",
+      "repoPlaceholder": "repo, e.g. contoso-billing",
+      "noRepoHint": "No repo named: the rules confined to one contribute nothing, as in the dashboard.",
       "attributes": "Attributes",
       "metaEnvironments": "Meta-environments",
-      "none": "none"
+      "none": "none",
+      "against": "Against",
+      "againstCatalogue": "the rules listed here",
+      "againstSourceHint": "This source's own rules — the ones it subscribed to, matched against its own repo names. This is the answer production gives."
     },
     "catalogueHint": "Defined once for the whole install, then enabled source by source from the source form. A pattern describes a naming convention, which rarely stops at one repository host."
   },
@@ -277,7 +290,8 @@
     },
     "envRule": {
       "notFound": "Rule not found.",
-      "invalidPattern": "Invalid regular expression: {{pattern}}"
+      "invalidPattern": "Invalid regular expression: {{pattern}}",
+      "contributesNothing": "A simple rule must capture a named group or force an attribute; “{{pattern}}” does neither."
     },
     "settings": {
       "outOfRange": "Invalid value for {{key}}: expected an integer between {{min}} and {{max}}.",
@@ -299,7 +313,9 @@
       "dora": "DORA snapshot failed: {{error}}",
       "changelogs": "Deployment changelogs could not be archived: {{error}}",
       "changelogsPartial": "{{count}} deployment(s) could not be archived — their contents will be lost once they age out of the store.",
-      "refreshInFlight": "This source is already being re-read ({{state}}). Wait for that run to finish before asking for another."
+      "refreshInFlight": "This source is already being re-read ({{state}}). Wait for that run to finish before asking for another.",
+      "rebuildInFlight": "A replay of this source is already running ({{state}}).",
+      "rebuild": "The metric history could not be replayed: {{error}}"
     },
     "ticketRule": {
       "notFound": "Ticket rule not found.",
@@ -366,7 +382,7 @@
       "repo": "Repo",
       "title": "Title",
       "author": "Author",
-      "ageH": "Age (h)",
+      "age": "Age",
       "ref": "Ref",
       "status": "Status",
       "duration": "Duration",
@@ -432,7 +448,8 @@
       "title": "Contributing events",
       "noSample": "No event to detail.",
       "gone": "This metric no longer exists for that combination over the requested period.",
-      "openMetric": "Open the detail: {{metric}}"
+      "openMetric": "Open the detail: {{metric}}",
+      "folded": "across {{count}} dimension combinations"
     },
     "metric": {
       "deployment_frequency": "Deployment frequency",
@@ -614,6 +631,7 @@
       "actionDays": "Re-read the whole history ({{days}} days)",
       "title": "Re-read {{name}}",
       "explain": "The whole history this source keeps is read again from its platform, rather than what changed since the last run. It runs in the background — you can leave this page. It is the most expensive thing this page starts, and on a wide scope it spends a large part of the API budget.",
+      "rebuilds": "It also replays the DORA metric history over that depth: the readings of those days are recomputed from what has just been ingested, with the classification rules as they stand today, and replace the ones taken at the time. Anything older is kept as it is.",
       "depth": "History depth",
       "keepWindow": "Leave it as it is (follows the reporting window)",
       "keepDays": "Leave it as it is ({{days}} days)",
@@ -628,6 +646,18 @@
       "is": "Opens by default",
       "make": "Open on this source by default",
       "badge": "default"
+    },
+    "rebuild": {
+      "action": "Replay the metric history",
+      "title": "Replay the metric history of “{{name}}”",
+      "explain": "Recomputes the DORA readings of past days from the data already collected, using the classification rules as they stand today. No platform listing beyond one read.",
+      "depth": "Days to rewrite",
+      "depthHint": "counted back from yesterday; today is left to the next collection",
+      "olderKept": "Anything older is kept as it is, classified the way it was then — the two will sit on one curve.",
+      "confirm": "Replay",
+      "queued": "Replay queued.",
+      "defaultDays": "As many days as the reporting window",
+      "windowNote": "This says how many days are rewritten, not what each of them measures: every replayed reading covers the reporting window ending on its own day, as the scheduled collection does. To change that, change the window in Settings, then replay."
     }
   },
   "ticketRules": {
@@ -792,6 +822,11 @@
     "basePrevious": "The previous deployment here",
     "baseDefault": "The default branch",
     "against": "Against",
+    "againstKind": {
+      "previous": "Against the previous deployment",
+      "default": "Against the default branch",
+      "nearest": "Against the nearest branch"
+    },
     "noBase": "No earlier successful deployment to this environment over this period — there is nothing to compare against. The default branch is the other base on offer.",
     "noChange": "Nothing between the two refs. Deploying the branch you are comparing against is the usual reason.",
     "summary": "{{count}} commits · {{authors}} authors",
@@ -825,6 +860,23 @@
     "nextRun": "{{pattern}} — next {{at}}",
     "paused": "Paused",
     "observedAt": "Read at {{at}}, refreshed every few seconds.",
+    "running": {
+      "title": "In flight",
+      "hint": "What is running, and what is queued behind it. The longest-running job comes first: a queue that has stopped draining shows up as a job that never leaves.",
+      "empty": "Nothing running, nothing queued.",
+      "stateHeader": "State",
+      "states": {
+        "active": "running",
+        "waiting": "queued",
+        "delayed": "delayed"
+      },
+      "since": "For",
+      "progress": "Progress",
+      "attempt": "attempt {{n}}",
+      "payload": "Payload",
+      "due": "due now",
+      "dueIn": "in {{duration}}"
+    },
     "unreachable": "Redis is not answering: nothing is being collected in the background. ({{error}})",
     "job": "Job",
     "subject": "Subject",
@@ -929,7 +981,9 @@
       "rows": "rows",
       "columns": "columns",
       "needsTwo": "A matrix needs two dimensions to cross. Your rules extract only one: add a capture group, or switch to the control room.",
-      "noTier": "no published scale"
+      "noTier": "no published scale",
+      "more": "+{{count}}",
+      "alsoHere": "Also on this crossing: {{names}}. Cross another dimension to separate them."
     },
     "stream": {
       "title": "Journal",

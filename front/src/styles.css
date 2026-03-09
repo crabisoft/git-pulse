@@ -324,6 +324,9 @@ select {
 .rule-kind { font-size: .66rem; padding: 1px 7px; border-radius: 5px; font-family: var(--mono); vertical-align: middle; border: 1px solid var(--line); color: var(--muted); }
 .rule-kind.meta { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent-deep); border-color: transparent; }
 input.mono-input { font-family: var(--mono); font-size: .84rem; }
+/* Which rule set answers. The catalogue is a rehearsal; a source is the take. */
+.preview-against { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; font-size: .85rem; color: var(--muted); }
+.preview-against select { flex: 1; min-width: 0; }
 .preview-row { display: flex; gap: 8px; margin-bottom: 12px; }
 /* The sample takes the row; the button beside it takes what it needs. */
 .preview-row input { flex: 1; }
@@ -567,14 +570,17 @@ h3.with-help, h2.with-help { display: flex; align-items: center; gap: 6px; }
 .card-line > :not(.card-key) { min-width: 0; overflow-wrap: anywhere; }
 .card > .btn { align-self: flex-start; }
 
-/* A scroll container at every width, not only on a phone.
+/* A scroll container at every width, not only on a phone: left to itself a
+ * table sizes to its content and pushes the document wider than the window,
+ * which moves the whole page rather than just the table. A tablet is where this
+ * bites — too wide for the cards, too narrow for six columns of branch names.
  *
- * `display: block` is what makes a table one at all — as a table box it sizes
- * to its content and pushes the document wider than the window, which moves
- * the whole page rather than just the table. A tablet is where this bites:
- * too wide for the cards, too narrow for six columns of branch names. */
+ * The scroll is the wrapper's, never the table's. Making the table a block to
+ * carry it kept its box the full width while its rows shrank to their content,
+ * so a list sat hugging the left of a panel twice as wide. */
+.data-scroll { overflow-x: auto; }
 table.data {
-  display: block; width: 100%; overflow-x: auto;
+  width: 100%; table-layout: auto;
   border-collapse: collapse; font-size: .88rem;
 }
 table.data th { text-align: left; color: var(--muted); font-weight: 600; font-size: .72rem; text-transform: uppercase; letter-spacing: .05em; padding: 6px 8px; border-bottom: 1px solid var(--line); }
@@ -620,6 +626,13 @@ textarea {
 .hint { color: var(--muted); font-weight: 400; font-size: .74rem; }
 /* Why a field is inert, under the field itself rather than beside its label. */
 .field-note { color: var(--warn); font-weight: 400; font-size: .74rem; margin-top: 4px; }
+
+/* Forced attributes: key, value, and the button that drops the pair. */
+.attr-editor { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+.attr-editor-label { font-size: .85rem; color: var(--muted); }
+.attr-row { display: flex; gap: 6px; align-self: stretch; }
+.attr-row input { flex: 1; min-width: 0; }
+.rule-attrs { margin-top: 4px; }
 
 /* Buttons */
 .btn {
@@ -858,6 +871,13 @@ pre.mono { background: var(--surface-2); border: 1px solid var(--line); border-r
 }
 .job-warnings { margin: 0; padding-left: 16px; color: var(--warn); }
 
+/* Running is the one state worth the accent: the rest of the panel is what has
+   not started yet, and colouring a queue the same as work in progress is how
+   the counts became unreadable in the first place. */
+.pill.job-state.active { background: color-mix(in srgb, var(--accent) 15%, transparent); color: var(--accent-deep); }
+.pill.job-state.waiting, .pill.job-state.delayed { background: var(--surface-2); color: var(--muted); border: 1px solid var(--line); }
+tr.is-active > td, .card.is-active { background: color-mix(in srgb, var(--accent) 4%, transparent); }
+
 /* ───────── Overview
    The landing page reads as one board, not as a stack of cards: hairlines
    between rows rather than a panel around each block, so the eye crosses from
@@ -1086,6 +1106,13 @@ pre.mono { background: var(--surface-2); border: 1px solid var(--line); border-r
 .matrix-ref { font-size: .8rem; overflow-wrap: anywhere; }
 .matrix-none { font-family: var(--mono); font-size: .8rem; color: var(--muted); }
 .matrix-sub { font-size: .7rem; }
+/* What the crossing is standing in front of. Quiet — the cell is still about
+   the one environment running here; this only says it is not alone. */
+.matrix-more {
+  margin-left: 5px; padding: 0 5px; border-radius: 999px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  font-family: var(--mono); font-size: .68rem; color: var(--muted); cursor: help;
+}
 
 /* ───────── Direction C — the delivery stream */
 .stream { display: grid; grid-template-columns: 1.5fr 1fr; gap: 24px; align-items: start; }

@@ -89,7 +89,7 @@
       "uiTitle": "Interface",
       "saved": "Réglages enregistrés.",
       "doraWindowDays": "Fenêtre DORA",
-      "doraWindowDaysHint": "période d'analyse par défaut, surchargeable sur la page DORA",
+      "doraWindowDaysHint": "période par défaut de la page DORA, que tout filtre y surcharge — et fenêtre sur laquelle chaque relevé historisé est calculé, que rien ne surcharge",
       "stalePrHours": "Seuil PR bloquée (heures)",
       "stalePrHoursHint": "au-delà, une PR/MR est signalée comme bloquée",
       "pageSize": "Éléments par page",
@@ -187,13 +187,13 @@
         "tab": "Environnements",
         "listTitle": "Règles d'environnement",
         "hint": "Appliquées aux noms d'environnements de déploiement. Alimentent la classification du dashboard et la ventilation des métriques de déploiement.",
-        "placeholder": "ex. AcmeProdExtranetBack"
+        "placeholder": "ex. AcmeProdPortalBack"
       },
       "repository": {
         "tab": "Repos",
         "listTitle": "Règles de repo",
         "hint": "Appliquées aux noms de repos. Une pull request n'a pas d'environnement : c'est par ici que le lead time se ventile par application ou par client.",
-        "placeholder": "ex. extranet-api"
+        "placeholder": "ex. portal-api"
       },
       "incident": {
         "tab": "Incidents",
@@ -209,6 +209,14 @@
       "kind": "Type",
       "priority": "Priorité",
       "priorityHint": "le plus petit gagne en cas de conflit d'attribut",
+      "attributes": "Attributs forcés",
+      "attributesHint": "posés quand la règle matche, pour ce que le nom ne dit pas",
+      "attributeKey": "clé, ex. App",
+      "attributeValue": "valeur, ex. Billing",
+      "addAttribute": "Ajouter un attribut",
+      "repo": "Repo",
+      "repoHint": "RegEx ; vide s'applique à tous les repos. La règle se tait partout où le repo est inconnu.",
+      "repoPlaceholder": "ex. ^contoso-billing$",
       "submit": "Ajouter la règle",
       "submitting": "Enregistrement…"
     },
@@ -219,9 +227,14 @@
       "ruleHint": "Classe un nom selon cette seule règle.",
       "placeholder": "ex. prod-acme",
       "classify": "Classer",
+      "repoPlaceholder": "repo, ex. contoso-billing",
+      "noRepoHint": "Aucun repo nommé : les règles liées à un repo ne contribuent rien, comme dans le dashboard.",
       "attributes": "Attributs",
       "metaEnvironments": "Méta-environnements",
-      "none": "aucun"
+      "none": "aucun",
+      "against": "Contre",
+      "againstCatalogue": "les règles listées ici",
+      "againstSourceHint": "Les règles propres à cette source — celles auxquelles elle a souscrit, confrontées à ses vrais noms de repos. C'est la réponse que donne la production."
     },
     "catalogueHint": "Définies une fois pour toute l'installation, puis activées source par source depuis le formulaire de source. Un pattern décrit une convention de nommage, qui s'arrête rarement à un seul hébergeur."
   },
@@ -277,7 +290,8 @@
     },
     "envRule": {
       "notFound": "Règle introuvable.",
-      "invalidPattern": "Expression régulière invalide : {{pattern}}"
+      "invalidPattern": "Expression régulière invalide : {{pattern}}",
+      "contributesNothing": "Une règle simple doit capturer un groupe nommé ou forcer un attribut ; « {{pattern}} » ne fait ni l'un ni l'autre."
     },
     "settings": {
       "outOfRange": "Valeur invalide pour {{key}} : attendu un entier entre {{min}} et {{max}}.",
@@ -299,7 +313,9 @@
       "dora": "Relevé DORA échoué : {{error}}",
       "changelogs": "Archivage des changelogs de déploiement échoué : {{error}}",
       "changelogsPartial": "{{count}} déploiement(s) n'ont pas pu être archivés — leur contenu sera perdu dès qu'ils sortiront du magasin.",
-      "refreshInFlight": "Cette source est déjà en cours de relecture ({{state}}). Attendez la fin de ce passage avant d'en demander un autre."
+      "refreshInFlight": "Cette source est déjà en cours de relecture ({{state}}). Attendez la fin de ce passage avant d'en demander un autre.",
+      "rebuildInFlight": "Un rejeu de cette source est déjà en cours ({{state}}).",
+      "rebuild": "L'historique des métriques n'a pas pu être rejoué : {{error}}"
     },
     "ticketRule": {
       "notFound": "Règle de ticket introuvable.",
@@ -366,7 +382,7 @@
       "repo": "Repo",
       "title": "Titre",
       "author": "Auteur",
-      "ageH": "Âge (h)",
+      "age": "Âge",
       "ref": "Ref",
       "status": "Statut",
       "duration": "Durée",
@@ -432,7 +448,8 @@
       "title": "Événements contributeurs",
       "noSample": "Aucun événement à détailler.",
       "gone": "Cette métrique n'existe plus pour cette combinaison sur la période demandée.",
-      "openMetric": "Ouvrir le détail : {{metric}}"
+      "openMetric": "Ouvrir le détail : {{metric}}",
+      "folded": "sur {{count}} combinaisons de dimensions"
     },
     "metric": {
       "deployment_frequency": "Fréquence de déploiement",
@@ -614,6 +631,7 @@
       "actionDays": "Relire tout l'historique ({{days}} jours)",
       "title": "Relire {{name}}",
       "explain": "Tout l'historique conservé par cette source est relu depuis sa plateforme, au lieu de ce qui a changé depuis le dernier passage. L'opération tourne en arrière-plan : vous pouvez quitter cette page. C'est le traitement le plus lourd lancé depuis ici, et sur un large périmètre il consomme une bonne part du budget d'API.",
+      "rebuilds": "Elle rejoue aussi l'historique des métriques DORA sur cette profondeur : les relevés de ces jours-là sont recalculés à partir de ce qui vient d'être ingéré, avec les règles de classification telles qu'elles sont aujourd'hui, et remplacent ceux pris à l'époque. Ce qui est plus ancien est conservé tel quel.",
       "depth": "Profondeur d'historique",
       "keepWindow": "Ne pas changer (suit la fenêtre de reporting)",
       "keepDays": "Ne pas changer ({{days}} jours)",
@@ -628,6 +646,18 @@
       "is": "Ouverte par défaut",
       "make": "Ouvrir cette source par défaut",
       "badge": "par défaut"
+    },
+    "rebuild": {
+      "action": "Rejouer l'historique des métriques",
+      "title": "Rejouer l'historique des métriques de « {{name}} »",
+      "explain": "Recalcule les relevés DORA des jours passés à partir des données déjà collectées, avec les règles de classification telles qu'elles sont aujourd'hui. Aucun listing de la plateforme au-delà d'une lecture.",
+      "depth": "Jours à réécrire",
+      "depthHint": "comptés depuis hier ; aujourd'hui est laissé à la prochaine collecte",
+      "olderKept": "Ce qui est plus ancien est conservé tel quel, classé selon les règles d'alors — les deux se suivront sur une même courbe.",
+      "confirm": "Rejouer",
+      "queued": "Rejeu mis en file.",
+      "defaultDays": "Autant de jours que la fenêtre de reporting",
+      "windowNote": "Ceci dit combien de jours sont réécrits, pas ce que chacun mesure : chaque relevé rejoué porte sur la fenêtre de reporting se terminant à sa propre date, comme le fait la collecte planifiée. Pour changer cela, modifiez la fenêtre dans les Réglages, puis rejouez."
     }
   },
   "ticketRules": {
@@ -792,6 +822,11 @@
     "basePrevious": "Le déploiement précédent ici",
     "baseDefault": "La branche par défaut",
     "against": "Par rapport à",
+    "againstKind": {
+      "previous": "Par rapport au déploiement précédent",
+      "default": "Par rapport à la branche par défaut",
+      "nearest": "Par rapport à la branche la plus proche"
+    },
     "noBase": "Aucun déploiement réussi antérieur sur cet environnement pour cette période — il n’y a rien à comparer. La branche par défaut est l’autre base proposée.",
     "noChange": "Rien entre les deux refs. Déployer la branche à laquelle on compare en est la raison habituelle.",
     "summary": "{{count}} commits · {{authors}} auteurs",
@@ -825,6 +860,23 @@
     "nextRun": "{{pattern}} — prochaine {{at}}",
     "paused": "En pause",
     "observedAt": "Lu à {{at}}, rafraîchi toutes les quelques secondes.",
+    "running": {
+      "title": "En cours",
+      "hint": "Ce qui tourne, et ce qui attend derrière. La tâche la plus ancienne en tête : une file qui ne s'écoule plus se voit à une tâche qui ne part jamais.",
+      "empty": "Rien en cours, rien en attente.",
+      "stateHeader": "État",
+      "states": {
+        "active": "en cours",
+        "waiting": "en file",
+        "delayed": "différée"
+      },
+      "since": "Depuis",
+      "progress": "Avancement",
+      "attempt": "essai {{n}}",
+      "payload": "Charge utile",
+      "due": "imminente",
+      "dueIn": "dans {{duration}}"
+    },
     "unreachable": "Redis ne répond pas : plus rien n’est collecté en fond. ({{error}})",
     "job": "Tâche",
     "subject": "Objet",
@@ -929,7 +981,9 @@
       "rows": "lignes",
       "columns": "colonnes",
       "needsTwo": "Il faut deux dimensions pour croiser une matrice. Vos règles n'en extraient qu'une : ajoutez un groupe de capture, ou passez en salle de contrôle.",
-      "noTier": "hors barème"
+      "noTier": "hors barème",
+      "more": "+{{count}}",
+      "alsoHere": "Aussi sur ce croisement : {{names}}. Croisez une autre dimension pour les séparer."
     },
     "stream": {
       "title": "Journal",
