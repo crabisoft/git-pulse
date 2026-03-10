@@ -28,7 +28,7 @@ export class MasterKeyService implements OnModuleInit {
       const buf = Buffer.from(fromEnv, 'base64');
       if (buf.length !== KEY_LENGTH) {
         throw new Error(
-          `MASTER_KEY invalide : ${buf.length} octets décodés, ${KEY_LENGTH} attendus (base64 de 32 octets).`,
+          `Invalid MASTER_KEY: ${buf.length} bytes decoded, ${KEY_LENGTH} expected (base64 of 32 bytes).`,
         );
       }
       this.key = buf;
@@ -52,7 +52,7 @@ export class MasterKeyService implements OnModuleInit {
     const buf = Buffer.from(raw, 'base64');
     if (buf.length !== KEY_LENGTH) {
       throw new Error(
-        `Fichier master key corrompu (${filePath}) : ${buf.length} octets, ${KEY_LENGTH} attendus.`,
+        `Corrupt master key file (${filePath}): ${buf.length} bytes, ${KEY_LENGTH} expected.`,
       );
     }
     this.logger.log(`Master key loaded from ${filePath}.`);

@@ -43,7 +43,7 @@ async function bootstrap() {
 
   const port = Number(process.env.API_PORT ?? 3001);
   await app.listen(port);
-  new Logger('Bootstrap').log(`API prête sur http://localhost:${port}/api`);
+  new Logger('Bootstrap').log(`API ready on http://localhost:${port}/api`);
 }
 
 bootstrap();
