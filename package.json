@@ -2,7 +2,7 @@
   "name": "git-dashboard",
   "version": "0.1.0",
   "private": true,
-  "description": "Dashboard self-hosted de monitoring GitHub/GitLab (DORA, release notes IA, connecteurs param\u00e9trables)",
+  "description": "Self-hosted monitoring dashboard for GitHub and GitLab: DORA metrics, deployment changelogs, AI-assisted release notes, pluggable connectors",
   "license": "AGPL-3.0-only",
   "author": "CrabiSoft",
   "workspaces": [
