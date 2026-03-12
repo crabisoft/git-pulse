@@ -10,6 +10,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:layout": "playwright test",
+    "screenshots": "playwright test --config playwright.screenshots.config.ts",
     "test:watch": "vitest"
   },
   "dependencies": {

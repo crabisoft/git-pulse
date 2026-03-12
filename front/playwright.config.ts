@@ -14,6 +14,9 @@ import { defineConfig, devices } from '@playwright/test';
  */
 export default defineConfig({
   testDir: './e2e',
+  // The documentation screenshots have a config of their own — they write into
+  // docs/ and assert nothing, which is not what this suite is for.
+  testIgnore: '**/screenshots.spec.ts',
   // The screenshots are written on every run and read by whoever is looking at
   // a change; the assertions are what fail. Kept out of git — see .gitignore.
   outputDir: './e2e/.results',
