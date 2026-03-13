@@ -8,6 +8,7 @@ mode ?= dev
         dev dev-down logs restart restart-back ps \
         prod prod-down \
         migrate deploy studio db-reset psql sh-back set-password \
+        demo demo-clear \
         clean clean-all
 
 help: ## Show this help
@@ -87,6 +88,15 @@ set-password: ## Reset a password, or recreate an admin (usage: make set-passwor
 	@test -n "$(email)" -a -n "$(password)" \
 		|| { echo "Usage: make set-password email=<email> password=<password>"; exit 1; }
 	$(COMPOSE) $(mode) exec back node back/dist/scripts/set-password.js "$(email)" "$(password)"
+
+# ─── Demo ────────────────────────────────────────────────────────────
+# A fictional organization, written straight into the store. Nothing is
+# collected and no credential is involved — see docs/technical/demo.md.
+demo: ## Fill the install with demo data (usage: make demo [email=… password=…] [mode=prod])
+	$(COMPOSE) $(mode) exec back node back/dist/scripts/seed-demo.js "$(email)" "$(password)"
+
+demo-clear: ## Remove the demo source and its rules
+	$(COMPOSE) $(mode) exec back node back/dist/scripts/seed-demo.js --clear
 
 # ─── Cleanup ─────────────────────────────────────────────────────────
 clean: ## Remove build artifacts (dist)
