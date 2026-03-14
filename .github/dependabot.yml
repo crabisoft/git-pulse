@@ -1,0 +1,50 @@
+version: 2
+
+# Grouped on purpose: this is a monorepo with three manifests, and ungrouped
+# updates would open a dozen pull requests a week that nobody reads. What must
+# not be grouped is a security fix — Dependabot raises those on their own
+# whatever is configured here.
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # A patch bump of anything is one pull request, and one CI run.
+      patches:
+        update-types: [patch]
+      types:
+        patterns: ['@types/*']
+      nest:
+        patterns: ['@nestjs/*', 'reflect-metadata', 'rxjs']
+      prisma:
+        patterns: ['prisma', '@prisma/client']
+      react:
+        patterns: ['react', 'react-dom', '@types/react', '@types/react-dom', 'react-*']
+      testing:
+        patterns: ['vitest', '@vitest/*', '@testing-library/*', '@playwright/test', 'jsdom']
+    ignore:
+      # Node's own major cadence is a decision, not an update: it moves the
+      # engines floor, both Dockerfiles and the CI runner together.
+      - dependency-name: '@types/node'
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ['*']
+
+  - package-ecosystem: docker
+    directory: /.docker
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      images:
+        patterns: ['*']
