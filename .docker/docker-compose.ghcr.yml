@@ -1,0 +1,77 @@
+# Git Dashboard, from the published images — no clone, no build.
+#
+#   curl -O https://raw.githubusercontent.com/CrabiSoft/git-dashboard/main/.docker/docker-compose.ghcr.yml
+#   docker compose -f docker-compose.ghcr.yml up -d
+#   open http://localhost:8080
+#
+# Self-contained on purpose: this file is meant to be downloaded on its own, so
+# it chains no override and reads no .env of the repository. Everything is
+# overridable from the environment, image names included.
+#
+# Only the web port is published. The API is reached through nginx on the same
+# origin, which is also why TRUST_PROXY is set: without it the sign-in throttle
+# would count every attempt against the proxy rather than the caller.
+services:
+  db:
+    image: ${POSTGRES_IMAGE:-postgres:16-alpine}
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-dashboard}
+      # Change this for anything that outlives a trial.
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dashboard}
+      POSTGRES_DB: ${POSTGRES_DB:-dashboard}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-dashboard}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: ${REDIS_IMAGE:-redis:7-alpine}
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  back:
+    image: ${API_IMAGE:-ghcr.io/crabisoft/git-dashboard/api:latest}
+    restart: unless-stopped
+    environment:
+      API_PORT: 3001
+      # The address the app is reached at. Behind TLS, set it to the https one
+      # — the session cookie follows it.
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:8080}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-}
+      # One hop: the bundled nginx. Add to it if another proxy fronts that one.
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-dashboard}:${POSTGRES_PASSWORD:-dashboard}@db:5432/${POSTGRES_DB:-dashboard}?schema=public
+      REDIS_URL: redis://redis:6379
+      MASTER_KEY_FILE: /data/master.key
+    volumes:
+      # Generated on first boot. It decrypts every stored credential — back up
+      # this volume, and treat losing it as losing every source token.
+      - master-key:/data
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  front:
+    image: ${WEB_IMAGE:-ghcr.io/crabisoft/git-dashboard/web:latest}
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    depends_on:
+      - back
+
+volumes:
+  db-data:
+  redis-data:
+  master-key:
