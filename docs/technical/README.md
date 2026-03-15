@@ -40,8 +40,16 @@ is the distinction every other document leans on.
 
 | Document | What it covers |
 |---|---|
-| [Running it](operations.md) | The Docker stacks, background jobs, database migrations |
+| [Running it](operations.md) | The Docker stacks, published images, background jobs, migrations |
+| [The demo dataset](demo.md) | `make demo` — a fictional organization, no credential involved |
 | [Tests](testing.md) | What the suites cover, and what they deliberately do not |
+
+## When something is wrong
+
+These documents explain how the thing works. The [runbooks](../runbooks/)
+explain what to do about it — backups, upgrades, the master key, a collection
+that has stopped, a budget that is spent, webhooks that never arrive, a database
+that keeps growing.
 
 Contributing to the project itself — setup, expectations, commit style — is
 [`CONTRIBUTING.md`](../../CONTRIBUTING.md).

@@ -29,12 +29,43 @@ All the Docker configuration lives in `.docker/`:
   docker-compose.yml       # base: db + redis
   docker-compose.dev.yml   # DEV override: watch / HMR, code mounted as a volume
   docker-compose.prod.yml  # PROD override: built images + nginx
+  docker-compose.ghcr.yml  # standalone: the published images, nothing built
   Dockerfile.back · Dockerfile.front · nginx.conf
   .env                     # versioned defaults (no real secrets)
   .env.local               # your local overrides (git-ignored)
   .env.local.example       # template to copy
   compose.sh               # wrapper: mode + .env/.env.local chaining
 ```
+
+### The published images
+
+`.github/workflows/publish.yml` pushes two images to the GitHub registry on
+every push to `main`, and again with a version on every `v*` tag:
+
+| Image | Holds |
+|---|---|
+| `ghcr.io/<owner>/git-dashboard/api` | the compiled API; applies the migrations, then starts |
+| `ghcr.io/<owner>/git-dashboard/web` | the built bundle behind nginx, which also proxies `/api` |
+
+`docker-compose.ghcr.yml` is what runs them, and it is deliberately
+**standalone**: it chains no override and reads none of the repository's `.env`
+files, because it is meant to be downloaded on its own by somebody who never
+cloned anything.
+
+That stack publishes **one port**. The bundle in the web image is built with no
+`VITE_API_URL`, so it calls `/api` on whatever origin served it, and nginx
+proxies that to the API container — which is the only reason a single published
+image can run on any host. Baking an address in at build time would produce an
+image that works on exactly one deployment.
+
+The API is therefore behind a proxy in that stack, and `TRUST_PROXY` is set to
+`1` accordingly: without it every sign-in attempt would be counted against
+nginx rather than against the caller, and the throttle would lock everybody out
+together.
+
+Images are amd64 only. Building arm64 on the hosted runners means emulating it,
+which turns a three-minute install into a thirty-minute one; the workflow says
+where to add the platform when that stops being true.
 
 **Dev mode (recommended day to day)** — hot reload: `nest start --watch` on the
 API, the Vite server (HMR) on the front. Source code is mounted as a volume, no

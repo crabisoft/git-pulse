@@ -41,6 +41,16 @@ The Playwright layout suite (`npm run test:layout -w @repo/front`) is **not** in
 CI: it needs browsers and a running stack. Run it locally when you change
 layout, spacing, or a shared control.
 
+The screenshots in the README are generated from the same fixtures — no
+database, no credential, no cropping by hand:
+
+```bash
+npm run screenshots -w @repo/front   # rewrites docs/images/*.png
+```
+
+Regenerate them when a change alters what those pages look like, and commit the
+images with it.
+
 If your change touches `back/prisma/schema.prisma`, include the generated
 migration:
 

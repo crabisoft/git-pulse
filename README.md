@@ -8,6 +8,39 @@ GitLab, public or self-hosted.
 Adding a platform means adding a connector: nothing in the data model, the UI or
 the metric names mentions one.
 
+![The overview: every environment with what is running on it, the four DORA
+metrics with their trend, and the deployments of the last 24
+hours](docs/images/overview.png)
+
+<details>
+<summary><b>More screenshots</b> — DORA metrics, a metric's trend, deployments, the changelog archive</summary>
+
+<br>
+
+**DORA metrics**, over the period and the dimensions the filter bar asks for.
+
+![The DORA page: the four metrics plus the lead-time breakdown, each with a
+sparkline](docs/images/dora.png)
+
+**One metric**: how it moved, then the events it is made of.
+
+![The lead time page: a chart of the historised snapshots, and the pull
+requests behind the value](docs/images/dora-metric.png)
+
+**Deployments**, filtered by period, repository, environment, status and
+dimensions.
+
+![The deployments page: a row per deployment with its environment, ref and
+status](docs/images/deployments.png)
+
+**The changelog archive**: what each deployment carried, filed while the
+platform could still say.
+
+![The changelogs page: archived deployments with their commit and author
+counts](docs/images/changelogs.png)
+
+</details>
+
 ## What it does
 
 - **DORA metrics** — deployment frequency, lead time for changes, change
@@ -34,35 +67,49 @@ the metric names mentions one.
 
 Everything the connectors do is **read-only**.
 
-## Quick start
+## Run it
 
-Requires Docker, and Node 24+ to work on the code.
+One file, published images, no clone and no build:
 
 ```bash
-git clone <this repository>
-cd git-dashboard
-make dev
+curl -O https://raw.githubusercontent.com/CrabiSoft/git-dashboard/main/.docker/docker-compose.ghcr.yml
+docker compose -f docker-compose.ghcr.yml up -d
 ```
 
-- Web: <http://localhost:5173>
-- API: <http://localhost:3001/api>
+The app is on <http://localhost:8080>, API included — one origin, one port. The
+database migrations run before the API starts. Then:
 
-The first run installs dependencies into a container volume and applies the
-database migrations — expect a minute. Then:
-
-1. Open the web app and **create the first admin account**. The bootstrap closes
-   as soon as one exists.
+1. Open it and **create the first admin account**. The bootstrap closes as soon
+   as one exists.
 2. Go to **Settings › Sources** and add a source: platform, base URL,
    organization or group, and a credential. It is encrypted immediately.
 3. **Test** the connection, then **Collect now**.
 
-For the production stack, `make prod` builds the images and serves the app
-through nginx on <http://localhost:8080>. Run `make` with no argument for the
-full list of targets.
-
 > ⚠️ The master key encrypts every stored credential. It is generated on first
 > boot into the `master-key` volume — **back it up separately**. Losing it makes
 > every stored secret unrecoverable.
+
+**Just looking?** `make demo` fills a local install with a fictional
+organization — metrics, deployments and changelogs to click through, with no
+GitHub or GitLab account involved. See [the demo dataset](docs/technical/demo.md).
+
+## Work on it
+
+Requires Docker and Node 24+.
+
+```bash
+git clone https://github.com/CrabiSoft/git-dashboard.git
+cd git-dashboard
+make dev
+```
+
+- Web: <http://localhost:5173> (Vite, hot reload)
+- API: <http://localhost:3001/api> (NestJS, watch mode)
+
+`make prod` builds the images locally and serves the app through nginx on
+<http://localhost:8080>. Run `make` with no argument for the full list of
+targets, and read [`CONTRIBUTING.md`](CONTRIBUTING.md) before opening a pull
+request.
 
 ## Configuration
 
@@ -75,8 +122,9 @@ public access — lives in the database and is edited from **Settings**.
 
 ## Documentation
 
-Full technical documentation is in **[`docs/technical/`](docs/technical/)**.
-Start with [Collection and metrics](docs/technical/collection-and-metrics.md):
+Everything is under **[`docs/`](docs/)** — [`technical/`](docs/technical/) for
+how it works, [`runbooks/`](docs/runbooks/) for what to do when something is
+wrong. Start with [Collection and metrics](docs/technical/collection-and-metrics.md):
 it explains what is stored and what is recomputed on every request, which is
 what makes the rest make sense.
 
@@ -88,6 +136,7 @@ what makes the rest make sense.
 | [Deployments](docs/technical/deployments.md) | What each deployment carried, and the archive |
 | [Release notes](docs/technical/release-notes.md) | Commit ranges, squashes, model rewriting |
 | [Running it](docs/technical/operations.md) | Docker stacks, background jobs, migrations |
+| [Runbooks](docs/runbooks/) | Backups, upgrades, the master key, and what to do when collection stops |
 
 ## Stack
 
