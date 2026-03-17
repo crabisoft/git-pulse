@@ -38,6 +38,9 @@ services:
     volumes:
       - ..:/app
       - back-node-modules:/app/node_modules
+      # Same as the front's below: what npm cannot hoist must not be written
+      # into the host tree by a container running as root.
+      - back-local-modules:/app/back/node_modules
       # Build outputs in named volumes so the container never writes (as root)
       # into the host working tree.
       - back-dist:/app/back/dist
@@ -71,13 +74,23 @@ services:
     volumes:
       - ..:/app
       - front-node-modules:/app/node_modules
+      # Same reason as the dist volumes above, and it was missing: `npm install`
+      # writes here whatever it cannot hoist, and Vite and Storybook cache here
+      # too. Bound to the host tree, all of it lands as root-owned directories
+      # the host user then cannot write into — which is what makes a tool run
+      # from the host fail with EACCES on a path it has every right to expect.
+      - front-local-modules:/app/front/node_modules
     ports:
       - "${WEB_PORT_DEV:-5173}:${WEB_PORT_DEV:-5173}"
+      # The component catalogue, on demand: `make storybook`.
+      - "${STORYBOOK_PORT:-6006}:6006"
     depends_on:
       - back
 
 volumes:
   back-node-modules:
+  back-local-modules:
   front-node-modules:
+  front-local-modules:
   back-dist:
   shared-dist:

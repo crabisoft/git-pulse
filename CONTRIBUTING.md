@@ -41,6 +41,19 @@ The Playwright layout suite (`npm run test:layout -w @repo/front`) is **not** in
 CI: it needs browsers and a running stack. Run it locally when you change
 layout, spacing, or a shared control.
 
+Working on a shared control? The catalogue is where to see it in the states a
+page rarely reaches, in both colour modes and both languages:
+
+```bash
+make dev                             # the catalogue runs in the front container
+make storybook                       # http://localhost:6006
+```
+
+A new shared control comes with a story, and a control that grows a state worth
+recognising — an empty one, a degraded one, one that renders nothing — comes
+with a story for it. CI builds the catalogue, so a story that stops compiling
+fails there rather than the day somebody opens it.
+
 The screenshots in the README are generated from the same fixtures — no
 database, no credential, no cropping by hand:
 

@@ -60,3 +60,15 @@ than a logged 500, an abort reaching the UI as silence rather than a red banner.
 > guard that stops a superseded run from clearing the loading flag, or joining a
 > repeated query parameter with commas each fails the suite. A suite that stays
 > green under those proves nothing.
+
+## What is not a test
+
+The [component catalogue](frontend.md#the-component-catalogue) is built by CI
+and asserts nothing. It is a workshop: a place to see a control in the states
+that are hard to reach from a page, in both colour modes and both languages.
+Building it catches a story that stopped compiling, and that is the whole of
+what it proves.
+
+The screenshots in the README come from the same fixtures, through the layout
+suite's harness rather than through Storybook — they are pictures of pages, and
+the pages are what a reader wants to see.

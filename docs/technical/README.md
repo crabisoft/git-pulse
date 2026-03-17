@@ -14,7 +14,7 @@ is the distinction every other document leans on.
 |---|---|
 | [Architecture](architecture.md) | Stack, monorepo layout, and what each module owns |
 | [Collection and metrics](collection-and-metrics.md) | Where data lives, when it is written, when a figure is computed |
-| [The web application](frontend.md) | Routing, slugs, and how the UI paces expensive requests |
+| [The web application](frontend.md) | Routing, slugs, request pacing, and the component catalogue |
 | [API conventions](api.md) | Pagination on list routes, and cancelling an abandoned request |
 | [Accounts and access](authentication.md) | The four access levels, sessions, sign-in throttling, recovery |
 

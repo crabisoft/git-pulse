@@ -1,0 +1,72 @@
+import { Meta } from '@storybook/addon-docs/blocks';
+
+<Meta title="Get started" />
+
+# The component catalogue
+
+The controls the pages of **Git Dashboard** are built from, each in the states
+that are awkward to reach from a running install: a quota gauge on a window
+that has already elapsed, a sparkline with too few points to plot, a pagination
+that renders nothing because one page covers everything.
+
+Two sections:
+
+- **Foundations › Design tokens** — every custom property `styles.css`
+  declares, read back out of the loaded stylesheet as the browser resolved it.
+  It cannot go stale: a token added or renamed appears on the next reload, and
+  the values follow the mode in effect.
+- **Controls** — one page per shared control, one story per state worth
+  recognising.
+
+## The three switches above
+
+They are what a control can look right in one of and wrong in another. What
+each one actually moves, since two of them are quieter than they look:
+
+- **Theme** — light or dark, through the `data-mode` attribute the application
+  stamps on the root element. Every surface and every ink follows it, so this
+  one shows everywhere.
+- **Direction** — `control`, `instrument` or `stream`, through
+  `data-direction`. It carries **shape, not colour**: `--radius` (3px against
+  10px) and `--density` (14px against 20px), which read on corners and
+  spacing — a modal, a card, a menu. Its one loud exception is the **tier ramp
+  of the gauge**, declared under `instrument` and nowhere else; the gauge
+  stories pin that direction through a parameter, since it is the only one the
+  application ever draws one in.
+- **Language** — English or French, through the application's own i18n. It
+  changes what a control *writes*: `Pagination`, `Modal`, `HelpTip`. Most
+  stories are mostly data — a repository name, a count, a ref — and those read
+  the same in both. It applies to the canvas and to nothing around it:
+  Storybook's own interface ships in English only, with no translation layer
+  to hook into.
+
+Nothing here holds a copy of the styling. A story is painted by `styles.css`
+against those attributes, exactly as a page is.
+
+## What is not here
+
+**The pages.** They need the router, the API and a session, and the layout
+suite under `front/e2e/` already renders them in a real engine at three widths
+over stubbed answers. A second harness for the same thing would be two to keep
+in step, with the odds on the wrong one rotting. The screenshots in the README
+come from that suite too.
+
+**Assertions.** This is a workshop, not a test layer. CI builds it, which
+catches a story that stopped compiling — the one regression nobody would
+otherwise notice, since nothing renders a catalogue entry until somebody opens
+it. What a component *does* is the unit suites' business.
+
+## Running it
+
+```sh
+make dev          # the catalogue runs in the front container
+make storybook    # http://localhost:6006
+```
+
+The rows in the `DataList` stories come from `front/e2e/fixtures.ts` — the same
+fixtures the layout suite and the documentation screenshots answer with, rather
+than a second set of invented data that would have drifted within a release.
+
+Adding a shared control? Add a story with it, and a story for each state worth
+recognising — an empty one, a degraded one, one that renders nothing. See
+[`CONTRIBUTING.md`](https://github.com/CrabiSoft/git-dashboard/blob/main/CONTRIBUTING.md).

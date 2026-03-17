@@ -4,7 +4,7 @@ COMPOSE := sh .docker/compose.sh
 # Stack the container targets act on. Override with `mode=prod`.
 mode ?= dev
 
-.PHONY: help install build typecheck test \
+.PHONY: help install build typecheck test storybook \
         dev dev-down logs restart restart-back ps \
         prod prod-down \
         migrate deploy studio db-reset psql sh-back set-password \
@@ -29,6 +29,12 @@ typecheck: ## Type-check the whole monorepo
 
 test: ## Run the unit tests (pure engines: classification, DORA, tickets)
 	npm test
+
+# In the running front container, like every other target that needs the
+# dependencies installed: the host has no node_modules of its own for this, and
+# the ones the dev stack installs belong to root. Needs `make dev` first.
+storybook: ## Component catalogue on http://localhost:6006 (needs the dev stack up)
+	$(COMPOSE) dev exec front npm run storybook -w @repo/front -- --host 0.0.0.0 --no-open
 
 # ─── Docker: development (watch / HMR) ───────────────────────────────
 dev: ## Start the dev stack (db + redis + back watch + front HMR)

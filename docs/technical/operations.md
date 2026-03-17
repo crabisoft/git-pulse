@@ -15,6 +15,7 @@ full self-documented list:
 | `make deploy` | Apply pending migrations |
 | `make prod` | Prod stack (build + nginx) |
 | `make test` | Unit tests of the pure engines |
+| `make storybook` | Component catalogue, on `:6006` (dev stack up) |
 | `make build` | Full monorepo build |
 | `make clean` | Clean build artifacts |
 
@@ -81,6 +82,21 @@ npm run docker:dev:down    # stop
 > First run: the dev containers execute `npm install` into a dedicated
 > `node_modules` volume (Alpine binaries) — expect a minute the first time,
 > instant afterwards.
+
+**Nothing the containers write lands in the working tree.** The root
+`node_modules`, the per-package ones, the build outputs and the caches are all
+named volumes, because these containers run as root and everything they leave
+behind in a bind mount is a root-owned file the host user then cannot touch —
+which surfaces later as a tool run from the host failing with `EACCES` on a
+path that looks perfectly ordinary.
+
+The catalogue runs in the front container for the same reason, and its port is
+published alongside the dev server's:
+
+```bash
+make dev
+make storybook             # http://localhost:6006 · STORYBOOK_PORT moves it
+```
 
 **Prod mode (validating a build)** — compiled API + static front served by nginx.
 

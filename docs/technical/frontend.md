@@ -70,3 +70,49 @@ of their filters. Two safeguards, shared in `front/src/hooks.ts`:
 An abort is not an error: `isAbort()` singles it out in `api.ts` so a
 cancellation never shows up as a red banner, and the abandoned load leaves the
 `loading` flag to whichever load replaced it.
+
+## The component catalogue
+
+The pages are built from about twenty shared controls, and `styles.css`
+declares the tokens they are drawn with. Neither had anywhere to be *seen*:
+the tokens existed only as twelve hundred lines of CSS, and the only way to
+look at a control was to find a page that happened to use it in the state you
+were after.
+
+```bash
+make storybook                           # the workshop, on :6006
+npm run build-storybook -w @repo/front   # what CI builds
+```
+
+It runs **inside the front container**, which is where the dependencies are:
+`make dev` first. The port is published like the dev server's, and
+`STORYBOOK_PORT` moves it.
+
+**Controls only, deliberately.** The pages need the router, the API and a
+session; the layout suite under `e2e/` already renders them in a real engine
+over stubbed answers, and a second harness for the same thing would be two to
+keep in step — with the odds on the wrong one being the one that rots.
+
+What it holds:
+
+| | |
+|---|---|
+| **Foundations › Design tokens** | Every custom property, read back out of the loaded stylesheet at render time. It cannot go stale: a token added or renamed appears on the next reload, and the values follow the mode in effect |
+| **Controls › …** | One page per shared control, and a story per state that is easy to get wrong — a declared quota beside a measured one, a window that has elapsed, a sparkline with too few points to plot, a page of results that fits in one page and therefore renders nothing |
+
+Three switches sit in the toolbar, because they are exactly what a control can
+look right in one of and wrong in another: the **colour mode**, the **overview
+direction** and the **language**. The first two are the same `data-` attributes
+`display.ts` stamps on the root element, so a story is styled by the
+application's own rules rather than by anything Storybook holds.
+
+The rows in the `DataList` stories come from `e2e/fixtures.ts` — the fixtures
+the layout suite and the documentation screenshots already answer with. A
+second set of invented data here would have drifted from that one within a
+release.
+
+> **It asserts nothing.** CI builds it, which catches a story that no longer
+> compiles — a catalogue entry nobody would otherwise notice was gone, since
+> nothing renders it until somebody opens it. What a component *does* is still
+> the unit suites' business, and whether a page fits a phone is still the
+> layout suite's.
