@@ -49,11 +49,13 @@ connector calls, too expensive to replay on each keystroke in a date field. A
 bound left empty stays open.
 
 The period picker — DORA page and settings alike — offers the same values
-(`DORA_WINDOW_PRESETS`: 15 d, 1, 2, 3, 6 months, 1 and 2 years; a month counts
+(`DORA_WINDOW_PRESETS`: 7 and 15 days, 1, 2, 3, 6 months, 1 year; a month counts
 as 30 days, a year as 365). The API itself accepts any value between
-`DORA_WINDOW_MIN` and `DORA_WINDOW_MAX`: an already-stored window outside the
-presets therefore stays offered in the list rather than being silently
-rewritten.
+`DORA_WINDOW_MIN` and `DORA_WINDOW_MAX`, and the maximum is the wider of the
+two — two years, the deepest a source can be ingested. An already-stored window
+outside the presets therefore stays offered in the list rather than being
+silently rewritten, which is what an install configured at two years before the
+preset was dropped relies on.
 
 > Attributes of `environment` and `repository` rules share the same namespace.
 > If `app` exists on both sides, the values must be **identical to the

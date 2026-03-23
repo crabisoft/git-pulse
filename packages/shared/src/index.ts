@@ -997,20 +997,28 @@ export interface DoraResult {
  * any value in [DORA_WINDOW_MIN, DORA_WINDOW_MAX] — these are what the dropdowns
  * propose, not what the backend enforces.
  */
-export const DORA_WINDOW_PRESETS: readonly number[] = [15, 30, 60, 90, 180, 365, 730];
+export const DORA_WINDOW_PRESETS: readonly number[] = [7, 15, 30, 60, 90, 180, 365];
 
 export const DORA_WINDOW_MIN = 1;
-/** Widest window accepted, i.e. the largest preset. */
+/**
+ * Widest window accepted — wider than the widest preset, and deliberately.
+ *
+ * A source can be ingested two years deep, so a range the store actually holds
+ * has to stay readable: by an ad-hoc query, and by an install that had two
+ * years configured before the dropdowns stopped offering it.
+ */
 export const DORA_WINDOW_MAX = 730;
 
 /**
  * Depths a stored source offers, in days, and the bounds around them.
  *
- * The same range as the reporting window, deliberately: a depth shallower than
- * the window would leave the reports reading rows nobody ingested, and one
- * deeper is exactly what makes widening the window later worth anything.
+ * The reporting windows plus the two years they no longer propose, which is
+ * where the long end belongs: a depth shallower than the window would leave the
+ * reports reading rows nobody ingested, and one deeper is exactly what makes
+ * widening the window later worth anything. A window is what gets read; a depth
+ * is what is kept, and keeping more than is read is the point of having both.
  */
-export const SOURCE_HISTORY_PRESETS: readonly number[] = DORA_WINDOW_PRESETS;
+export const SOURCE_HISTORY_PRESETS: readonly number[] = [...DORA_WINDOW_PRESETS, 730];
 export const SOURCE_HISTORY_MIN = DORA_WINDOW_MIN;
 export const SOURCE_HISTORY_MAX = DORA_WINDOW_MAX;
 
