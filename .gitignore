@@ -12,6 +12,7 @@ coverage/
 data/
 *.key
 !/*.key.example
+backup/
 
 # Prisma generated client
 back/src/generated/

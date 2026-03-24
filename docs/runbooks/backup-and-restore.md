@@ -24,6 +24,11 @@ $C exec -T back cat /data/master.key > backup/master.key
 chmod 600 backup/master.key
 ```
 
+From a clone, the same block with a target: `make backup` (add
+`mode=prod` for the production stack, `out=/somewhere/else` to write elsewhere
+than `backup/`). It writes the same two file names, which is what the restore
+below expects.
+
 `pg_dump` runs against a live database and takes a consistent snapshot; there is
 no need to stop anything. Adjust `-U dashboard` and the database name if
 `POSTGRES_USER` or `POSTGRES_DB` were changed.

@@ -3,11 +3,14 @@
 COMPOSE := sh .docker/compose.sh
 # Stack the container targets act on. Override with `mode=prod`.
 mode ?= dev
+# Where `make backup` writes. Override with `out=/somewhere/else`.
+out ?= backup
 
 .PHONY: help install build typecheck test storybook \
         dev dev-down logs restart restart-back ps \
         prod prod-down \
         migrate deploy studio db-reset psql sh-back set-password \
+        backup \
         demo demo-clear \
         clean clean-all
 
@@ -85,6 +88,20 @@ psql: ## psql console on the dev database (running container)
 
 sh-back: ## Open a shell in the back container (dev)
 	$(COMPOSE) dev exec back sh
+
+# ─── Backup ──────────────────────────────────────────────────────────
+# The two halves, in one pass, with the stack running: a dump restored without
+# its key gives back credentials nobody can decrypt. `pg_dump` snapshots a live
+# database, so nothing has to be stopped. Adjust the user and database name
+# below if POSTGRES_USER or POSTGRES_DB were changed in .docker/.env.local.
+# Keep the key somewhere other than the dump — see
+# docs/runbooks/backup-and-restore.md, which also covers the restore.
+backup: ## Back up the database and the master key (usage: make backup [out=backup] [mode=prod])
+	@mkdir -p "$(out)"
+	$(COMPOSE) $(mode) exec -T db pg_dump -U dashboard --format=custom dashboard > "$(out)/dashboard.dump"
+	$(COMPOSE) $(mode) exec -T back cat /data/master.key > "$(out)/master.key"
+	@chmod 600 "$(out)/master.key"
+	@echo "Wrote $(out)/dashboard.dump and $(out)/master.key — store the key apart from the dump."
 
 # ─── Accounts ────────────────────────────────────────────────────────
 # Recovery only: the UI handles accounts. Use it when no admin can sign in —
