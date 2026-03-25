@@ -18,6 +18,7 @@ import {
   type RuleTarget,
   type ScopeRules,
   type SourceKind,
+  type SourceCoverage,
   type SourceMode,
   type SourcePublic,
   type ConnectionTestResult,
@@ -46,6 +47,7 @@ import { IconButton } from '../IconButton';
 import { ConfirmDialog, Modal } from '../Modal';
 import { MultiSelect } from '../MultiSelect';
 import { Pagination } from '../Pagination';
+import { CoverageLine } from '../CoverageLine';
 import { QuotaGauge } from '../QuotaGauge';
 
 interface FormState {
@@ -207,6 +209,8 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
   const [collected, setCollected] = useState<Record<string, ConnectionTestResult | 'pending'>>({});
   const [quotas, setQuotas] = useState<ApiQuotaPublic[]>([]);
   const [budgets, setBudgets] = useState<ApiBudgetPublic[]>([]);
+  /** How much history each source actually holds — see the coverage endpoint. */
+  const [coverage, setCoverage] = useState<SourceCoverage[]>([]);
   const [budgeting, setBudgeting] = useState<SourcePublic | null>(null);
   /** Open editor: `null` source means creation. */
   const [editing, setEditing] = useState<{ source: SourcePublic | null } | null>(null);
@@ -246,9 +250,23 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
     }
   }, []);
 
+  /**
+   * Coverage is loaded on its own too, and for the same reason: it counts rows
+   * rather than reading a source, so a store that has never been filled costs
+   * the list an empty line and nothing else.
+   */
+  const loadCoverage = useCallback(async () => {
+    try {
+      setCoverage(await api.listCoverage());
+    } catch {
+      setCoverage([]);
+    }
+  }, []);
+
   useEffect(() => {
     void loadQuotas();
-  }, [loadQuotas]);
+    void loadCoverage();
+  }, [loadQuotas, loadCoverage]);
 
   useEffect(() => {
     void load();
@@ -295,8 +313,10 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
         return next;
       });
       // A deep re-read is the heaviest thing this page starts, and the gauges
-      // are the point of watching it from here.
-      await loadQuotas();
+      // are the point of watching it from here. What it brought back — or what
+      // a replay restated — is what the coverage line reports, so that one is
+      // read again with them.
+      await Promise.all([loadQuotas(), loadCoverage()]);
     };
 
     const timer = setInterval(() => void tick(), JOB_POLL_MS);
@@ -305,7 +325,7 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
       live = false;
       clearInterval(timer);
     };
-  }, [jobs, loadQuotas]);
+  }, [jobs, loadQuotas, loadCoverage]);
 
   /** Quotas of a source, by bucket — a provider meters several of them. */
   const quotasBySource = useMemo(() => {
@@ -316,6 +336,12 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
     }
     return map;
   }, [quotas]);
+
+  /** What each source actually holds — one entry per source, or none yet. */
+  const coverageBySource = useMemo(
+    () => new Map(coverage.map((row) => [row.sourceId, row])),
+    [coverage],
+  );
 
   /** The ceiling declared for a source, if any — at most one per subject. */
   const budgetBySource = useMemo(() => {
@@ -366,9 +392,10 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
       setCollected((cur) => ({ ...cur, [id]: { ok: false, message: apiErrorInfo(err) } }));
     }
     // A collection is the heaviest thing this page can start, and the gauges
-    // are the point of watching it from here. The source itself did not change,
+    // are the point of watching it from here. It also wrote rows and readings,
+    // which is what the coverage line counts. The source itself did not change,
     // so nothing else needs reloading.
-    await loadQuotas();
+    await Promise.all([loadQuotas(), loadCoverage()]);
   }
 
   /**
@@ -398,7 +425,8 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
    *
    * Unlike the re-read above, the depth given here is not written on the
    * source: it says how far back to restate readings, not how deep to ingest.
-   * Nothing to reload afterwards — what changed is a history no list shows.
+   * Nothing to reload here — the run is followed, and the effect above reads
+   * the coverage back once it settles.
    */
   async function startRebuild(source: SourcePublic, days?: number) {
     setRebuilding(null);
@@ -464,6 +492,8 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
           {sources.map((s) => {
             const ts = tested[s.id];
             const cs = collected[s.id];
+            /** Absent until the coverage call answers, and on nothing else. */
+            const held = coverageBySource.get(s.id);
             return (
               <li key={s.id} className="source-row">
                 <div>
@@ -486,6 +516,10 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
                       </>
                     )}
                   </div>
+                  {/* Under the badges rather than beside them: how deep a
+                      source reaches is read once, when something looks wrong
+                      about a period — it is not part of what a source is. */}
+                  {held && <CoverageLine coverage={held} />}
                   {(quotasBySource.get(s.id) ?? []).map((quota) => (
                     <QuotaGauge key={quota.bucket} quota={quota} />
                   ))}

@@ -147,6 +147,21 @@
       "admin": "Admin",
       "user": "User"
     },
+    "coverage": {
+      "depth": "depth {{days}} d",
+      "store": "history held {{days}} d",
+      "storeEmpty": "nothing stored",
+      "metrics": "DORA {{days}} d",
+      "metricsEmpty": "no DORA reading",
+      "explain": "What the source actually holds, against the depth it asks for: a report over a longer period is answering from data that does not exist. DORA readings are historized by the collection, so they start the day it did, however deep the store is.",
+      "deployments": "Deployments",
+      "pullRequests": "Pull requests",
+      "pipelines": "Pipelines",
+      "metricsLabel": "DORA readings",
+      "spanDays": "{{days}} d, since {{from}} ({{rows}} rows)",
+      "none": "nothing stored",
+      "swept": "The sweep keeps {{days}} d; beyond that rows are deleted — except pull requests still open."
+    },
     "form": {
       "name": "Name",
       "email": "Email",

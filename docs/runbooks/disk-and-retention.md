@@ -75,6 +75,14 @@ Neither direction takes effect when you press save.
   source before re-reading — a depth applied to a single run would be swept away
   the same night.
 
+Either way, **Sources** states what each one actually holds under its row —
+`depth 60 d · history held 47 d · DORA 12 d`, with the breakdown per table
+behind the `?`. That is where a widening is confirmed as having landed, and
+where a narrowing shows up once the sweep has passed. The figure turns amber
+while the store is shallower than the depth it claims, which is normal for the
+hours after a widening and a symptom at any other time — see
+[Nothing is being collected](collection-stalled.md).
+
 A narrowing then takes its whole effect in one sweep, and that sweep is a single
 transaction: every source's three deletions and the deliveries, together. On a
 loaded install the first one after a large narrowing runs long and holds its

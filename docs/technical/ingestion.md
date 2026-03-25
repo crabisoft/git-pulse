@@ -45,6 +45,39 @@ cursors), `WebhookSecret` and `WebhookDelivery`.
 > lists names only, and the one caller that needs a default branch — the release
 > notes — reads live in either mode. It is a column waiting for a reader.
 
+## How deep it actually goes
+
+A source's depth says what the ingestion *asks* its provider for. It says
+nothing about what came back, and the two part company constantly: an install
+collecting since Monday has four days whatever the field reads, and a widened
+depth only fills in at the next reconciliation.
+
+`GET /api/coverage` answers that difference, for every source at once — the
+sources page draws it under each row, next to the quota gauges:
+
+| Field | What it counts |
+|---|---|
+| `depthDays` | the configured depth, or the reporting window when the source states none. Null in `live` mode, which stores nothing |
+| `retainedDays` | `depthDays` plus the retention margin — past that, the sweep deletes |
+| `deployments`, `pullRequests`, `pipelines` | oldest row, newest row, and whole days from the oldest to **now** |
+| `metrics` | the same, over `MetricSnapshot` |
+
+Three things about the figures are deliberate:
+
+- **Counted to now, not to the newest row.** A source that stopped being
+  collected last month has an old history, not a short one, and the gap is the
+  thing worth seeing.
+- **The metrics span is stated apart.** DORA readings are historized by the
+  collection rather than ingested, so they start the day the install started
+  collecting — a store holding a year of deployments still has a fortnight of
+  curves, which is why the trends on the overview barely move when the period
+  is widened.
+- **Pull requests are counted from `openedAt`**, opened ones included. The sweep
+  never deletes those, so that span can legitimately reach past `retainedDays`.
+
+One `groupBy` per table answers for every source, so a page listing ten of them
+costs five queries. All of them are index-backed.
+
 ## One row, two feeds, no ordering
 
 The open listing, the merged listing and the webhooks all write the same rows,

@@ -172,6 +172,59 @@ export interface SourcePublic {
 }
 
 /**
+ * How far back one table actually reaches for a source.
+ *
+ * `days` is what it is read for — how deep a report can ask before it runs out
+ * of rows — and is counted from the oldest row to now rather than to the newest
+ * one: a source that stopped being collected last month has an old history, not
+ * a short one.
+ */
+export interface CoverageSpan {
+  /** Oldest row, ISO. Null when the table holds none for this source. */
+  from: string | null;
+  /** Newest row, ISO. Null likewise. */
+  to: string | null;
+  /** Whole days from the oldest row to now, at least 1. Null when there is none. */
+  days: number | null;
+  count: number;
+}
+
+/**
+ * What a source actually holds, table by table, against what it was configured
+ * to hold.
+ *
+ * The point of stating both: a source asked for a year of depth but collected
+ * for a week has a week, and every report over a longer period is answering
+ * from data that does not exist. Nothing else on the page says that.
+ *
+ * The metrics span is separate from the rest, and deliberately: DORA readings
+ * are historized by the collection rather than ingested, so they start the day
+ * an install starts collecting — never earlier, however deep the store is.
+ */
+export interface SourceCoverage {
+  sourceId: string;
+  mode: SourceMode;
+  /**
+   * How far back the ingestion is configured to read, in days — the source's
+   * own depth, or the reporting window when it states none. Null in `live`
+   * mode, which stores nothing and has no depth to speak of.
+   */
+  depthDays: number | null;
+  /** What the sweep keeps: the depth plus the configured margin. Null in `live` mode. */
+  retainedDays: number | null;
+  deployments: CoverageSpan;
+  /**
+   * Counted from the oldest pull request, opened ones included — and those the
+   * sweep never deletes, so this one can legitimately reach further back than
+   * `retainedDays`.
+   */
+  pullRequests: CoverageSpan;
+  pipelines: CoverageSpan;
+  /** Historized DORA readings — what a trend can be drawn from, and nothing else. */
+  metrics: CoverageSpan;
+}
+
+/**
  * What an admin needs to declare the hook on the provider side. Returned once,
  * by the call that generates it: the secret is stored encrypted and never read
  * back out, exactly like a source credential.

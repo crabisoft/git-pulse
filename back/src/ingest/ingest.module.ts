@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { SourcesModule } from '../sources/sources.module';
 import { SettingsModule } from '../settings/settings.module';
+import { CoverageController } from './coverage.controller';
+import { CoverageService } from './coverage.service';
 import { ReaderFactory } from './reader.factory';
 import { RetentionService } from './retention.service';
 import { StoreService } from './store.service';
@@ -26,15 +28,16 @@ import { IngestProcessor } from './webhooks/ingest.processor';
     SourcesModule,
     SettingsModule,
   ],
-  controllers: [WebhookController],
+  controllers: [WebhookController, CoverageController],
   providers: [
     StoreService,
     ReaderFactory,
     SyncService,
     RetentionService,
+    CoverageService,
     WebhookService,
     IngestProcessor,
   ],
-  exports: [StoreService, ReaderFactory, SyncService, RetentionService],
+  exports: [StoreService, ReaderFactory, SyncService, RetentionService, CoverageService],
 })
 export class IngestModule {}

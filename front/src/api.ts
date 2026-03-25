@@ -8,6 +8,7 @@ import type {
   PasswordResetTarget,
   UserPublic,
   UserRole,
+  SourceCoverage,
   SourceMode,
   SourcePublic,
   WebhookSetup,
@@ -483,6 +484,12 @@ export const api = {
     request<void>(`/jobs/${queue}/${id}/retry`, { method: 'POST' }),
   discardJob: (queue: QueueName, id: string) =>
     request<void>(`/jobs/${queue}/${id}`, { method: 'DELETE' }),
+
+  /**
+   * How much history every source actually holds, all of them at once — the
+   * same shape as the quotas below, and read on the same page.
+   */
+  listCoverage: () => request<SourceCoverage[]>('/coverage'),
 
   /** Every metered bucket, all subjects at once — see the quotas controller. */
   listQuotas: () => request<ApiQuotaPublic[]>('/quotas'),

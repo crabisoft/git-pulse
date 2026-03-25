@@ -147,6 +147,21 @@
       "admin": "Administrateur",
       "user": "Utilisateur"
     },
+    "coverage": {
+      "depth": "profondeur {{days}} j",
+      "store": "historique réel {{days}} j",
+      "storeEmpty": "aucune donnée stockée",
+      "metrics": "DORA {{days}} j",
+      "metricsEmpty": "aucun relevé DORA",
+      "explain": "Ce que la source détient réellement, à comparer à sa profondeur : un rapport demandé sur une période plus longue répond à partir de données qui n'existent pas. Les relevés DORA sont historisés par la collecte, ils commencent donc le jour où elle a commencé, quelle que soit la profondeur du stock.",
+      "deployments": "Déploiements",
+      "pullRequests": "Pull requests",
+      "pipelines": "Pipelines",
+      "metricsLabel": "Relevés DORA",
+      "spanDays": "{{days}} j, depuis le {{from}} ({{rows}} lignes)",
+      "none": "rien de stocké",
+      "swept": "La purge conserve {{days}} j ; au-delà, les lignes sont supprimées — sauf les pull requests encore ouvertes."
+    },
     "form": {
       "name": "Nom",
       "email": "Email",

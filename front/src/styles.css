@@ -662,6 +662,21 @@ textarea {
 .source-test.err { color: var(--crit); }
 .row-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
+/* What a source actually holds. Separated by middots rather than by a table:
+   it is three figures read in passing, under the row that names the source. */
+.source-coverage {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 8px;
+  margin-top: 6px; font-size: .76rem; color: var(--muted);
+}
+/* Not before the help tip: it is a control, and a separator in front of it
+   would read as a fourth figure. */
+.source-coverage > span + span:not(.help-tip)::before { content: '· '; }
+/* Less history than the depth claims — what the line is scanned for. */
+.source-coverage .short { color: var(--warn); }
+/* The tip lists one table per line, and a paragraph would hide exactly the
+   shape that makes them comparable. */
+.source-coverage .help-pop { white-space: pre-line; max-width: 340px; }
+
 /* Repo selection — the summary line, then the picking once it is opened. */
 .repo-scope { display: flex; align-items: center; gap: 10px; font-size: .85rem; color: var(--muted); }
 .repo-scope .btn { padding: 4px 10px; font-size: .8rem; }
