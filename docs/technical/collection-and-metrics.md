@@ -9,7 +9,9 @@ everything on every request.
 ## 1. The principle in one sentence
 
 > **Raw data** is stored. **Metrics** are recomputed on every display. **Metric
-> snapshots** serve the charts and nothing else.
+> snapshots** serve the charts that are about the history itself, and nothing
+> else — a line that illustrates a period is cut from that period, not read
+> back from them.
 
 Everything else in this document follows from those three lines.
 
@@ -154,15 +156,23 @@ No metric on screen is ever read back from `MetricSnapshot`.
 | Sub-page — the headline value | recomputed (`/dora`) | no |
 | Sub-page — the chart | `MetricSnapshot` (`/metrics/series`) | **yes** |
 | Sub-page — the event list | recomputed (`/dora/samples`), paginated | no |
-| Deployments, Overview, dashboard | recomputed | no |
+| Overview — the values *and* their sparklines | recomputed (`/overview`) | no |
+| Deployments, dashboard | recomputed | no |
 | Changelogs | `DeploymentChangelog` | **yes** |
 
 ## 8. Consequences — the questions this raises
 
 **Why does a value cover 180 days when its chart only shows 5?**
-The value is recomputed over the whole ingested depth. The chart can only show
-the instants at which a collection **actually wrote** a reading. A five-day-old
-install has five days of chart, whatever window is asked for.
+On the pages still drawn from snapshots, the value is recomputed over the whole
+ingested depth while the chart can only show the instants at which a collection
+**actually wrote** a reading. A five-day-old install has five days of chart,
+whatever window is asked for.
+
+The overview no longer works that way, and the reason is worth stating: a
+snapshot holds what a metric was worth over the **collection's** configured
+window on the day it was taken, so asking for seven days and asking for ninety
+were shown the same twelve points. The figures moved with the period and the
+lines beside them never did — see [Trends over the period](#10-trends-over-the-period).
 
 **Why does filtering on a dimension shorten the chart?**
 A snapshot carries the dimensions it had at capture time. Filtering on
@@ -240,3 +250,74 @@ before the click.
 
 And the past is re-read through the present classification — usually the point,
 but a replayed chart no longer tells you what the install believed at the time.
+
+## 10. Trends over the period
+
+The overview draws its sparklines from the period being reported on, not from
+the snapshot table. `DoraService.reportOverTime` cuts the resolved period into
+consecutive slices (`back/src/dora/series.ts`) and computes each one from **the
+same gathering** — the trick `rebuild` uses, and the reason a line costs no
+extra read.
+
+Three rules decide what a point is:
+
+- **At most twelve slices, never finer than a day.** A sparkline is a word
+  wide, and slicing a two-day period into twelve produces eleven empty
+  readings and one spike. A week draws seven points, a quarter twelve.
+- **Slices are disjoint and cover the whole period.** Each starts a millisecond
+  after the last ends — a period includes both its bounds, so an event landing
+  on a seam would otherwise be counted twice. Summing the points therefore gives
+  the figure beside them, for a count.
+- **An empty slice is a zero for a count and a gap for anything else.** Nothing
+  deployed is genuinely zero deployments; nothing merged is not a lead time of
+  zero, it is the absence of one. The line steps over it rather than dropping
+  to the floor.
+
+Two consequences follow, and both are deliberate. The last point is the last
+*slice*, not the value beside it: the figure covers the whole period and the
+point covers a twelfth of it. And the delta arrow now compares the first slice
+with the last — how the period went — where it used to compare two overlapping
+rolling windows that shared eleven twelfths of their data, which is why it
+barely ever moved.
+
+> The DORA page's own block sparklines still come from `MetricSnapshot`, and
+> still answer over the collection's window rather than the selected period.
+> They are the one place left where a line and the figure above it are read two
+> different ways.
+
+## 11. What the overview's period governs
+
+The filter bar sits at the top of the page, so it looks like it governs the
+whole of it. It does not, and the split is deliberate — each block answers a
+different tense, and the page now says which:
+
+| Block | Window | Why |
+|---|---|---|
+| **État** — the environment table | the period | A row is a report: its deployment count and its heartbeat describe the window, and an environment nothing reached inside it is not a row. Its head states the window beside the count. |
+| **Ce qui tourne** — the instrument matrix, and the journal's side rail | none | Which version is live for which client. A version that has *not* moved is the one thing a matrix of live versions is looked at for, so no period narrows it. |
+| **Flux** — the metrics | the period | Values and sparklines alike, both cut from it — see [Trends over the period](#10-trends-over-the-period). |
+| **Friction** | the present | Open pull requests, running pipelines, last collection. An open pull request is not "open during July": period-scoping these would change the question rather than narrow it. |
+| **Journal / frieze** — recent activity | fixed, 48 h (24 h for the frieze's axis) | Read after an alert, not to report a quarter. It says so in its head and in its empty state. |
+
+Two consequences of the **État** table following the period:
+
+- **An environment deployed before the period disappears from it.** On seven
+  days, a stable production is not listed — the table answers "what moved, and
+  how did it go", and the empty state names the period as a possible cause. The
+  matrix is unaffected: the report carries two lists, `environments` for the
+  period and `running` for the present, and the collection reads both in one
+  round (`CollectedSource.latest`). On a live source the second listing is the
+  most recent page per repo, beside a bounded read that already pages twenty
+  deep — a twentieth more, for a question the period cannot answer.
+- **`ref` is the last deployment of the period, not of all time.** Over a
+  window ending now the two are the same sentence; over one that ended last
+  month it is "what was running at the end of it", which is the honest reading
+  there.
+
+The dimension vocabulary is built over **both** lists: a value only an
+out-of-period environment carries is still a value the filter has to offer, or
+narrowing the period would quietly remove the dimension you would widen back on.
+
+The collection reads back to whichever of the two windows reaches furthest
+(`readFrom`, `back/src/overview/overview.service.ts`): a one-day period must
+not cost the journal its second day.

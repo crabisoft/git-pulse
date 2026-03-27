@@ -52,9 +52,12 @@ export function InstrumentView({
 
       <section>
         <div className="matrix-head">
+          {/* What runs, not what moved: this list is never narrowed by the
+              period — a version that has not moved is the one thing the
+              matrix is looked at for. */}
           <SectionHead
             title={t('overview.matrix.title')}
-            count={t('overview.board.count', { count: report.environments.length })}
+            count={t('overview.board.count', { count: report.running.length })}
           />
           {axes && (
             <div className="matrix-axes">
@@ -135,8 +138,8 @@ function Matrix({
 }) {
   const { t } = useTranslation();
 
-  if (report.environments.length === 0) {
-    return <p className="muted empty-note">{t('overview.board.empty')}</p>;
+  if (report.running.length === 0) {
+    return <p className="muted empty-note">{t('overview.matrix.empty')}</p>;
   }
   if (!axes) {
     // One dimension cannot be crossed with itself. Said plainly, with what
@@ -144,7 +147,7 @@ function Matrix({
     return <p className="muted empty-note">{t('overview.matrix.needsTwo')}</p>;
   }
 
-  const { rows, columns, cells } = pivotEnvironments(report.environments, axes.rows, axes.columns);
+  const { rows, columns, cells } = pivotEnvironments(report.running, axes.rows, axes.columns);
 
   return (
     <div className="matrix-scroll">

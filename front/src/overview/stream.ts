@@ -28,12 +28,15 @@ export interface StreamEntry {
  */
 export function toStream(events: OverviewEvent[], incidents: Incident[]): StreamEntry[] {
   const fromDeployments = events.map((event) => ({
-    id: `deploy:${event.environment}:${event.at}`,
+    // The provider's own identity: two deployments of the same environment in
+    // the same second are two lines, and a key built from the pair made them
+    // one.
+    id: `deploy:${event.id}`,
     at: event.at,
     kind: failed(event.status) ? ('failure' as const) : ('deploy' as const),
     title: event.environment,
     detail: `${event.repo} · ${event.ref}`,
-    url: null,
+    url: event.url,
     attributes: event.attributes,
   }));
 
@@ -63,6 +66,18 @@ export function toStream(events: OverviewEvent[], incidents: Incident[]): Stream
   });
 
   return [...fromDeployments, ...fromIncidents].sort((a, b) => msOf(b.at) - msOf(a.at));
+}
+
+/**
+ * The entries of the last `hours`, most recent first.
+ *
+ * The journal and the incidents are read over windows that need not agree — the
+ * tracker is asked for a period, this rail covers what has just happened — so
+ * the cut is made here rather than trusted from either feed.
+ */
+export function within(entries: StreamEntry[], hours: number, now = Date.now()): StreamEntry[] {
+  const since = now - hours * 3_600_000;
+  return entries.filter((entry) => msOf(entry.at) >= since);
 }
 
 /** Local calendar day of an entry — what the day separators are drawn from. */

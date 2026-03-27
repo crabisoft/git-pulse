@@ -143,6 +143,19 @@ describe('DoraService.rebuild', () => {
     expect(since).toBe('2026-06-30T00:00:00.000Z');
   });
 
+  it('reaches as far back for the deployments as for the merges', async () => {
+    // They used to be read unbounded, which reads as "everything" and means
+    // the opposite: the most recent slice per repo. A replay of sixty days was
+    // then built from whatever those rows happened to span.
+    const { dora, reader } = service([deployment('2026-07-30T10:00:00.000Z')]);
+
+    await dora.rebuild(SOURCE_ID, 2);
+
+    const [, deploymentsSince] = reader.listDeployments.mock.calls[0];
+    const [, mergesSince] = reader.listMergedPullRequests.mock.calls[0];
+    expect(deploymentsSince).toBe(mergesSince);
+  });
+
   it('counts what it left untouched before the range', async () => {
     // Those keep the classification they were written with, and the caller has
     // to be able to say so rather than let two eras be read as one.

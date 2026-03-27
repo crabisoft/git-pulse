@@ -10,19 +10,37 @@ import type {
 } from '@repo/shared';
 import { DashboardService, type CollectedSource } from '../dashboard/dashboard.service';
 import { foldEnvironments, type DimensionedDeployment } from '../dashboard/environments';
+import { within } from '../common/period';
 import { DoraService } from '../dora/dora.service';
-import { CollectorService } from '../collection/collector.service';
 import { JobsService } from '../jobs/jobs.service';
 import { ApiQuotaService } from '../api-quota/api-quota.service';
 import { SettingsService } from '../settings/settings.service';
-import { OVERVIEW_METRICS, toFlow } from './flow';
-import { foldTrend } from '../dora/trend';
+import { flowsFrom } from './flow';
 import type { OverviewQueryDto } from './dto/overview-query.dto';
 
-/** How far back the shared time axis of the page reaches. */
-const EVENT_WINDOW_MS = 24 * 60 * 60 * 1000;
+/**
+ * How far back the recent-activity window reaches.
+ *
+ * Two days, and deliberately not the selected period: what this feeds answers
+ * "what has just happened", which is a different question from "how did the
+ * quarter go" — the period governs the metrics, and the journal is a rail you
+ * read down after an alert.
+ *
+ * Two rather than one because a Monday morning has to show Friday evening:
+ * a day-wide window makes the journal empty on any source that deploys on
+ * weekdays, at the hour somebody is most likely to be looking. The control
+ * room's frieze draws the last day of this and filters the rest itself — its
+ * axis is a day wide, and older marks would pile against its left edge.
+ */
+const EVENT_WINDOW_MS = 48 * 60 * 60 * 1000;
 
-/** Points a sparkline is drawn from — more would be noise at that width. */
+/**
+ * Most points a sparkline is drawn from — more would be noise at that width.
+ *
+ * A ceiling and not a count: the period is cut into at most this many slices,
+ * and never into pieces shorter than a day. A week therefore draws seven
+ * points, a quarter twelve.
+ */
 const TREND_POINTS = 12;
 
 @Injectable()
@@ -30,7 +48,6 @@ export class OverviewService {
   constructor(
     private readonly dashboard: DashboardService,
     private readonly dora: DoraService,
-    private readonly collector: CollectorService,
     private readonly jobs: JobsService,
     private readonly quotas: ApiQuotaService,
     private readonly settings: SettingsService,
@@ -56,80 +73,80 @@ export class OverviewService {
     signal?: AbortSignal,
   ): Promise<OverviewReport> {
     const dimensionFilter = toFilter(query.dimension);
-    const collected = await this.dashboard.collect(sourceId, query.repos, signal);
-    const { results, period } = await this.doraFor(sourceId, query, dimensionFilter);
+    // The period first: the board reports over it now, so the collection has to
+    // know how far back to read before it reads.
+    const { results, period, trend } = await this.doraFor(sourceId, query, dimensionFilter);
+    const collected = await this.dashboard.collect(sourceId, query.repos, signal, readFrom(period));
 
     // Filtered as deployments, then folded — never the other way round. A row
     // spans repos that need not classify alike, so narrowing it after the fold
     // would leave it counting deployments it no longer describes, and would
     // hide an attribute only one of its repos carries.
-    const kept = collected.deployments.filter(
+    const matching = collected.deployments.filter(
       (d) => matches(d.attributes, dimensionFilter) && carriesMeta(d.metaEnvironments, query.meta),
     );
-    const environments = foldEnvironments(kept);
+    // The board is a report over the period: a row's count and its heartbeat
+    // describe the window, and an environment nothing reached inside it is not
+    // a row. The journal below is not — it is a rail of the recent past,
+    // whatever the period says, so it reads the unbounded list.
+    const environments = foldEnvironments(matching.filter((d) => within(d.createdAt, period)));
+    // And what runs is a third question again, which no period narrows: an
+    // environment last deployed forty days ago is absent from a seven-day
+    // window and is still what is live for that client. The matrix exists to
+    // show exactly that — a version that has *not* moved — so it reads this.
+    const running = foldEnvironments(
+      collected.latest.filter(
+        (d) => matches(d.attributes, dimensionFilter) && carriesMeta(d.metaEnvironments, query.meta),
+      ),
+    );
     const { stalePrHours } = await this.settings.get();
 
     return {
       sourceId,
       environments,
-      dimensions: vocabulary(collected.deployments),
-      metaEnvironments: metaNames(collected.deployments),
+      running,
+      // Over both lists: a value only an environment outside the period carries
+      // is still a value the filter has to offer, or narrowing the period would
+      // quietly remove the dimension you would widen back on.
+      dimensions: vocabulary([...collected.deployments, ...collected.latest]),
+      metaEnvironments: metaNames([...collected.deployments, ...collected.latest]),
       repos: collected.repos,
-      flow: await this.flowFor(sourceId, results, dimensionFilter, period),
+      flow: flowsFrom(results, trend),
       friction: friction(collected, results, stalePrHours),
       health: await this.health(collected, signedIn),
-      events: events(kept),
+      events: events(matching),
       period,
       warnings: collected.warnings,
     };
   }
 
-  /** The metrics over the requested period, already sliced by the filter. */
+  /**
+   * The metrics over the requested period, already sliced by the filter, and
+   * how each of them moved across it.
+   *
+   * The movement is computed from the same gathering as the figures rather than
+   * read back from the historised snapshots. A snapshot holds what a metric was
+   * worth over the collection's own window on the day it was taken, so every
+   * period was shown the same line — which is exactly what a reader changing
+   * the period notices and cannot explain.
+   */
   private async doraFor(
     sourceId: string,
     query: OverviewQueryDto,
     dimensions: Record<string, string>,
   ) {
-    const report = await this.dora.report(sourceId, {
-      from: query.from,
-      to: query.to,
-      windowDays: query.windowDays,
-      repos: query.repos,
-      dimensions,
-    });
-    return { results: report.results, period: report.period };
-  }
-
-  /**
-   * One reading per metric, with the history behind it. The trend is read from
-   * the snapshots of the same slice — an unsliced view reads the unsliced
-   * series, which is the one the collection persists most often.
-   */
-  private async flowFor(
-    sourceId: string,
-    results: DoraResult[],
-    dimensions: Record<string, string>,
-    period: { from: string; to: string },
-  ): Promise<OverviewFlow[]> {
-    const flows = await Promise.all(
-      OVERVIEW_METRICS.map(async (metric) => {
-        const matching = results.filter((r) => r.metric === metric);
-        if (matching.length === 0) return null;
-
-        const rows = await this.collector.snapshotsMatching({
-          sourceId,
-          metric,
-          dimensions,
-          from: period.from,
-          to: period.to,
-        });
-        const trend = foldTrend(rows, matching[0].unit)
-          .slice(-TREND_POINTS)
-          .map((point) => point.value);
-        return toFlow(metric, matching, trend);
-      }),
+    const report = await this.dora.reportOverTime(
+      sourceId,
+      {
+        from: query.from,
+        to: query.to,
+        windowDays: query.windowDays,
+        repos: query.repos,
+        dimensions,
+      },
+      TREND_POINTS,
     );
-    return flows.filter((flow): flow is OverviewFlow => flow !== null);
+    return { results: report.results, period: report.period, trend: report.trend };
   }
 
   /**
@@ -165,6 +182,18 @@ export class OverviewService {
 
     return { ...age, queues, quotaLeft: shares.length > 0 ? Math.min(...shares) : null };
   }
+}
+
+/**
+ * How far back the collection has to read.
+ *
+ * The furthest of the two windows drawn from that one list: the board reports
+ * over the period, and the journal covers the recent past whatever the period
+ * is. A period of one day would otherwise cost the journal its second day.
+ */
+function readFrom(period: { from: string }): string {
+  const journal = Date.now() - EVENT_WINDOW_MS;
+  return new Date(Math.min(new Date(period.from).getTime(), journal)).toISOString();
 }
 
 /** Turns the `key:value` pairs into the record everything filters on. */
@@ -236,8 +265,8 @@ function friction(
 }
 
 /**
- * The deployments of the last day, already filtered, each carrying its own
- * attributes — that is what lets the page draw one lane per client, or per
+ * The deployments of the recent window, already filtered, each carrying its own
+ * attributes — that is what lets the frieze draw one lane per client, or per
  * app, without a second request.
  *
  * Its own, not its environment's: two repos deploying to the same environment
@@ -250,11 +279,13 @@ function events(deployments: DimensionedDeployment[]): OverviewEvent[] {
     .filter((d) => new Date(d.createdAt).getTime() >= since)
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .map((d) => ({
+      id: d.id,
       at: d.createdAt,
       environment: d.environment,
       repo: d.repo,
       ref: d.ref,
       status: d.status,
+      url: d.url,
       attributes: d.attributes,
     }));
 }

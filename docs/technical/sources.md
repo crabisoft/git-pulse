@@ -97,3 +97,21 @@ read tags and commits, which are not stored.
 > Classification and ticket rules still apply **at read time**, exactly as they
 > did: changing a rule takes effect on the next page load, with nothing to
 > re-ingest. Only the platform data is stored, never what we make of it.
+
+### What a period costs, either way
+
+Anything reporting over a period — DORA, the deployments list — now asks its
+reader to reach back to the start of that period rather than taking the most
+recent slice. The two modes pay for that very differently:
+
+- **`stored`**: one indexed query. The rows are already local, so a ninety-day
+  window costs what a one-day window costs.
+- **`live`**: the connector pages down to the date, up to twenty pages of a
+  hundred per repo — and on GitHub each deployment then costs a status call on
+  top. Widening the period on a live source widens its bill, per request.
+
+That is the trade the mode already described, sharpened. A live source under
+budget pressure degrades rather than exhausting itself: past the **API reserve**
+the per-deployment enrichment is dropped and those deployments come back with an
+`unknown` status — they still count towards frequency, just not towards the
+failure rate. A source watched over long windows belongs in `stored` mode.

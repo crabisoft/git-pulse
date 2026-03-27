@@ -27,8 +27,21 @@ export interface CollectedSource {
   repos: string[];
   pullRequests: PullRequest[];
   pipelines: Pipeline[];
-  /** Each carrying its own classification — see `DimensionedDeployment`. */
+  /**
+   * Each carrying its own classification — see `DimensionedDeployment`. Bounded
+   * by `since` when the caller asked for a window, and the most recent slice
+   * per repo otherwise.
+   */
   deployments: DimensionedDeployment[];
+  /**
+   * The most recent slice per repo, whatever the window — **what runs now**.
+   *
+   * The same list as `deployments` when no window was asked for. With one, the
+   * two answer different questions and both are wanted: an environment last
+   * deployed forty days ago is absent from a seven-day window and is still what
+   * is running, which is exactly what a matrix of live versions is read for.
+   */
+  latest: DimensionedDeployment[];
   environments: DashboardEnvironment[];
   mode: SourceMode;
   syncedAt: string | null;
@@ -83,14 +96,22 @@ export class DashboardService {
   }
 
   /**
-   * One round of collection, unwindowed and uncounted. A failing listing
-   * degrades into a warning rather than emptying the screen: a missing
-   * permission on pipelines should not cost the environments too.
+   * One round of collection, uncounted. A failing listing degrades into a
+   * warning rather than emptying the screen: a missing permission on pipelines
+   * should not cost the environments too.
+   *
+   * `since` bounds the deployments alone, and only the callers that report over
+   * a period pass it. Omitted, the read is the most recent slice per repo —
+   * what a board of the present wants, at the cost a live source would answer
+   * at. The pull requests and pipelines never take it: an open pull request and
+   * a running pipeline are facts about now, and a period would not narrow them
+   * so much as change the question.
    */
   async collect(
     sourceId: string,
     repoFilter?: string[],
     signal?: AbortSignal,
+    since?: string,
   ): Promise<CollectedSource> {
     const reader = await this.readers.for(sourceId, signal);
     const warnings: CodedMessage[] = [];
@@ -115,7 +136,7 @@ export class DashboardService {
       signal,
     );
     const deployments = await safe(
-      () => reader.listDeployments(repos),
+      () => reader.listDeployments(repos, since),
       warnings,
       'dashboard.warn.deploymentsFailed',
       signal,
@@ -128,16 +149,32 @@ export class DashboardService {
       warnings.push({ code: 'dashboard.warn.neverSynced', params: {} });
     }
 
+    // What runs now, alongside the window. A second listing rather than a
+    // second collection: on a stored source it is one more indexed query, and
+    // on a live one it is the single most recent page per repo — the bounded
+    // read beside it already pages twenty deep, so the pair costs a twentieth
+    // more than the window alone.
+    const running = since
+      ? await safe(
+          () => reader.listDeployments(repos),
+          warnings,
+          'dashboard.warn.deploymentsFailed',
+          signal,
+        )
+      : deployments;
+
     // Classified once, then folded: the overview folds the same deployments a
     // second time over a narrower set, and both foldings have to mean the same
     // thing by construction.
     const dimensioned = await this.dimension(sourceId, deployments);
+    const latest = since ? await this.dimension(sourceId, running) : dimensioned;
 
     return {
       repos: allRepos,
       pullRequests: await this.withTickets(sourceId, reader.scope.owner, pullRequests),
       pipelines,
       deployments: dimensioned,
+      latest,
       environments: foldEnvironments(dimensioned),
       mode: reader.mode,
       syncedAt: syncedAt?.toISOString() ?? null,

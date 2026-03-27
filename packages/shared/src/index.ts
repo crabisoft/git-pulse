@@ -1380,6 +1380,11 @@ export const RETENTION_MARGIN_MAX = 365;
  * An environment discovered in the deployments of a source, resolved against
  * its rules. An environment no rule matches is still listed, with empty
  * attributes and meta-environments.
+ *
+ * Every field describes the deployments the caller handed over, so it describes
+ * whatever window those covered. The overview folds them over the reported
+ * period — an environment nothing reached inside it is therefore not a row at
+ * all — while the dashboard folds the most recent slice, which is the present.
  */
 export interface DashboardEnvironment {
   name: string;
@@ -1401,9 +1406,11 @@ export interface DashboardEnvironment {
   lastDeployAt: string;
   lastStatus: PipelineStatus;
   /**
-   * The ref the last deployment carried — what is running there right now.
-   * "Which version is live for that client" is the question an environment is
-   * looked up for, and the date alone never answered it.
+   * The ref the **last deployment of the set** carried. Folded over the present
+   * that is what is running there right now — "which version is live for that
+   * client" is the question an environment is looked up for, and the date alone
+   * never answered it. Folded over a period that ended, it is what was running
+   * at the end of it, which is a different sentence and the honest one there.
    */
   ref: string;
   /**
@@ -1505,13 +1512,28 @@ export interface OverviewHealth {
   quotaLeft: number | null;
 }
 
-/** A deployment on the shared 24-hour axis. */
+/**
+ * A deployment on the recent-activity window the overview reads — the journal
+ * covers all of it, the control room's frieze the last day of it.
+ *
+ * Deliberately not the reporting period: this is what has just happened, and
+ * the two questions are different ones. What reports over the period reads the
+ * deployments route.
+ */
 export interface OverviewEvent {
+  /** The provider's own identity — two deployments of one environment in the
+   * same second are two events, and a key built from the pair made them one. */
+  id: string;
   at: string;
   environment: string;
   repo: string;
   ref: string;
   status: PipelineStatus;
+  /**
+   * Where the deployment is read on the platform, when one publishes a page
+   * for it. Null is ordinary — see `Deployment.url`.
+   */
+  url: string | null;
   /** The environment's attributes, so a lane can be drawn per dimension. */
   attributes: Record<string, string>;
 }
@@ -1527,7 +1549,19 @@ export interface OverviewEvent {
  */
 export interface OverviewReport {
   sourceId: string;
+  /**
+   * The environments **of the period**: a row is a report over the window, so
+   * its count and its heartbeat describe it and one nothing reached inside it
+   * is not a row at all. What the board reads.
+   */
   environments: DashboardEnvironment[];
+  /**
+   * The environments **as they stand**, whatever the period — what is live for
+   * each client right now. Read by the matrix, whose whole job is to reveal a
+   * version that has *not* moved: narrowing that to the period would hide
+   * precisely the rows it is looked at for.
+   */
+  running: DashboardEnvironment[];
   /** Dimension key → observed values, over the whole scope. */
   dimensions: Record<string, string[]>;
   metaEnvironments: string[];

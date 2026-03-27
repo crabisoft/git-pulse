@@ -57,6 +57,14 @@ outside the presets therefore stays offered in the list rather than being
 silently rewritten, which is what an install configured at two years before the
 preset was dropped relies on.
 
+The period also decides how deep the listings read: every one of them — merges,
+incidents, and the deployments — reaches back to `period.from`. That last one is
+recent. The deployments used to be read unbounded, which sounds generous and
+means the opposite: unbounded is "the most recent slice", 30 rows per repo, so a
+busy repo's ninety-day window was computed from its last three days. See
+[What a period costs](sources.md#what-a-period-costs-either-way) — a wide window
+on a `live` source is now a wide bill.
+
 > Attributes of `environment` and `repository` rules share the same namespace.
 > If `app` exists on both sides, the values must be **identical to the
 > character**: `app=Portal` on environments and `app=portal` on repos would
@@ -147,10 +155,15 @@ them: a value computed over another period is a different number, so the page
 reads exactly the report the list was showing rather than re-picking a period on
 arrival.
 
-The trend comes from the historised snapshots through
-`GET /api/sources/:id/metrics/series`, **bucketed server-side**. The collection
-runs every few minutes, so a year of raw snapshots is tens of thousands of rows
-— more than a page window carries and more than a plot can say anything with.
+This chart is about the history itself, so it comes from the historised
+snapshots through `GET /api/sources/:id/metrics/series`, **bucketed
+server-side** — unlike the overview's sparklines, which illustrate a period and
+are therefore cut from it (see
+[Trends over the period](collection-and-metrics.md#10-trends-over-the-period)).
+
+The collection runs every few minutes, so a year of raw snapshots is tens of
+thousands of rows — more than a page window carries and more than a plot can
+say anything with.
 Each bucket keeps its **last** reading rather than an average: a DORA value is
 already an aggregate over a rolling window, and averaging aggregates would blur
 two different things together.

@@ -5,15 +5,13 @@ import { DashboardModule } from '../dashboard/dashboard.module';
 import { DashboardService } from '../dashboard/dashboard.service';
 import { DoraModule } from '../dora/dora.module';
 import { DoraService } from '../dora/dora.service';
-import { CollectionModule } from '../collection/collection.module';
-import { CollectorService } from '../collection/collector.service';
 import { JobsModule } from '../jobs/jobs.module';
 import { JobsService } from '../jobs/jobs.service';
 import { ApiQuotaModule } from '../api-quota/api-quota.module';
 import { ApiQuotaService } from '../api-quota/api-quota.service';
 
 /**
- * The overview injects services five other modules own, and a module that
+ * The overview injects services four other modules own, and a module that
  * provides one without exporting it fails at boot rather than at build — the
  * kind of break nothing in the source looks wrong for.
  *
@@ -24,7 +22,6 @@ import { ApiQuotaService } from '../api-quota/api-quota.service';
 const NEEDED: ReadonlyArray<[object, object, string]> = [
   [DashboardModule, DashboardService, 'DashboardService'],
   [DoraModule, DoraService, 'DoraService'],
-  [CollectionModule, CollectorService, 'CollectorService'],
   [JobsModule, JobsService, 'JobsService'],
   [ApiQuotaModule, ApiQuotaService, 'ApiQuotaService'],
 ];

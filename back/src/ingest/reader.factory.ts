@@ -32,8 +32,8 @@ class ConnectorReader implements SourceReader {
     return this.connector.listPipelines(this.ctx, repos);
   }
 
-  listDeployments(repos: string[]): Promise<Deployment[]> {
-    return this.connector.listDeployments(this.ctx, repos);
+  listDeployments(repos: string[], since?: string): Promise<Deployment[]> {
+    return this.connector.listDeployments(this.ctx, repos, since);
   }
 
   listMergedPullRequests(repos: string[], since: string): Promise<MergedPullRequest[]> {
@@ -73,8 +73,8 @@ class StoreReader implements SourceReader {
     return this.store.readPipelines(this.sourceId, repos);
   }
 
-  listDeployments(repos: string[]): Promise<Deployment[]> {
-    return this.store.readDeployments(this.sourceId, repos);
+  listDeployments(repos: string[], since?: string): Promise<Deployment[]> {
+    return this.store.readDeployments(this.sourceId, repos, since);
   }
 
   listMergedPullRequests(repos: string[], since: string): Promise<MergedPullRequest[]> {

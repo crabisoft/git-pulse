@@ -6,10 +6,19 @@ import { useCancellableLoad } from '../hooks';
 import { Sparkline } from '../Sparkline';
 import { formatValue } from '../doraFormat';
 import { SectionHead, sparkTone, toneOf } from './parts';
-import { dayOf, toStream, type StreamEntry } from './stream';
+import { dayOf, toStream, within, type StreamEntry } from './stream';
 
 /** How many environments the side rail lists before it stops naming them. */
 const RAIL_MAX = 8;
+
+/**
+ * How much of the recent past the journal covers.
+ *
+ * Matched to what the overview sends back, and stated in both units because
+ * both are read: the incidents route takes days, the rail is labelled in hours.
+ */
+const JOURNAL_DAYS = 2;
+const JOURNAL_HOURS = JOURNAL_DAYS * 24;
 
 /** Glyph per kind of entry — read alongside the colour, never instead of it. */
 const MARK: Record<StreamEntry['kind'], string> = {
@@ -27,9 +36,15 @@ const MARK: Record<StreamEntry['kind'], string> = {
  * incident that lands twenty minutes after a release reads as a sequence
  * rather than as two numbers on two pages.
  *
- * Incidents are fetched here rather than with the rest of the page: they come
- * from a tracker on another platform, with a budget of its own, and only this
- * view spends it.
+ * A rail of the **last two days**, and not of the reporting period. What is
+ * read here is what has just happened; the period governs the metrics beside
+ * it. Two days rather than one because a Monday morning has to show Friday
+ * evening — and when there is genuinely nothing, the journal says so in those
+ * words rather than leaving the period to be blamed for it.
+ *
+ * The incidents are fetched here rather than with the rest of the page: they
+ * come from a tracker on another platform, with a budget of its own, and only
+ * this view spends it.
  */
 export function StreamView({
   report,
@@ -48,29 +63,39 @@ export function StreamView({
       setIncidents(
         await api.incidents(
           sourceId,
-          { from: query.from, to: query.to, windowDays: query.windowDays, repos: query.repos },
+          // The rail's own window, not the page's: an incident from six weeks
+          // ago on a two-day journal would be the only line on it.
+          { windowDays: JOURNAL_DAYS, repos: query.repos },
           signal,
         ),
       ),
-    [sourceId, query.from, query.to, query.windowDays, query.repos],
+    [sourceId, query.repos],
   );
   // Degraded on purpose: no tracker, or one that refused, still leaves a
-  // timeline of deployments worth reading.
+  // timeline of releases worth reading.
   const { error } = useCancellableLoad(load);
 
-  const entries = toStream(report.events, incidents);
-  const environments = report.environments;
+  // Cut here rather than trusted from either feed: the events arrive over the
+  // window the API sends, the incidents over the one asked for, and the rail
+  // has to be one window.
+  const entries = within(toStream(report.events, incidents), JOURNAL_HOURS);
+  // What runs, like the matrix: the rail beside a journal answers "and where
+  // does that leave us", which no period narrows.
+  const environments = report.running;
 
   return (
     <div className="stream">
       <section>
         <SectionHead
           title={t('overview.stream.title')}
-          count={t('overview.stream.count', { count: entries.length })}
+          count={t('overview.stream.window', { hours: JOURNAL_HOURS })}
         />
         {error && <div className="banner warn">{error}</div>}
         {entries.length === 0 ? (
-          <p className="muted empty-note">{t('overview.stream.empty')}</p>
+          // Named in hours, because the period filter above says something
+          // else: "nothing on this scope" over a window nobody chose reads as
+          // a broken filter rather than as a quiet two days.
+          <p className="muted empty-note">{t('overview.stream.empty', { hours: JOURNAL_HOURS })}</p>
         ) : (
           <div className="river">
             <Entries entries={entries} />

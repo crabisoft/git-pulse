@@ -335,7 +335,12 @@ export class DeploymentsService {
     repos: string[],
     period: DoraPeriod,
   ): Promise<ClassifiedDeployment[]> {
-    const raw = (await reader.listDeployments(repos)).filter((d) => within(d.createdAt, period));
+    // Bounded on the way in *and* filtered on the way out: the lower bound
+    // decides how deep the read goes, and only the filter enforces the upper
+    // one — a period ending last month is still read from today backwards.
+    const raw = (await reader.listDeployments(repos, period.from)).filter((d) =>
+      within(d.createdAt, period),
+    );
     return this.classify(sourceId, raw);
   }
 

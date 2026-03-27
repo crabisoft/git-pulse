@@ -45,6 +45,28 @@ cursors), `WebhookSecret` and `WebhookDelivery`.
 > lists names only, and the one caller that needs a default branch — the release
 > notes — reads live in either mode. It is a column waiting for a reader.
 
+## How much of it a read brings back
+
+A read of the store is bounded two ways, and the difference decides whether a
+report is true.
+
+**Unbounded** — the board of the present — takes the most recent slice per repo:
+30 deployments, 20 pipelines. Those are the numbers the connectors page with, so
+a stored source answers what the same source read live would, at the same cost.
+
+**Bounded by a date** — anything reporting over a period — reads every row of
+the window in one query, with no per-repo ceiling. `readDeployments` takes that
+date, and `readMergedPullRequests` never had a ceiling at all.
+
+That distinction is recent, and its absence was a bug worth naming: the readers
+used to drop the date the connectors have always accepted, so a repo deploying
+ten times a day filled the 30-row slice in three days — and a ninety-day DORA
+window was computed from those three days while calling itself ninety. The
+deployment frequency was the frequency of whatever the slice happened to span.
+
+The pipelines keep their ceiling whatever is asked: nothing reports over a
+period of them, the two counters that read them are counters of the present.
+
 ## How deep it actually goes
 
 A source's depth says what the ingestion *asks* its provider for. It says
@@ -70,8 +92,9 @@ Three things about the figures are deliberate:
 - **The metrics span is stated apart.** DORA readings are historized by the
   collection rather than ingested, so they start the day the install started
   collecting — a store holding a year of deployments still has a fortnight of
-  curves, which is why the trends on the overview barely move when the period
-  is widened.
+  curves. It bounds the charts drawn from `MetricSnapshot`, which is now the
+  DORA page alone: the overview cuts its sparklines from the period instead,
+  and reaches as far back as the deployments do.
 - **Pull requests are counted from `openedAt`**, opened ones included. The sweep
   never deletes those, so that span can legitimately reach past `retainedDays`.
 

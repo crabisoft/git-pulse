@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { PipelineStatus, PullRequest } from '@repo/shared';
+import type { DoraResult, PipelineStatus, PullRequest } from '@repo/shared';
 import { OverviewService } from './overview.service';
 import type { CollectedSource } from '../dashboard/dashboard.service';
 import type { DimensionedDeployment } from '../dashboard/environments';
@@ -50,38 +50,52 @@ function pullRequest(ageHours: number): PullRequest {
   };
 }
 
-function build(overrides: Partial<CollectedSource> = {}) {
+/** What the DORA service answers with — its readings, and its slices of them. */
+interface DoraStub {
+  results?: DoraResult[];
+  trend?: DoraResult[][];
+}
+
+function build(overrides: Partial<CollectedSource> = {}, dora: DoraStub = {}) {
   const collected: CollectedSource = {
     repos: ['acme/api', 'acme/web'],
     pullRequests: [pullRequest(200), pullRequest(4)],
     pipelines: [],
     deployments: [],
+    latest: [],
     environments: [],
     mode: 'stored',
     syncedAt: '2026-07-30T09:00:00.000Z',
     warnings: [],
     ...overrides,
   };
+  // What runs now defaults to the window: a fixture that says nothing about
+  // the difference is a fixture where the two are the same list.
+  if (!overrides.latest) collected.latest = collected.deployments;
 
   const jobs = { snapshot: vi.fn().mockResolvedValue({ queues: [], observedAt: '', unreachable: null }) };
   const quotas = { list: vi.fn().mockResolvedValue([]) };
 
+  const dashboard = { collect: vi.fn().mockResolvedValue(collected) };
+
   const service = new OverviewService(
-    { collect: vi.fn().mockResolvedValue(collected) } as never,
+    dashboard as never,
     {
-      report: vi.fn().mockResolvedValue({
-        results: [],
+      reportOverTime: vi.fn().mockResolvedValue({
+        results: dora.results ?? [],
         repos: collected.repos,
         dimensions: {},
-        period: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-30T00:00:00.000Z', windowDays: 30 },
+        // Wide enough to hold the fixtures above: the board reports over this
+        // period now, so a deployment outside it is not a row.
+        period: { from: '2026-07-01T00:00:00.000Z', to: '2026-07-31T23:59:59.999Z', windowDays: 30 },
+        trend: dora.trend ?? [],
       }),
     } as never,
-    { snapshotsMatching: vi.fn().mockResolvedValue([]) } as never,
     jobs as never,
     quotas as never,
     { get: vi.fn().mockResolvedValue({ stalePrHours: 72 }) } as never,
   );
-  return { service, jobs, quotas };
+  return { service, jobs, quotas, dashboard };
 }
 
 describe('OverviewService', () => {
@@ -188,6 +202,105 @@ describe('OverviewService', () => {
     });
   });
 
+  it('leaves out an environment nothing reached inside the period', async () => {
+    // The board reports over the window now: a row's count and its heartbeat
+    // describe it, and an environment last deployed before it has neither.
+    const { service } = build({
+      deployments: [
+        deployment('prod-acme-api', { type: 'prod' }, { createdAt: '2026-07-20T10:00:00.000Z' }),
+        deployment('prod-globex-api', { type: 'prod' }, { createdAt: '2026-06-02T10:00:00.000Z' }),
+      ],
+    });
+
+    const report = await service.report('src-1', {}, true);
+
+    expect(report.environments.map((e) => e.name)).toEqual(['prod-acme-api']);
+    // The vocabulary still offers what the older one carried: a filter must
+    // not lose the value you would widen back to.
+    expect(report.dimensions).toEqual({ type: ['prod'] });
+  });
+
+  it('keeps what runs out of reach of the period', async () => {
+    // The matrix exists to reveal a version that has *not* moved: narrowing it
+    // to the period would hide precisely the rows it is looked at for.
+    const stale = deployment('prod-globex-api', { type: 'prod' }, {
+      createdAt: '2026-06-02T10:00:00.000Z',
+      ref: 'v1.9.0',
+    });
+    const fresh = deployment('prod-acme-api', { type: 'prod' }, {
+      createdAt: '2026-07-20T10:00:00.000Z',
+    });
+    const { service } = build({ deployments: [fresh], latest: [fresh, stale] });
+
+    const report = await service.report('src-1', {}, true);
+
+    expect(report.environments.map((e) => e.name)).toEqual(['prod-acme-api']);
+    expect(report.running.map((e) => e.name)).toEqual(['prod-acme-api', 'prod-globex-api']);
+    expect(report.running.find((e) => e.name === 'prod-globex-api')?.ref).toBe('v1.9.0');
+  });
+
+  it('narrows what runs by the dimensions, since those are not a period', async () => {
+    const { service } = build({
+      deployments: [],
+      latest: [
+        deployment('prod-acme-api', { type: 'prod', client: 'acme' }),
+        deployment('prod-globex-api', { type: 'prod', client: 'globex' }),
+      ],
+    });
+
+    const report = await service.report('src-1', { dimension: ['client:acme'] }, true);
+
+    expect(report.running.map((e) => e.name)).toEqual(['prod-acme-api']);
+  });
+
+  it('offers a dimension only an out-of-period environment carries', async () => {
+    // Narrowing the period must not quietly remove the value you would widen
+    // the dimension back on.
+    const { service } = build({
+      deployments: [deployment('prod-acme-api', { client: 'acme' })],
+      latest: [
+        deployment('prod-acme-api', { client: 'acme' }),
+        deployment('prod-globex-api', { client: 'globex' }),
+      ],
+    });
+
+    const report = await service.report('src-1', {}, true);
+
+    expect(report.dimensions).toEqual({ client: ['acme', 'globex'] });
+  });
+
+  it('keeps the journal on its own window whatever the period is', async () => {
+    // The two read one list: the board takes the period, the journal takes the
+    // recent past, and neither may cut the other short.
+    vi.setSystemTime(new Date('2026-07-31T12:00:00.000Z'));
+    const { service } = build({
+      deployments: [
+        deployment('prod-acme-api', { type: 'prod' }, { createdAt: '2026-07-31T08:00:00.000Z' }),
+        deployment('prod-globex-api', { type: 'prod' }, { createdAt: '2026-06-02T10:00:00.000Z' }),
+      ],
+    });
+
+    const report = await service.report('src-1', {}, true);
+
+    // Out of the period, so out of the board — but the journal is not the board.
+    expect(report.environments.map((e) => e.name)).toEqual(['prod-acme-api']);
+    expect(report.events.map((e) => e.at)).toEqual(['2026-07-31T08:00:00.000Z']);
+    vi.useRealTimers();
+  });
+
+  it('reads back far enough for whichever window reaches furthest', async () => {
+    // A one-day period must not cost the journal its second day: the read is
+    // bounded by the further of the two.
+    vi.setSystemTime(new Date('2026-07-31T12:00:00.000Z'));
+    const { service, dashboard } = build({});
+
+    await service.report('src-1', {}, true);
+
+    const since = new Date(dashboard.collect.mock.calls[0][3] as string).getTime();
+    expect(since).toBeLessThanOrEqual(new Date('2026-07-29T12:00:00.000Z').getTime());
+    vi.useRealTimers();
+  });
+
   it('counts the friction over everything collected, not over a page', async () => {
     const { service } = build({
       pipelines: [
@@ -207,11 +320,14 @@ describe('OverviewService', () => {
     });
   });
 
-  it('keeps the last day of deployments, most recent first', async () => {
+  it('keeps the last two days of deployments, most recent first', async () => {
+    // Two days rather than one so a Monday morning still shows the Friday
+    // evening release — the hour somebody is most likely to be looking.
     vi.setSystemTime(new Date('2026-07-30T12:00:00.000Z'));
     const { service } = build({
       deployments: [
-        deployment('prod-acme-api', { type: 'prod' }, { createdAt: '2026-07-28T12:00:00.000Z' }),
+        deployment('prod-acme-api', { type: 'prod' }, { createdAt: '2026-07-28T09:00:00.000Z' }),
+        deployment('prod-acme-api', { type: 'prod' }, { createdAt: '2026-07-29T06:00:00.000Z' }),
         deployment('prod-acme-api', { type: 'prod' }, { createdAt: '2026-07-30T08:00:00.000Z' }),
         deployment(
           'prod-acme-api',
@@ -223,12 +339,60 @@ describe('OverviewService', () => {
 
     const report = await service.report('src-1', {}, true);
 
+    // The 28th at 09:00 is 51 hours back: outside, and the only one that is.
     expect(report.events.map((e) => e.at)).toEqual([
       '2026-07-30T11:00:00.000Z',
       '2026-07-30T08:00:00.000Z',
+      '2026-07-29T06:00:00.000Z',
     ]);
     expect(report.events[0].attributes).toEqual({ type: 'prod' });
     vi.useRealTimers();
+  });
+
+  it('carries what each event is, so the journal can name and open it', async () => {
+    vi.setSystemTime(new Date('2026-07-30T12:00:00.000Z'));
+    const { service } = build({
+      deployments: [
+        deployment(
+          'prod-acme-api',
+          { type: 'prod' },
+          { id: 'gh:acme/api:41', createdAt: '2026-07-30T08:00:00.000Z', url: 'https://x.test/41' },
+        ),
+      ],
+    });
+
+    const report = await service.report('src-1', {}, true);
+
+    // The identity is the provider's: two deployments of one environment in
+    // the same second are two lines, not one.
+    expect(report.events[0]).toMatchObject({ id: 'gh:acme/api:41', url: 'https://x.test/41' });
+    vi.useRealTimers();
+  });
+
+  it('draws each metric from the slices of the period it reports on', async () => {
+    // Not from the historised snapshots: those hold what a metric was worth
+    // over the collection's own window, so every period was shown one line.
+    const count = (value: number) => ({
+      metric: 'deployment_frequency' as const,
+      value,
+      unit: 'count' as const,
+      dimensions: {},
+      sampleSize: value,
+      samples: [],
+    });
+    const { service } = build(
+      {},
+      { results: [count(20)], trend: [[count(3)], [], [count(9)]] },
+    );
+
+    const report = await service.report('src-1', {}, true);
+
+    const [flow] = report.flow;
+    expect(flow.value).toBe(20);
+    // A slice that deployed nothing is a zero, not a hole: it is the quiet
+    // week the line exists to show.
+    expect(flow.trend).toEqual([3, 0, 9]);
+    expect(flow.improving).toBe(true);
   });
 
   it('tells a visitor how fresh the data is, and nothing about the machine room', async () => {

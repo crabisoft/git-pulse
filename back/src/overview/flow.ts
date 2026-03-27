@@ -15,6 +15,41 @@ export const OVERVIEW_METRICS: readonly DoraMetric[] = [
 ];
 
 /**
+ * One reading per metric, with the movement behind it.
+ *
+ * `slices` is the period cut into consecutive pieces, oldest first, each
+ * carrying the same folded readings as the whole — so a point on a line and
+ * the number beside it are one computation over different bounds.
+ */
+export function flowsFrom(results: DoraResult[], slices: DoraResult[][]): OverviewFlow[] {
+  return OVERVIEW_METRICS.map((metric) => {
+    const matching = results.filter((r) => r.metric === metric);
+    if (matching.length === 0) return null;
+    return toFlow(metric, matching, trendOf(metric, matching[0].unit, slices));
+  }).filter((flow): flow is OverviewFlow => flow !== null);
+}
+
+/**
+ * How one metric moved across the slices.
+ *
+ * A slice with no reading is not a zero for every metric, and treating it as
+ * one would draw a cliff where there is only silence: nothing deployed is
+ * genuinely zero deployments, while nothing merged is not a lead time of zero,
+ * it is the absence of one. So counts fill the gap and the rest step over it —
+ * which shortens the line rather than inventing a point on it.
+ */
+export function trendOf(
+  metric: DoraMetric,
+  unit: DoraResult['unit'],
+  slices: DoraResult[][],
+): number[] {
+  const points = slices.map((slice) => slice.find((r) => r.metric === metric) ?? null);
+  return unit === 'count'
+    ? points.map((point) => point?.value ?? 0)
+    : points.filter((point): point is DoraResult => point !== null).map((point) => point.value);
+}
+
+/**
  * Whether a rising value is good news. Not derivable from the number: more
  * deployments is progress, a longer restore time is not, and the front should
  * not have to hold that table to colour an arrow.
@@ -50,9 +85,12 @@ export function toFlow(metric: DoraMetric, results: DoraResult[], trend: number[
 }
 
 /**
- * Movement from one end of the trend to the other, as a signed ratio. Null
- * when there is nothing to measure across: fewer than two points, or a first
- * point of zero, where every change is infinite.
+ * Movement from one end of the trend to the other, as a signed ratio — the
+ * first slice of the period against its last, now that the trend is cut from
+ * the period rather than read from a rolling series.
+ *
+ * Null when there is nothing to measure across: fewer than two points, or a
+ * first point of zero, where every change is infinite.
  */
 export function changeAcross(trend: number[]): number | null {
   if (trend.length < 2) return null;

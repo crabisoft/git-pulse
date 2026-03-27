@@ -19,6 +19,7 @@ import { CodedException } from '../common/coded-exception';
 import { resolvePeriod, within } from '../common/period';
 import { paginate, type PageWindow } from '../common/pagination';
 import { foldByMetric } from './aggregate';
+import { sliceRange } from './series';
 import { throwIfAborted } from '../common/request-abort';
 import { PrismaService } from '../prisma/prisma.service';
 import { SourcesService } from '../sources/sources.service';
@@ -126,6 +127,43 @@ export class DoraService {
   }
 
   /**
+   * The same report, plus how each metric moved **across** the period.
+   *
+   * The series is computed here rather than read back from the historised
+   * snapshots, and that is the whole point of the method. A snapshot holds what
+   * a metric was worth over the *collection's* configured window on the day it
+   * was taken, so the page asking for ninety days and the page asking for seven
+   * were shown the same twelve points — the figures moved with the period and
+   * the line beside them never did.
+   *
+   * It costs one gathering and not one per point: classifying an event does not
+   * depend on the period, which is the same trick `rebuild` uses to replay
+   * ninety days from a single read. Every slice is folded exactly as the report
+   * is, so a point on the line and the number beside it are the same
+   * computation over different bounds.
+   *
+   * `maxPoints` is a ceiling, not a count — see `sliceRange`, which also
+   * refuses to cut finer than a day.
+   */
+  async reportOverTime(
+    sourceId: string,
+    query: DoraQuery,
+    maxPoints: number,
+    signal?: AbortSignal,
+  ): Promise<DoraReport & { trend: DoraResult[][] }> {
+    const { results, repos, period, slices } = await this.build(sourceId, query, signal, maxPoints);
+    const sliced = (of: (DoraResult | MeasuredResult)[]) =>
+      of.filter((r) => matchesDimensions(r.dimensions, query.dimensions));
+    return {
+      results: foldByMetric(sliced(results)),
+      repos,
+      dimensions: collectDimensions(results),
+      period,
+      trend: slices.map((slice) => foldByMetric(sliced(slice))),
+    };
+  }
+
+  /**
    * The events behind one metric, over the same period and slice as its value,
    * paginated — all of them, not the handful the reading carries.
    *
@@ -154,22 +192,37 @@ export class DoraService {
     return paginate(events, window);
   }
 
-  /** Fetches and computes everything, before any slicing. */
+  /**
+   * Fetches and computes everything, before any slicing by dimension.
+   *
+   * `maxPoints` asks for the period cut into slices as well, each computed from
+   * the same gathering — the events are read once whatever is asked of them.
+   */
   private async build(
     sourceId: string,
     query: DoraQuery,
     signal?: AbortSignal,
-  ): Promise<{ results: (DoraResult | MeasuredResult)[]; repos: string[]; period: ResolvedRange }> {
+    maxPoints = 0,
+  ): Promise<{
+    results: (DoraResult | MeasuredResult)[];
+    repos: string[];
+    period: ResolvedRange;
+    slices: (DoraResult | MeasuredResult)[][];
+  }> {
     const period = await this.resolveRange(query);
     const gathered = await this.gather(sourceId, period.from, query.repos, signal);
+    const context = { failureSource: gathered.failureSource, sourceId };
     return {
-      results: this.computeOver(gathered, period, {
-        failureSource: gathered.failureSource,
-        sourceId,
-      }),
+      results: this.computeOver(gathered, period, context),
       // The full list stays the filter vocabulary, exactly like the dashboard.
       repos: gathered.allRepos,
       period,
+      slices: sliceRange(period, maxPoints).map((slice) =>
+        // Quiet: the slices are the same events a dozen times over, so a gap
+        // worth warning about has already been reported by the computation
+        // over the whole period, one line above.
+        this.computeOver(gathered, { ...slice, windowDays: null }, { ...context, quiet: true }),
+      ),
     };
   }
 
@@ -177,9 +230,14 @@ export class DoraService {
    * Every event of a source, classified, from `since` onward.
    *
    * Period-free on purpose — see `computeOver`. `since` bounds what the
-   * platform is asked for, never what the caller may compute over: the pull
-   * requests and the incidents are listed from it, the deployments come as
-   * they come.
+   * platform is asked for, never what the caller may compute over: every
+   * listing here reads back down to it, and each of them may well answer with
+   * more.
+   *
+   * The deployments used to be read unbounded, which sounded generous and was
+   * the opposite: unbounded means "the most recent slice", so a busy repo's
+   * ninety-day window was computed from its last thirty deployments. The
+   * frequency was then a frequency over whatever those spanned.
    */
   private async gather(
     sourceId: string,
@@ -215,7 +273,7 @@ export class DoraService {
     // rather than failing the whole computation — except for a cancellation,
     // which has nothing to degrade into and must stop the run (throwIfAborted).
     const [deployments, mergedPrs, incidents] = await Promise.all([
-      reader.listDeployments(repos).catch((e) => {
+      reader.listDeployments(repos, since).catch((e) => {
         throwIfAborted(signal);
         this.logger.warn(`listDeployments failed (${sourceId}): ${asMessage(e)}`);
         return [] as Deployment[];
@@ -267,7 +325,7 @@ export class DoraService {
       incidentEvents: IncidentEvent[];
     },
     period: ResolvedRange,
-    context: { failureSource: FailureSource; sourceId: string },
+    context: { failureSource: FailureSource; sourceId: string; quiet?: boolean },
   ): (DoraResult | MeasuredResult)[] {
     const deploymentEvents = events.deploymentEvents.filter((d) => within(d.createdAt, period));
     const prEvents = events.prEvents.filter((p) => within(p.mergedAt, period));
@@ -281,7 +339,7 @@ export class DoraService {
     // What is left divides by deployments, so a slice with no deployment
     // produces no rate at all. Saying so beats letting numbers go missing.
     const orphans = orphanIncidentDimensions(deploymentEvents, incidentEvents, linked);
-    if (orphans.length > 0) {
+    if (orphans.length > 0 && !context.quiet) {
       this.logger.warn(
         `${orphans.length} dimension combination(s) carry incidents but no deployment ` +
           `(${sourceId}): ${orphans.map((d) => JSON.stringify(d)).join(', ')}`,

@@ -147,21 +147,6 @@
       "admin": "Administrateur",
       "user": "Utilisateur"
     },
-    "coverage": {
-      "depth": "profondeur {{days}} j",
-      "store": "historique réel {{days}} j",
-      "storeEmpty": "aucune donnée stockée",
-      "metrics": "DORA {{days}} j",
-      "metricsEmpty": "aucun relevé DORA",
-      "explain": "Ce que la source détient réellement, à comparer à sa profondeur : un rapport demandé sur une période plus longue répond à partir de données qui n'existent pas. Les relevés DORA sont historisés par la collecte, ils commencent donc le jour où elle a commencé, quelle que soit la profondeur du stock.",
-      "deployments": "Déploiements",
-      "pullRequests": "Pull requests",
-      "pipelines": "Pipelines",
-      "metricsLabel": "Relevés DORA",
-      "spanDays": "{{days}} j, depuis le {{from}} ({{rows}} lignes)",
-      "none": "rien de stocké",
-      "swept": "La purge conserve {{days}} j ; au-delà, les lignes sont supprimées — sauf les pull requests encore ouvertes."
-    },
     "form": {
       "name": "Nom",
       "email": "Email",
@@ -535,6 +520,21 @@
       "observedAt": "Dernière mesure : {{at}}",
       "declared": "déclaré",
       "declaredHint": "Plafond saisi à la main : cette instance n'envoie aucun en-tête de quota."
+    },
+    "coverage": {
+      "depth": "profondeur {{days}} j",
+      "store": "historique réel {{days}} j",
+      "storeEmpty": "aucune donnée stockée",
+      "metrics": "DORA {{days}} j",
+      "metricsEmpty": "aucun relevé DORA",
+      "explain": "Ce que la source détient réellement, à comparer à sa profondeur : un rapport demandé sur une période plus longue répond à partir de données qui n'existent pas. Les relevés DORA sont historisés par la collecte, ils commencent donc le jour où elle a commencé, quelle que soit la profondeur du stock.",
+      "deployments": "Déploiements",
+      "pullRequests": "Pull requests",
+      "pipelines": "Pipelines",
+      "metricsLabel": "Relevés DORA",
+      "spanDays": "{{days}} j, depuis le {{from}} ({{rows}} lignes)",
+      "none": "rien de stocké",
+      "swept": "La purge conserve {{days}} j ; au-delà, les lignes sont supprimées — sauf les pull requests encore ouvertes."
     },
     "form": {
       "name": "Nom",
@@ -952,7 +952,8 @@
       "count_other": "{{count}} environnements",
       "alerts_one": "{{count}} à traiter",
       "alerts_other": "{{count}} à traiter",
-      "empty": "Aucun environnement ne répond à ce filtre. Élargissez une dimension."
+      "period": "{{days}} jours",
+      "empty": "Aucun environnement n'a été déployé sur cette période, avec ce filtre. Élargissez la période, ou une dimension."
     },
     "flow": {
       "title": "Flux",
@@ -997,15 +998,15 @@
       "rows": "lignes",
       "columns": "colonnes",
       "needsTwo": "Il faut deux dimensions pour croiser une matrice. Vos règles n'en extraient qu'une : ajoutez un groupe de capture, ou passez en salle de contrôle.",
+      "empty": "Aucun environnement connu, avec ce filtre. La période ne s'applique pas ici : cette matrice montre ce qui tourne.",
       "noTier": "hors barème",
       "more": "+{{count}}",
       "alsoHere": "Aussi sur ce croisement : {{names}}. Croisez une autre dimension pour les séparer."
     },
     "stream": {
       "title": "Journal",
-      "count_one": "{{count}} événement",
-      "count_other": "{{count}} événements",
-      "empty": "Rien sur ce périmètre pour la période retenue.",
+      "window": "{{hours}} dernières heures",
+      "empty": "Aucun événement sur les {{hours}} dernières heures — ni déploiement, ni incident. La période choisie plus haut ne s'applique pas à ce journal : il couvre toujours les {{hours}} dernières heures.",
       "today": "Aujourd'hui",
       "yesterday": "Hier",
       "more_one": "+ {{count}} autre environnement",

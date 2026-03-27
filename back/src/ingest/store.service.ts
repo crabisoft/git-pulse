@@ -28,8 +28,13 @@ const ON_BOARD: PullRequestState[] = ['open', 'draft'];
  * The same numbers the connectors page with, deliberately: the dashboard
  * summary counts failed and running pipelines over what it was handed, so a
  * source that stores its data must not answer over a wider set than the same
- * source read live would. The merged pull requests are the exception — see
- * `readMergedPullRequests`.
+ * source read live would.
+ *
+ * Parity of the **unbounded** read, that is. Asked for a date, the deployments
+ * read the whole window rather than the top of it — see `readDeployments`, and
+ * `readMergedPullRequests`, which never had a cap at all. The pipelines keep
+ * theirs whatever is asked: nothing reports over a period of them, the two
+ * counters that read them are counters of the present.
  */
 const PIPELINES_PER_REPO = 20;
 const DEPLOYMENTS_PER_REPO = 30;
@@ -164,8 +169,30 @@ export class StoreService {
     return perRepo.flat().map(toPipeline);
   }
 
-  async readDeployments(sourceId: string, repos: string[]): Promise<Deployment[]> {
+  /**
+   * Bounded by a date, this reads **every** deployment of the window in one
+   * query — like the merged pull requests below, and for the same reason: the
+   * rows are already here, and capping them would throw away the far end of a
+   * period somebody asked to report over. A repo deploying ten times a day
+   * fills the per-repo cap in three days, so a ninety-day report read through
+   * it was a three-day report wearing a ninety-day label.
+   *
+   * Unbounded, the cap stands: that call is the board of the present, which
+   * wants what is running now and must answer at the cost a live source would.
+   */
+  async readDeployments(
+    sourceId: string,
+    repos: string[],
+    since?: string,
+  ): Promise<Deployment[]> {
     if (repos.length === 0) return [];
+    if (since) {
+      const rows = await this.prisma.storedDeployment.findMany({
+        where: { sourceId, repo: { in: repos }, createdAt: { gte: new Date(since) } },
+        orderBy: { createdAt: 'desc' },
+      });
+      return rows.map(toDeployment);
+    }
     const perRepo = await this.prisma.$transaction(
       repos.map((repo) =>
         this.prisma.storedDeployment.findMany({

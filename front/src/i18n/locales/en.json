@@ -147,21 +147,6 @@
       "admin": "Admin",
       "user": "User"
     },
-    "coverage": {
-      "depth": "depth {{days}} d",
-      "store": "history held {{days}} d",
-      "storeEmpty": "nothing stored",
-      "metrics": "DORA {{days}} d",
-      "metricsEmpty": "no DORA reading",
-      "explain": "What the source actually holds, against the depth it asks for: a report over a longer period is answering from data that does not exist. DORA readings are historized by the collection, so they start the day it did, however deep the store is.",
-      "deployments": "Deployments",
-      "pullRequests": "Pull requests",
-      "pipelines": "Pipelines",
-      "metricsLabel": "DORA readings",
-      "spanDays": "{{days}} d, since {{from}} ({{rows}} rows)",
-      "none": "nothing stored",
-      "swept": "The sweep keeps {{days}} d; beyond that rows are deleted — except pull requests still open."
-    },
     "form": {
       "name": "Name",
       "email": "Email",
@@ -535,6 +520,21 @@
       "observedAt": "Last reading: {{at}}",
       "declared": "declared",
       "declaredHint": "Ceiling entered by hand: this instance sends no rate-limit header."
+    },
+    "coverage": {
+      "depth": "depth {{days}} d",
+      "store": "history held {{days}} d",
+      "storeEmpty": "nothing stored",
+      "metrics": "DORA {{days}} d",
+      "metricsEmpty": "no DORA reading",
+      "explain": "What the source actually holds, against the depth it asks for: a report over a longer period is answering from data that does not exist. DORA readings are historized by the collection, so they start the day it did, however deep the store is.",
+      "deployments": "Deployments",
+      "pullRequests": "Pull requests",
+      "pipelines": "Pipelines",
+      "metricsLabel": "DORA readings",
+      "spanDays": "{{days}} d, since {{from}} ({{rows}} rows)",
+      "none": "nothing stored",
+      "swept": "The sweep keeps {{days}} d; beyond that rows are deleted — except pull requests still open."
     },
     "form": {
       "name": "Name",
@@ -952,7 +952,8 @@
       "count_other": "{{count}} environments",
       "alerts_one": "{{count}} to handle",
       "alerts_other": "{{count}} to handle",
-      "empty": "No environment matches this filter. Widen a dimension."
+      "period": "{{days}} days",
+      "empty": "Nothing was deployed to any environment over this period, under this filter. Widen the period, or a dimension."
     },
     "flow": {
       "title": "Flow",
@@ -1003,9 +1004,8 @@
     },
     "stream": {
       "title": "Journal",
-      "count_one": "{{count}} event",
-      "count_other": "{{count}} events",
-      "empty": "Nothing on this scope over the period.",
+      "window": "last {{hours}} hours",
+      "empty": "No event over the last {{hours}} hours — no deployment, no incident. The period picked above does not apply to this journal: it always covers the last {{hours}} hours.",
       "today": "Today",
       "yesterday": "Yesterday",
       "more_one": "+ {{count}} more environment",

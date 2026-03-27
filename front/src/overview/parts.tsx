@@ -19,8 +19,21 @@ import { UNCLASSIFIED } from './grouping';
  * three views from drifting into three vocabularies for the same fact.
  */
 
-/** The window the bottom strip covers, matched to what the API sends back. */
+/**
+ * The window the bottom strip covers.
+ *
+ * A slice of what the API sends back rather than all of it: the overview
+ * reports two days of activity, because the journal is read after a weekend,
+ * and this axis is a day wide — anything older would pile against its left
+ * edge. `lastDay` is what makes the two agree.
+ */
 export const EVENT_WINDOW_HOURS = 24;
+
+/** The events this axis can place: the last day of what the report carries. */
+export function lastDay(events: OverviewEvent[], now = Date.now()): OverviewEvent[] {
+  const since = now - EVENT_WINDOW_HOURS * 3_600_000;
+  return events.filter((event) => new Date(event.at).getTime() >= since);
+}
 
 /** One environment: what runs there, how it has been going, and since when. */
 export function EnvironmentRow({ env, keys }: { env: DashboardEnvironment; keys: string[] }) {

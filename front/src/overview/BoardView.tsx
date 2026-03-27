@@ -1,7 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import type { OverviewReport } from '@repo/shared';
 import { groupEnvironments } from './grouping';
-import { EnvironmentRow, FlowRow, Friction, SectionHead, Timeline } from './parts';
+import { EnvironmentRow, FlowRow, Friction, lastDay, SectionHead, Timeline } from './parts';
 
 /**
  * Direction A — the control room.
@@ -26,13 +26,20 @@ export function BoardView({
   const { t } = useTranslation();
   const keys = Object.keys(report.dimensions);
   const groups = groupEnvironments(report.environments, fold);
+  const recent = lastDay(report.events);
 
   return (
     <>
       <section>
+        {/* The window is said here as it is on the flow block: this table
+            reports over the period now, so an environment missing from it is
+            an environment nothing reached inside the period. */}
         <SectionHead
           title={t('overview.board.title')}
-          count={t('overview.board.count', { count: report.environments.length })}
+          count={`${t('overview.board.count', { count: report.environments.length })} · ${t(
+            'overview.board.period',
+            { days: report.period.windowDays ?? '—' },
+          )}`}
         />
         {report.environments.length === 0 ? (
           <p className="muted empty-note">{t('overview.board.empty')}</p>
@@ -82,11 +89,12 @@ export function BoardView({
       </div>
 
       <section>
+        {/* The report carries two days; this axis is a day wide and says so. */}
         <SectionHead
           title={t('overview.events.title')}
-          count={t('overview.events.count', { count: report.events.length })}
+          count={t('overview.events.count', { count: recent.length })}
         />
-        <Timeline events={report.events} dimension={fold} />
+        <Timeline events={recent} dimension={fold} />
       </section>
     </>
   );

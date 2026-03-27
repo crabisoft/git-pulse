@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   DashboardEnvironment,
   OverviewDirection,
+  OverviewEvent,
   OverviewReport,
   PipelineStatus,
 } from '@repo/shared';
@@ -14,7 +15,7 @@ import { FILTER_DEBOUNCE_MS } from '../hooks';
 
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
-  api: { overview: vi.fn(), live: vi.fn(), incidents: vi.fn() },
+  api: { overview: vi.fn(), live: vi.fn(), incidents: vi.fn(), deployments: vi.fn() },
 }));
 
 const { api } = await import('../api');
@@ -55,12 +56,16 @@ function env(
 }
 
 function report(over: Partial<OverviewReport> = {}): OverviewReport {
+  const environments = over.environments ?? [
+    env('prod-acme-api', { type: 'prod', client: 'acme', app: 'api' }),
+    env('prod-globex-api', { type: 'prod', client: 'globex', app: 'api' }, 'failed'),
+  ];
   return {
     sourceId: 'src-1',
-    environments: [
-      env('prod-acme-api', { type: 'prod', client: 'acme', app: 'api' }),
-      env('prod-globex-api', { type: 'prod', client: 'globex', app: 'api' }, 'failed'),
-    ],
+    environments,
+    // What runs defaults to what the period held: a fixture that says nothing
+    // about the difference is one where the two lists are the same.
+    running: over.running ?? environments,
     dimensions: { app: ['api'], client: ['acme', 'globex'], type: ['prod'] },
     metaEnvironments: ['production'],
     repos: ['acme/api'],
@@ -96,11 +101,30 @@ function report(over: Partial<OverviewReport> = {}): OverviewReport {
   };
 }
 
+/**
+ * A deployment on the recent-activity window, placed relative to now — the
+ * journal and the frieze both cut on the clock, so a fixed date would age out
+ * of every window the day after it was written.
+ */
+function event(hoursAgo: number, id = `gh:acme/api:${hoursAgo}`): OverviewEvent {
+  return {
+    id,
+    at: new Date(Date.now() - hoursAgo * 3_600_000).toISOString(),
+    environment: 'prod-acme-api',
+    repo: 'acme/api',
+    ref: 'v2.14.1',
+    status: 'success',
+    url: 'https://example.test/deployments/1',
+    attributes: { type: 'prod' },
+  };
+}
+
 beforeEach(() => {
   vi.mocked(api.overview).mockReset();
   vi.mocked(api.live).mockReset();
   vi.mocked(api.incidents).mockReset();
   vi.mocked(api.incidents).mockResolvedValue([]);
+  vi.mocked(api.deployments).mockReset();
   onDirectionChange.mockReset();
 });
 
@@ -268,6 +292,24 @@ describe('OverviewPage', () => {
     expect(screen.getByTitle(/prod-acme-api/)).toBeInTheDocument();
   });
 
+  it('crosses what runs, not what moved inside the period', async () => {
+    // The matrix answers "which version is live where"; a stable production
+    // deployed before the period is exactly what it is looked at for.
+    vi.mocked(api.overview).mockResolvedValue(
+      report({
+        environments: [env('prod-acme-api', { type: 'prod', client: 'acme', app: 'api' })],
+        running: [
+          env('prod-acme-api', { type: 'prod', client: 'acme', app: 'api' }),
+          env('prod-globex-api', { type: 'prod', client: 'globex', app: 'api' }),
+        ],
+      }),
+    );
+    renderPage('instrument');
+
+    await waitFor(() => expect(screen.getByTitle('prod-globex-api')).toBeInTheDocument());
+    expect(screen.getByTitle('prod-acme-api')).toBeInTheDocument();
+  });
+
   it('says what is missing rather than drawing an empty grid', async () => {
     // One dimension cannot be crossed with itself.
     vi.mocked(api.overview).mockResolvedValue(report({ dimensions: { type: ['prod'] } }));
@@ -286,6 +328,51 @@ describe('OverviewPage', () => {
     cleanup();
     renderPage('stream');
     await waitFor(() => expect(vi.mocked(api.incidents)).toHaveBeenCalledOnce());
+  });
+
+  it('draws the journal from the recent window the report carries', async () => {
+    vi.mocked(api.overview).mockResolvedValue(
+      report({ events: [event(3)] }),
+    );
+    renderPage('stream');
+
+    // The rail names environments too, so the entry is looked for by its own
+    // second line rather than by a name the page says twice.
+    await waitFor(() =>
+      expect(screen.getByText('acme/api · v2.14.1')).toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/overview\.stream\.empty/)).not.toBeInTheDocument();
+    // The journal is a rail of the recent past, not a report over the period:
+    // it costs no listing of its own.
+    expect(vi.mocked(api.deployments)).not.toHaveBeenCalled();
+  });
+
+  it('names the window it covers when it has nothing to show', async () => {
+    // The complaint this answers: "nothing on this scope over the period" on a
+    // journal that never read the period reads as a broken filter. It says
+    // which hours it looked at, and that the period is not one of them.
+    vi.mocked(api.overview).mockResolvedValue(report({ events: [] }));
+    renderPage('stream', ['/dashboard/acme?windowDays=60']);
+
+    await waitFor(() =>
+      expect(screen.getByText(/overview\.stream\.empty/)).toHaveTextContent('"hours":48'),
+    );
+  });
+
+  it('keeps the frieze to the day it draws, whatever the report carries', async () => {
+    // The report covers two days so the journal can show a Friday evening on a
+    // Monday; the control room's axis is a day wide and would pile anything
+    // older against its left edge.
+    vi.mocked(api.overview).mockResolvedValue(
+      report({
+        events: [event(3), event(30, 'gh:acme/api:old')],
+      }),
+    );
+    renderPage('control');
+
+    await waitFor(() =>
+      expect(screen.getByText(/overview\.events\.count/)).toHaveTextContent('"count":1'),
+    );
   });
 
   it('strips everything meant to be operated on a wall screen', async () => {
