@@ -12,6 +12,7 @@ import { CodedException } from '../common/coded-exception';
 import { paginate, type PageWindow } from '../common/pagination';
 import { resolvePeriod, within, type PeriodQuery } from '../common/period';
 import { ChangelogStore } from '../changelogs/changelog.store';
+import { VersionReadingStore } from '../version-rules/version-reading.store';
 import type { SourceReader } from '../ingest/source-reader.interface';
 import { SettingsService } from '../settings/settings.service';
 import { SourcesService } from '../sources/sources.service';
@@ -50,6 +51,7 @@ export class DeploymentsService {
     private readonly releaseNotes: ReleaseNotesService,
     private readonly settings: SettingsService,
     private readonly changelogs: ChangelogStore,
+    private readonly versions: VersionReadingStore,
   ) {}
 
   /**
@@ -79,13 +81,34 @@ export class DeploymentsService {
     // Vocabularies before the filters, so narrowing one never empties another.
     const vocabulary = vocabularies(classified);
     const matching = applyFilters(classified, query).sort(byMostRecent);
+    const page = paginate(matching, window);
+
+    // Three questions about versions, asked together because they are read
+    // together: what each listed deployment was confirmed to have put live,
+    // what those environments run now, and whether this source reads versions
+    // at all. All three are small reads of our own tables, and all three are
+    // skipped in effect on an install with no rules — the first two come back
+    // empty and the third is a count of nothing.
+    const [frozen, current, versionRules] = await Promise.all([
+      // Read for the page rather than for the window: one row per deployment
+      // shown, so a hundred-deployment period costs the ids on screen.
+      this.versions.frozenFor(
+        sourceId,
+        page.items.map((deployment) => deployment.id),
+      ),
+      this.versions.latest(sourceId),
+      this.versions.rulesAttached(sourceId),
+    ]);
 
     return {
-      deployments: paginate(matching, window),
+      deployments: page,
       repos: allRepos,
       environments: vocabulary.environments,
       statuses: vocabulary.statuses,
       dimensions: vocabulary.dimensions,
+      versions: frozen,
+      currentVersions: current,
+      versionRules,
       period,
     };
   }

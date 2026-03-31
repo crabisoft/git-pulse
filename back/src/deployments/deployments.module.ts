@@ -6,6 +6,7 @@ import { IngestModule } from '../ingest/ingest.module';
 import { EnvRulesModule } from '../env-rules/env-rules.module';
 import { ReleaseNotesModule } from '../release-notes/release-notes.module';
 import { ChangelogStoreModule } from '../changelogs/changelog-store.module';
+import { VersionReadingStoreModule } from '../version-rules/version-reading-store.module';
 
 /**
  * The deployments view: the rows, and what each one carried.
@@ -25,6 +26,7 @@ import { ChangelogStoreModule } from '../changelogs/changelog-store.module';
     EnvRulesModule,
     ReleaseNotesModule,
     ChangelogStoreModule,
+    VersionReadingStoreModule,
   ],
   controllers: [DeploymentsController],
   providers: [DeploymentsService],

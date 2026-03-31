@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type {
   DashboardEnvironment,
   DoraResult,
+  EnvironmentVersion,
   OverviewEvent,
   OverviewFlow,
   OverviewFriction,
@@ -15,6 +16,7 @@ import { DoraService } from '../dora/dora.service';
 import { JobsService } from '../jobs/jobs.service';
 import { ApiQuotaService } from '../api-quota/api-quota.service';
 import { SettingsService } from '../settings/settings.service';
+import { VersionReadingStore } from '../version-rules/version-reading.store';
 import { flowsFrom } from './flow';
 import type { OverviewQueryDto } from './dto/overview-query.dto';
 
@@ -51,6 +53,7 @@ export class OverviewService {
     private readonly jobs: JobsService,
     private readonly quotas: ApiQuotaService,
     private readonly settings: SettingsService,
+    private readonly versions: VersionReadingStore,
   ) {}
 
   /**
@@ -115,6 +118,10 @@ export class OverviewService {
       friction: friction(collected, results, stalePrHours),
       health: await this.health(collected, signedIn),
       events: events(matching),
+      // Not read at all without an account, rather than read and blanked: the
+      // stance `health` takes, and for a stronger reason than a spared query —
+      // these rows name the release each public environment is exposing.
+      versions: signedIn ? narrowed(await this.versions.latest(sourceId), query, dimensionFilter) : [],
       period,
       warnings: collected.warnings,
     };
@@ -182,6 +189,38 @@ export class OverviewService {
 
     return { ...age, queues, quotaLeft: shares.length > 0 ? Math.min(...shares) : null };
   }
+}
+
+/**
+ * The readings the filters leave standing.
+ *
+ * The same three the board and `running` apply — the repo scope, the dimension
+ * filter and the meta filter — because a reader who narrowed the page to one
+ * client is asking every part of it the same question, and a grid that went on
+ * listing everybody was answering a different one.
+ *
+ * **The period is deliberately not among them**, for the reason `running`
+ * escapes it too: a version that has not moved for forty days is precisely what
+ * this view exists to show, and narrowing to the window would drop exactly the
+ * rows worth looking at. The other two lists are reports *over* a period; this
+ * one is a statement about now.
+ *
+ * The repo scope is applied here rather than in the query above because these
+ * rows come from our own table: there is no call to be spared by asking for
+ * fewer, and the store answers a source at a time.
+ */
+function narrowed(
+  versions: EnvironmentVersion[],
+  query: OverviewQueryDto,
+  dimensionFilter: Record<string, string>,
+): EnvironmentVersion[] {
+  const repos = query.repos && query.repos.length > 0 ? new Set(query.repos) : null;
+  return versions.filter(
+    (version) =>
+      (!repos || repos.has(version.repo)) &&
+      matches(version.attributes, dimensionFilter) &&
+      carriesMeta(version.metaEnvironments, query.meta),
+  );
 }
 
 /**

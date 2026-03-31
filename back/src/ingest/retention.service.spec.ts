@@ -30,6 +30,12 @@ function service(sources: SourceRow[], retentionMarginDays = MARGIN_DAYS) {
     storedDeployment: deleter('deployment'),
     storedPullRequest: deleter('pullRequest'),
     webhookDelivery: deleter('delivery'),
+    // Offered so that "never swept" below means the sweep spared them, rather
+    // than meaning the stub never had them to sweep.
+    deploymentChangelog: deleter('changelog'),
+    deploymentVersion: deleter('deploymentVersion'),
+    environmentVersion: deleter('environmentVersion'),
+    versionChange: deleter('versionChange'),
     $transaction: (ops: unknown[]) => Promise.resolve(ops),
   } as unknown as PrismaService;
   const settings = {
@@ -123,5 +129,31 @@ describe('RetentionService', () => {
     expect(delivery?.where.sourceId).toBeUndefined();
     const bound = delivery?.where.receivedAt as { lt: Date };
     expect(Math.round((NOW.getTime() - bound.lt.getTime()) / 86_400_000)).toBe(7);
+  });
+
+  /**
+   * Everything the sweep does touch can be fetched from the provider again if
+   * it were dropped. These cannot: what a deployment carried, and what its
+   * environment answered while it was live, are readings of a moment that has
+   * passed. Asking the environment today returns today's version.
+   */
+  it('leaves the frozen records alone, whatever the depth', async () => {
+    const { retention, queued } = service([{ id: 'shallow', historyDays: 1 }]);
+
+    await retention.prune(NOW);
+
+    expect(queued.map((q) => q.table)).not.toContain('deploymentVersion');
+    expect(queued.map((q) => q.table)).not.toContain('changelog');
+  });
+
+  it('leaves the version tables alone too', async () => {
+    // The current state is one row per environment and the timeline is written
+    // on change alone: neither grows with the window, so neither is swept by it.
+    const { retention, queued } = service([{ id: 'shallow', historyDays: 1 }]);
+
+    await retention.prune(NOW);
+
+    expect(queued.map((q) => q.table)).not.toContain('environmentVersion');
+    expect(queued.map((q) => q.table)).not.toContain('versionChange');
   });
 });

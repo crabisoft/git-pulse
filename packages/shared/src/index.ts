@@ -159,6 +159,8 @@ export interface SourcePublic {
   isDefault: boolean;
   /** Classification rules that apply to this source, from the global set. */
   envRuleIds: string[];
+  /** Version rules this source's environments are read with, from the global set. */
+  versionRuleIds: string[];
   /** Trackers this source's pull requests may reference. */
   trackerIds: string[];
   /**
@@ -443,6 +445,42 @@ export interface DeploymentReport {
   statuses: PipelineStatus[];
   /** Dimension key → observed values, over the repo-scoped deployments. */
   dimensions: Record<string, string[]>;
+  /**
+   * What each **listed deployment's** environment was answering while that
+   * deployment was live, frozen at the time — never the environment's current
+   * version.
+   *
+   * At most one entry per row and often fewer: a deployment replaced before a
+   * probe reached it has none, for good, since a version cannot be read after
+   * the fact. A row missing from here is a fact about that deployment.
+   */
+  versions: DeploymentVersion[];
+  /**
+   * What each environment is running **now**, one entry per (repo,
+   * environment).
+   *
+   * Carried beside the frozen rows rather than instead of them, because the two
+   * are complementary and not competing. Everything deployed before version
+   * rules existed has no frozen row and never will; the current reading is all
+   * there is to say about those environments, and saying nothing would leave a
+   * page that is permanently blank on its history.
+   *
+   * The page may only put this on the **most recent** deployment of a pair, and
+   * must mark it as the environment's current state rather than as something
+   * that deployment is known to have delivered. On any older row it would be
+   * plainly false: something newer went out since.
+   */
+  currentVersions: EnvironmentVersion[];
+  /**
+   * How many version rules this source has attached.
+   *
+   * What decides whether the page shows the column at all — and deliberately
+   * not "are there any readings". A source that was configured five minutes ago
+   * has rules and no readings, and that is exactly when somebody is looking for
+   * the column to find out why it is empty. Answered here because the frontend
+   * cannot tell "nobody configured this" from "configured, nothing read yet".
+   */
+  versionRules: number;
   period: DoraPeriod;
 }
 
@@ -608,6 +646,191 @@ export interface ChangelogArchiveOutcome {
    * of the store, which is what makes them worth reporting rather than logging.
    */
   failed: number;
+}
+
+// ─── Installed versions ──────────────────────────────────────────────
+
+/**
+ * How a response is read. `json` and `xml` are parsed into the same tree and
+ * addressed by path; `text` is the escape hatch for what is neither — a body
+ * holding a version and a newline, a page carrying it in a meta tag — and is
+ * read by a regex whose named groups the template refers to.
+ */
+export type VersionFormat = 'json' | 'xml' | 'text';
+
+/**
+ * What a probe sends to be let in. The secret itself never appears in a rule:
+ * it lives encrypted beside the platform tokens, and the API answers with
+ * `hasSecret` alone.
+ */
+export type VersionAuthKind = 'none' | 'bearer' | 'basic' | 'header';
+
+/**
+ * How a reading turned out.
+ *
+ * `skipped` is not a degraded `unreachable`: it says no request was made, which
+ * is the ordinary outcome for a rule addressing an environment URL the platform
+ * does not publish. Reported rather than left blank, because "we never asked"
+ * and "we asked and got nothing" are fixed by different things.
+ */
+export type VersionProbeStatus = 'ok' | 'unreachable' | 'noMatch' | 'skipped';
+
+/** A version rule as the API hands it over — never with its secret. */
+export interface VersionRulePublic {
+  id: string;
+  name: string;
+  /** Pattern the environment name must match. Null means every environment. */
+  environment: string | null;
+  /** Pattern the repo must match. Null means every repo. */
+  repo: string | null;
+  /** Placeholders: `{environmentUrl}` `{repo}` `{environment}` `{ref}` `{attr.*}`. */
+  urlTemplate: string;
+  format: VersionFormat;
+  /** Literal text and `{path}` placeholders resolved against the response. */
+  template: string;
+  /** The regex `text` reads groups from. Null for the parsed formats. */
+  pattern: string | null;
+  /** Extra request headers, secrets excluded. */
+  headers: Record<string, string>;
+  authKind: VersionAuthKind;
+  /** Header name when `authKind` is `header`. Null otherwise. */
+  authHeader: string | null;
+  /** Whether a secret is stored. The secret itself never leaves the backend. */
+  hasSecret: boolean;
+  /** Lower wins when two rules claim the same environment. */
+  priority: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * What an environment is currently running, as last read.
+ *
+ * A failed reading is a reading: the row carries its status and the coded reason
+ * rather than disappearing, because an environment that stopped answering is
+ * something a reader has to be told about — a version silently frozen at last
+ * week's value would be read as a deployment that never went out.
+ */
+export interface EnvironmentVersion {
+  repo: string;
+  environment: string;
+  /** Null when the last reading produced none — see `status`. */
+  version: string | null;
+  /** The deployment that was live when this was read, when one was known. */
+  deploymentId: string | null;
+  /** The ref that deployment carried, for the comparison the UI draws. */
+  ref: string | null;
+  /** The rule that answered, null when none applied. */
+  ruleId: string | null;
+  /** The address actually read, null when nothing was requested. */
+  url: string | null;
+  status: VersionProbeStatus;
+  /** Why the reading produced nothing. Null when it did. */
+  error: CodedMessage | null;
+  /**
+   * The environment resolved against the source's classification rules — the
+   * same attributes a deployment of that (repo, environment) carries, and
+   * resolved the same way, so a grid crossing `client` and a metric sliced on
+   * `client` mean the same thing.
+   *
+   * Attached on the way out rather than stored: rules are configuration, and a
+   * rule corrected today has to apply to readings taken yesterday.
+   */
+  attributes: Record<string, string>;
+  /**
+   * The meta-environments this environment belongs to, from the same
+   * resolution. Carried beside the attributes because a reader narrowing on
+   * `production` expects the version grid to narrow with everything else.
+   */
+  metaEnvironments: string[];
+  observedAt: string;
+  /** When the version last differed from the reading before it. */
+  changedAt: string | null;
+}
+
+/**
+ * What one deployment's environment was answering while it was the live one.
+ *
+ * The counterpart of `EnvironmentVersion`, and the questions differ: that one
+ * says what an environment runs now and is overwritten at every reading, this
+ * one says what a deployment was confirmed to have put there and survives the
+ * next deployment — and the sweep that takes the deployment row itself.
+ *
+ * A deployment with no row at all is the ordinary case for anything replaced
+ * before a probe reached it, and it is **not recoverable**: asking an
+ * environment today what it ran yesterday answers about today. So the absence
+ * has to be shown as its own state rather than as a blank cell.
+ */
+export interface DeploymentVersion {
+  /** The deployment this froze, as the connectors identify it. */
+  deploymentId: string;
+  repo: string;
+  environment: string;
+  /** What the deployment carried, kept so the reading can still be judged. */
+  ref: string;
+  deployedAt: string;
+  /** Null when the reading produced none — `status` says why. */
+  version: string | null;
+  ruleId: string | null;
+  url: string | null;
+  status: VersionProbeStatus;
+  error: CodedMessage | null;
+  observedAt: string;
+  /**
+   * Seconds between the deployment and the reading. A version read three
+   * seconds after a deployment is much weaker evidence than one read ten
+   * minutes later, and the reader is the one who has to weigh that.
+   */
+  delaySec: number;
+}
+
+/** What one probing run did, as the collection job reports it. */
+export interface VersionProbeOutcome {
+  /** Environments a request was actually made for. */
+  probed: number;
+  /** Read recently enough, or addressed by a rule that had nothing to say. */
+  skipped: number;
+  /** Asked and got nothing usable back. */
+  failed: number;
+  /** Readings that differed from the one before them. */
+  changed: number;
+  /**
+   * Version rules attached to this source. Zero is the reason a run did
+   * nothing far more often than anything else, and four zeroes above cannot
+   * say it — "finished" would be a polite lie to somebody who just asked for a
+   * reading and got none.
+   */
+  rules: number;
+  /**
+   * Environments the rules could have been applied to — the latest successful
+   * deployment of each. Zero with rules attached is a diagnosis nothing else
+   * gives: the rules are fine and no deployment has ever been collected for
+   * them to describe.
+   */
+  environments: number;
+}
+
+/**
+ * What the rule editor gets back when it tries a rule out.
+ *
+ * `tree` is the response as the resolver sees it — after the XML normalisation,
+ * not before — because the editor builds paths by clicking through it. Handing
+ * over the raw body and letting the front parse it again would put a second
+ * implementation of the same normalisation on the other side of the wire, and
+ * the paths it produced would be right only as long as the two agreed.
+ */
+export interface VersionPreview {
+  /** Null when the body could not be parsed, and in `text` mode. */
+  tree: unknown;
+  /** What the template produced. Null when it produced nothing. */
+  version: string | null;
+  /** Why it produced nothing. Null when it did. */
+  reason: CodedMessage | null;
+  /** The address read, null when the preview was given a body instead. */
+  url: string | null;
+  httpStatus: number | null;
+  /** The body as received, truncated — what the editor shows beside the tree. */
+  body: string;
 }
 
 /** A merged PR/MR with the timestamps needed to derive lead time. */
@@ -1571,6 +1794,18 @@ export interface OverviewReport {
   health: OverviewHealth;
   /** Deployments of the last 24 hours, most recent first. */
   events: OverviewEvent[];
+  /**
+   * What every environment was last read running — the same readings the
+   * deployments page shows, not a second gathering.
+   *
+   * **Empty for a caller without an account**, like `health.queues` and
+   * `health.quotaLeft`: a version states which release is exposed on which
+   * public environment, which is operational detail rather than the delivery
+   * summary an anonymous visitor is shown. Never narrowed by the period —
+   * an environment nobody has deployed to for a month is still running
+   * something, and a grid that hid it would hide the row most worth seeing.
+   */
+  versions: EnvironmentVersion[];
   period: DoraPeriod;
   /** Non-blocking errors collected while assembling the above. */
   warnings: CodedMessage[];
@@ -1584,12 +1819,13 @@ export interface OverviewReport {
  * `control`, and naming it as a third direction keeps the setting readable by
  * the person choosing it.
  */
-export type OverviewDirection = 'control' | 'instrument' | 'stream';
+export type OverviewDirection = 'control' | 'instrument' | 'stream' | 'versions';
 
 export const OVERVIEW_DIRECTIONS: readonly OverviewDirection[] = [
   'control',
   'instrument',
   'stream',
+  'versions',
 ];
 
 /**
@@ -1615,10 +1851,16 @@ export interface DisplayPreference {
 /**
  * The queues the install runs. `collection` carries the scheduled
  * synchronisation and the per-source work it fans out; `ingest` carries what
- * webhook deliveries ask to be written. Two rather than one so a burst of
- * events never waits behind a synchronisation that takes minutes.
+ * webhook deliveries ask to be written; `versions` carries the readings an
+ * event asks for, which wait out a settling delay and then call somebody
+ * else's application.
+ *
+ * Three rather than one because each has a different pace and a different
+ * appetite: a burst of events must not wait behind a synchronisation that takes
+ * minutes, and a reading that sleeps thirty seconds before it starts must not
+ * hold an ingestion worker while it does.
  */
-export const QUEUE_NAMES = ['collection', 'ingest'] as const;
+export const QUEUE_NAMES = ['collection', 'ingest', 'versions'] as const;
 
 export type QueueName = (typeof QUEUE_NAMES)[number];
 

@@ -7,6 +7,7 @@ import type { DashboardService } from '../dashboard/dashboard.service';
 import type { DoraService } from '../dora/dora.service';
 import type { SyncService } from '../ingest/sync.service';
 import type { ChangelogsService } from '../changelogs/changelogs.service';
+import type { VersionReadingsService } from '../version-rules/version-readings.service';
 
 const SOURCE_ID = 'src-1';
 
@@ -29,6 +30,7 @@ function service(existing: ReturnType<typeof jobIn> | null = null) {
     {} as DoraService,
     {} as SyncService,
     {} as ChangelogsService,
+    {} as VersionReadingsService,
     sources,
     queue,
   );

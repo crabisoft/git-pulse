@@ -7,6 +7,7 @@ import type { DashboardService } from '../dashboard/dashboard.service';
 import type { DoraService } from '../dora/dora.service';
 import type { SyncService } from '../ingest/sync.service';
 import type { ChangelogsService } from '../changelogs/changelogs.service';
+import type { VersionReadingsService } from '../version-rules/version-readings.service';
 
 /**
  * When a collection replays the metric history, and when it must not.
@@ -39,6 +40,9 @@ function service(
     dora,
     { syncIfStored: vi.fn().mockResolvedValue(null) } as unknown as SyncService,
     { archive: vi.fn().mockResolvedValue({ archived: 0 }) } as unknown as ChangelogsService,
+    {
+      probeSource: vi.fn().mockResolvedValue({ probed: 0, skipped: 0, failed: 0, changed: 0 }),
+    } as unknown as VersionReadingsService,
     {
       readSpec: vi.fn().mockResolvedValue({ mode: 'stored', historyDays }),
     } as unknown as SourcesService,

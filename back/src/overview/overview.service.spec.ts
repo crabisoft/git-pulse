@@ -75,6 +75,7 @@ function build(overrides: Partial<CollectedSource> = {}, dora: DoraStub = {}) {
 
   const jobs = { snapshot: vi.fn().mockResolvedValue({ queues: [], observedAt: '', unreachable: null }) };
   const quotas = { list: vi.fn().mockResolvedValue([]) };
+  const versions = { latest: vi.fn().mockResolvedValue([]) };
 
   const dashboard = { collect: vi.fn().mockResolvedValue(collected) };
 
@@ -94,8 +95,9 @@ function build(overrides: Partial<CollectedSource> = {}, dora: DoraStub = {}) {
     jobs as never,
     quotas as never,
     { get: vi.fn().mockResolvedValue({ stalePrHours: 72 }) } as never,
+    versions as never,
   );
-  return { service, jobs, quotas, dashboard };
+  return { service, jobs, quotas, dashboard, versions };
 }
 
 describe('OverviewService', () => {
@@ -407,6 +409,118 @@ describe('OverviewService', () => {
     expect(report.health.quotaLeft).toBeNull();
     expect(jobs.snapshot).not.toHaveBeenCalled();
     expect(quotas.list).not.toHaveBeenCalled();
+  });
+
+  it('tells a visitor nothing about what is running where either', async () => {
+    // A version names the release a public environment is exposing, which is
+    // operational detail rather than the delivery summary a visitor is shown.
+    const { service, versions } = build();
+
+    const report = await service.report('src-1', {}, false);
+
+    expect(report.versions).toEqual([]);
+    // Not read and then blanked: the same stance the health block takes.
+    expect(versions.latest).not.toHaveBeenCalled();
+  });
+
+  it('reports what every environment is running to an account', async () => {
+    const { service, versions } = build();
+    versions.latest.mockResolvedValue([
+      { repo: 'acme/api', environment: 'prod', version: '1.4.2', status: 'ok' },
+    ]);
+
+    const report = await service.report('src-1', {}, true);
+
+    expect(report.versions).toHaveLength(1);
+    expect(versions.latest).toHaveBeenCalledWith('src-1');
+  });
+
+  it('reads the versions whatever the period', async () => {
+    // The grid exists to reveal an environment that has *not* moved. Narrowing
+    // these to the window would drop precisely the rows worth looking at.
+    const { service, versions } = build();
+    versions.latest.mockResolvedValue([
+      {
+        repo: 'acme/api',
+        environment: 'prod',
+        version: '1.0.0',
+        status: 'ok',
+        // Last read weeks before the window this report covers.
+        observedAt: '2026-06-01T00:00:00.000Z',
+        attributes: {},
+        metaEnvironments: [],
+      },
+    ]);
+
+    const report = await service.report('src-1', { windowDays: 1 }, true);
+
+    expect(report.versions).toHaveLength(1);
+  });
+
+  describe('narrowing the versions', () => {
+    /** Two readings that differ on every axis a filter can act on. */
+    function readings() {
+      return [
+        {
+          repo: 'acme/api',
+          environment: 'prod-acme',
+          version: '1.4.2',
+          status: 'ok',
+          attributes: { client: 'acme' },
+          metaEnvironments: ['production'],
+          observedAt: '2026-07-30T10:00:00.000Z',
+        },
+        {
+          repo: 'acme/web',
+          environment: 'qa-globex',
+          version: '2.0.0',
+          status: 'ok',
+          attributes: { client: 'globex' },
+          metaEnvironments: [],
+          observedAt: '2026-07-30T10:00:00.000Z',
+        },
+      ];
+    }
+
+    function withReadings() {
+      const built = build();
+      built.versions.latest.mockResolvedValue(readings());
+      return built;
+    }
+
+    // The defect: the grid went on showing every client while the rest of the
+    // page was narrowed to one.
+    it('applies the dimension filter', async () => {
+      const { service } = withReadings();
+
+      const report = await service.report('src-1', { dimension: ['client:acme'] }, true);
+
+      expect(report.versions.map((v) => v.repo)).toEqual(['acme/api']);
+    });
+
+    it('applies the meta filter', async () => {
+      const { service } = withReadings();
+
+      const report = await service.report('src-1', { meta: 'production' }, true);
+
+      expect(report.versions.map((v) => v.repo)).toEqual(['acme/api']);
+    });
+
+    it('applies the repo scope', async () => {
+      const { service } = withReadings();
+
+      const report = await service.report('src-1', { repos: ['acme/web'] }, true);
+
+      expect(report.versions.map((v) => v.repo)).toEqual(['acme/web']);
+    });
+
+    it('keeps every reading when nothing is narrowed', async () => {
+      const { service } = withReadings();
+
+      const report = await service.report('src-1', {}, true);
+
+      expect(report.versions).toHaveLength(2);
+    });
   });
 
   it('reports the tightest quota bucket to an account', async () => {

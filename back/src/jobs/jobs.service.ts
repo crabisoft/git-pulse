@@ -39,8 +39,9 @@ export class JobsService {
   constructor(
     @InjectQueue('collection') collection: Queue,
     @InjectQueue('ingest') ingest: Queue,
+    @InjectQueue('versions') versions: Queue,
   ) {
-    this.queues = { collection, ingest };
+    this.queues = { collection, ingest, versions };
   }
 
   /**

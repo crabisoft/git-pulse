@@ -12,7 +12,7 @@ import { JobsController } from './jobs.controller';
  */
 @Module({
   imports: [
-    BullModule.registerQueue({ name: 'collection' }, { name: 'ingest' }),
+    BullModule.registerQueue({ name: 'collection' }, { name: 'ingest' }, { name: 'versions' }),
   ],
   controllers: [JobsController],
   providers: [JobsService],

@@ -32,8 +32,8 @@ function queue(over: Partial<Record<keyof Queue, unknown>> = {}) {
   } as unknown as Queue;
 }
 
-function service(collection = queue(), ingest = queue()) {
-  return { jobs: new JobsService(collection, ingest), collection, ingest };
+function service(collection = queue(), ingest = queue(), versions = queue()) {
+  return { jobs: new JobsService(collection, ingest, versions), collection, ingest, versions };
 }
 
 /** The coded body a route would answer with. */
@@ -44,7 +44,7 @@ function codeOf(e: unknown): string | undefined {
 }
 
 describe('JobsService.snapshot', () => {
-  it('reports both queues, with the next occurrence of a repeatable as a date', async () => {
+  it('reports every queue, with the next occurrence of a repeatable as a date', async () => {
     const { jobs } = service(
       queue({
         getRepeatableJobs: vi.fn().mockResolvedValue([
@@ -56,7 +56,7 @@ describe('JobsService.snapshot', () => {
     const snapshot = await jobs.snapshot();
 
     expect(snapshot.unreachable).toBeNull();
-    expect(snapshot.queues.map((q) => q.name)).toEqual(['collection', 'ingest']);
+    expect(snapshot.queues.map((q) => q.name)).toEqual(['collection', 'ingest', 'versions']);
     expect(snapshot.queues[0].counts).toEqual(COUNTS);
     expect(snapshot.queues[0].repeatables).toEqual([
       { name: 'collect-all', pattern: '*/15 * * * *', nextRunAt: '2026-07-30T10:15:00.000Z' },
@@ -113,6 +113,7 @@ describe('JobsService.running', () => {
         getWaiting: vi.fn().mockResolvedValue([job({ id: 'w1' })]),
         getDelayed: vi.fn().mockResolvedValue([job({ id: 'd1', delay: 600_000 })]),
       }),
+      inFlight(),
       inFlight(),
     );
 

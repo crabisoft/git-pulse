@@ -9,6 +9,7 @@ import { IngestModule } from '../ingest/ingest.module';
 import { DashboardModule } from '../dashboard/dashboard.module';
 import { DoraModule } from '../dora/dora.module';
 import { ChangelogsModule } from '../changelogs/changelogs.module';
+import { VersionRulesModule } from '../version-rules/version-rules.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { ChangelogsModule } from '../changelogs/changelogs.module';
     DashboardModule,
     DoraModule,
     ChangelogsModule,
+    VersionRulesModule,
   ],
   controllers: [CollectionController],
   providers: [CollectorService, CollectionProcessor, CollectionScheduler],

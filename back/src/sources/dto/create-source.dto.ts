@@ -107,6 +107,12 @@ export class CreateSourceDto {
   @IsString({ each: true })
   envRuleIds?: string[];
 
+  /** Version rules this source's environments are read with. Replaces the set. */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  versionRuleIds?: string[];
+
   /** Trackers this source's pull requests may reference. Replaces the set. */
   @IsOptional()
   @IsArray()

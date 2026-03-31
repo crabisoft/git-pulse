@@ -11,6 +11,7 @@ import { SyncService } from './sync.service';
 import { WebhookController } from './webhooks/webhook.controller';
 import { WebhookService } from './webhooks/webhook.service';
 import { IngestProcessor } from './webhooks/ingest.processor';
+import { PROBE_QUEUE } from '../version-rules/probe-job';
 
 /**
  * Everything that fills the read model and reads it back.
@@ -25,6 +26,11 @@ import { IngestProcessor } from './webhooks/ingest.processor';
 @Module({
   imports: [
     BullModule.registerQueue({ name: 'ingest' }),
+    // Written to, never consumed here: an event that lands a deployment asks
+    // for a reading, and the module that takes readings depends on this one.
+    // A queue name is the only thing that crosses, so the dependency stays
+    // one-way.
+    BullModule.registerQueue({ name: PROBE_QUEUE }),
     SourcesModule,
     SettingsModule,
   ],

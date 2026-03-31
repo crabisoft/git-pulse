@@ -17,6 +17,7 @@ import { DashboardService } from '../dashboard/dashboard.service';
 import { DoraService } from '../dora/dora.service';
 import { SyncService, type SyncOptions } from '../ingest/sync.service';
 import { ChangelogsService } from '../changelogs/changelogs.service';
+import { VersionReadingsService } from '../version-rules/version-readings.service';
 import { toPage, type PageWindow } from '../common/pagination';
 
 interface HistoryQuery {
@@ -48,6 +49,7 @@ export class CollectorService {
     private readonly dora: DoraService,
     private readonly sync: SyncService,
     private readonly changelogs: ChangelogsService,
+    private readonly versions: VersionReadingsService,
     private readonly sources: SourcesService,
     @InjectQueue('collection') private readonly queue: Queue,
   ) {}
@@ -173,6 +175,15 @@ export class CollectorService {
     await this.dora.snapshot(sourceId).catch((e) => {
       this.logger.warn(`DORA snapshot failed for ${sourceId}: ${asMessage(e)}`);
       warnings.push({ code: 'errors.collect.dora', params: { error: asMessage(e) } });
+    });
+
+    // Before the archiving rather than after it: reading a version is a request
+    // to somebody else's application, and what it confirms is the deployment
+    // that just went out. Left until last it would run behind a batch of
+    // comparisons, and confirm it a good deal later than it could have.
+    await this.versions.probeSource(sourceId).catch((e) => {
+      this.logger.warn(`Version probing failed for ${sourceId}: ${asMessage(e)}`);
+      warnings.push({ code: 'errors.collect.versions', params: { error: asMessage(e) } });
     });
 
     // Last, and best-effort like the rest — but the only step here whose work

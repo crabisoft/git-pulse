@@ -31,47 +31,51 @@ enum SourceMode {
 
 /// A Git data source (GitHub or GitLab) with its tracking scope.
 model Source {
-  id        String     @id @default(uuid())
-  name      String
+  id              String     @id @default(uuid())
+  name            String
   /// URL-safe form of the name, used by the frontend routes.
-  slug      String     @unique
-  kind      SourceKind
-  baseUrl   String
-  authKind  AuthKind
+  slug            String     @unique
+  kind            SourceKind
+  baseUrl         String
+  authKind        AuthKind
   /// ScopeRules payload: { owner, include[], exclude[] }.
-  scope     Json
+  scope           Json
   /// Defaults to `live`: an install upgrading into this keeps behaving exactly
   /// as it did, and switching is a decision.
-  mode      SourceMode @default(live)
+  mode            SourceMode @default(live)
   /// Whether events are accepted for this source. An acceleration, never a
   /// prerequisite: the scheduled synchronisation stays correct without it, so
   /// an install whose network refuses inbound traffic simply leaves it off.
   /// Only meaningful in `stored` mode, which the service enforces.
-  webhooksEnabled Boolean @default(false)
+  webhooksEnabled Boolean    @default(false)
   /// How far back the ingestion reads for this source, in days. Only meaningful
   /// in `stored` mode — a live source asks its provider for the instant.
   ///
   /// Nullable, and null means "follow the reporting window": a source created
   /// before this, or one whose owner had no opinion, keeps exactly the depth it
   /// had, and follows the window when that one is widened.
-  historyDays Int?
+  historyDays     Int?
   /// The source a reader lands on when the address names none. At most one, and
   /// possibly none — an install with a single source has never needed to say.
-  isDefault Boolean    @default(false)
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  isDefault       Boolean    @default(false)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
 
-  envRules    SourceEnvRule[]
-  trackers    SourceTracker[]
-  snapshots   MetricSnapshot[]
-  webhookSecret WebhookSecret?
-  deliveries    WebhookDelivery[]
-  repos        StoredRepo[]
-  pullRequests StoredPullRequest[]
-  pipelines    StoredPipeline[]
-  deployments  StoredDeployment[]
-  changelogs   DeploymentChangelog[]
-  syncStates   SyncState[]
+  envRules       SourceEnvRule[]
+  versionRules   SourceVersionRule[]
+  versions       EnvironmentVersion[]
+  versionChanges VersionChange[]
+  deploymentVersions DeploymentVersion[]
+  trackers       SourceTracker[]
+  snapshots      MetricSnapshot[]
+  webhookSecret  WebhookSecret?
+  deliveries     WebhookDelivery[]
+  repos          StoredRepo[]
+  pullRequests   StoredPullRequest[]
+  pipelines      StoredPipeline[]
+  deployments    StoredDeployment[]
+  changelogs     DeploymentChangelog[]
+  syncStates     SyncState[]
 }
 
 /// What a credential unlocks. A source spends its secret against a Git
@@ -80,6 +84,7 @@ model Source {
 enum CredentialOwner {
   source
   llmProvider
+  versionRule
 }
 
 /// Access secret for whatever holds one, encrypted at rest (AES-256-GCM
@@ -137,7 +142,7 @@ model EnvRule {
   createdAt  DateTime    @default(now())
   updatedAt  DateTime    @updatedAt
 
-  sources    SourceEnvRule[]
+  sources SourceEnvRule[]
 
   @@index([target, priority])
 }
@@ -155,6 +160,207 @@ model SourceEnvRule {
   @@index([ruleId])
 }
 
+/// How a response is read. `json` and `xml` are parsed into one shape and
+/// addressed by path; `text` runs a regex over the body, for what is neither.
+enum VersionFormat {
+  json
+  xml
+  text
+}
+
+/// What a probe sends to be let in. The secret is never here: it lives in
+/// Credential like every other, and only its presence is ever reported.
+enum VersionAuthKind {
+  none
+  bearer
+  basic
+  header
+}
+
+/// How the version an environment is running is read back over HTTP.
+///
+/// Defined once for the whole install and enabled source by source, like
+/// EnvRule: the address of a version endpoint follows a convention — one path
+/// under the environment's own URL, one host per customer — and a convention
+/// rarely stops at one repository host.
+///
+/// Which environment a rule answers for is a RegEx rather than a name, for the
+/// same reason: `prod`, `production` and `ProdContoso` are one environment in
+/// the mind of whoever wrote them.
+///
+/// The rule is *selected*, not accumulated — see `ruleFor`. A version is a
+/// single reading, so the most specific rule has to win outright where a
+/// classification rule contributes a piece and lets the others contribute
+/// theirs.
+model VersionRule {
+  id          String          @id @default(uuid())
+  name        String
+  /// Pattern the environment name must match. Null means every environment.
+  environment String?
+  /// Pattern the repo must match. Null means every repo — a version endpoint
+  /// is usually a property of the environment, not of what deploys into it.
+  repo        String?
+  /// Placeholders: {environmentUrl} {repo} {environment} {ref} {attr.*}. The
+  /// first covers what the platform published, the last what it did not — which
+  /// is the common case, since neither host states an address unless an
+  /// environment was configured with one.
+  urlTemplate String
+  format      VersionFormat   @default(json)
+  /// Literal text and `{path}` placeholders, resolved against the response.
+  template    String
+  /// The regex `text` reads its groups from. Null for the parsed formats.
+  pattern     String?
+  /// Extra request headers. Never a secret: those go through Credential, which
+  /// is the only place in this schema that is encrypted at rest.
+  headers     Json?
+  authKind    VersionAuthKind @default(none)
+  /// Header name when `authKind` is `header`.
+  authHeader  String?
+  /// Client-defined priority (lower wins when two rules claim an environment).
+  priority    Int             @default(100)
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  sources  SourceVersionRule[]
+  readings EnvironmentVersion[]
+  frozen   DeploymentVersion[]
+
+  @@index([priority])
+}
+
+/// Which version rules apply to a source. Written from the source, like
+/// SourceEnvRule and SourceTracker.
+model SourceVersionRule {
+  source    Source      @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId  String
+  rule      VersionRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  ruleId    String
+  createdAt DateTime    @default(now())
+
+  @@id([sourceId, ruleId])
+  @@index([ruleId])
+}
+
+/// What an environment is currently running, as last read.
+///
+/// One row per (source, repo, environment), overwritten at every reading: this
+/// is a current state, and the history of it is VersionChange. A failed reading
+/// overwrites just as a successful one does — an environment that stopped
+/// answering must not keep displaying last week's version, which would read as
+/// a deployment that never went out.
+model EnvironmentVersion {
+  id           String       @id @default(uuid())
+  source       Source       @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId     String
+  repo         String
+  environment  String
+  /// Null when the last reading produced none — `status` says why.
+  version      String?
+  /// The deployment that was live when this was read, as the connectors
+  /// identify it, and the ref it carried. Kept as plain columns rather than a
+  /// relation: the deployment row is purged with the reporting window, and a
+  /// reading outliving it is still true.
+  deploymentId String?
+  ref          String?
+  /// The rule that answered. Cleared rather than cascading when the rule goes:
+  /// the reading was taken, and deleting a rule does not make it untaken.
+  rule         VersionRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  ruleId       String?
+  url          String?
+  /// VersionProbeStatus — `skipped` means no request was made at all.
+  status       String
+  /// CodedMessage, so the reason reaches the reader in their own language.
+  error        Json?
+  observedAt   DateTime
+  /// When the version last differed from the reading before it. Null until a
+  /// second, different one lands — a first reading has changed nothing.
+  changedAt    DateTime?
+
+  @@unique([sourceId, repo, environment])
+  @@index([sourceId, observedAt])
+  @@index([ruleId])
+}
+
+/// A version arriving on an environment, written only when it differs from the
+/// reading before it.
+///
+/// The timeline the current state cannot answer: "when did 1.4.2 reach prod",
+/// asked long after 1.4.3 replaced it. Written on change alone, so a probe
+/// running every quarter of an hour for a year costs the number of releases
+/// rather than thirty-five thousand rows.
+model VersionChange {
+  id           String   @id @default(uuid())
+  source       Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId     String
+  repo         String
+  environment  String
+  version      String
+  deploymentId String?
+  ref          String?
+  observedAt   DateTime
+
+  @@index([sourceId, repo, environment, observedAt])
+}
+
+/// What one deployment's environment was answering while that deployment was
+/// the live one.
+///
+/// `EnvironmentVersion` says what an environment runs **now** and is overwritten
+/// at every reading; this says what a **deployment** was confirmed to have put
+/// there, and is never overwritten by a later deployment. Without it, "was
+/// 1.4.2 ever actually live on prod" stops being answerable the moment 1.4.3
+/// goes out.
+///
+/// What makes it unlike `DeploymentChangelog`, which is otherwise its twin:
+/// that one can be filed late, because the commits it describes are still on
+/// the platform hours later. This one cannot. Asking an environment today what
+/// it was running yesterday returns what it runs today, so a deployment
+/// replaced before a probe reached it has no version and never will. That is
+/// why "not read" has to be a state a reader can see, and not an empty cell —
+/// see `VersionProbeStatus`.
+///
+/// Copies `repo`, `environment`, `ref` and `deployedAt` rather than pointing at
+/// `StoredDeployment`: that table is swept down to each source's depth, and
+/// this row has to outlive it. Keyed on the provider's own deployment id, the
+/// handle that outlives the row itself — exactly as `DeploymentChangelog` is.
+model DeploymentVersion {
+  id           String       @id @default(uuid())
+  source       Source       @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId     String
+  /// Identity on the provider side, as the connectors build it.
+  deploymentId String
+  repo         String
+  environment  String
+  /// What the deployment carried, so a frozen reading can be judged against it
+  /// once the deployment row is gone.
+  ref          String
+  deployedAt   DateTime
+  /// Null when the reading produced none — `status` says why.
+  version      String?
+  /// The rule that answered. Cleared rather than cascading when it goes: the
+  /// reading was taken, and deleting a rule does not make it untaken.
+  rule         VersionRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  ruleId       String?
+  url          String?
+  /// VersionProbeStatus, as of the reading that was frozen here.
+  status       String
+  /// CodedMessage, so the reason reaches the reader in their own language.
+  error        Json?
+  observedAt   DateTime
+  /// Seconds between the deployment and the reading.
+  ///
+  /// Derivable from the two timestamps and stored anyway: it is what the row is
+  /// actually judged on — a version read three seconds after a deployment says
+  /// something much weaker than one read ten minutes later — and deriving it in
+  /// every reader is how two of them come to disagree about which is which.
+  /// Recomputed on every upsert, so it cannot drift from the pair.
+  delaySec     Int
+
+  @@unique([sourceId, deploymentId])
+  @@index([sourceId, deployedAt])
+  @@index([ruleId])
+}
+
 enum TrackerKind {
   jira
   linear
@@ -166,20 +372,20 @@ enum TrackerKind {
 /// Git-hosted kinds (github, gitlab) read issues with the Git source's own
 /// credentials; standalone ones (jira, linear) carry their own.
 model Tracker {
-  id        String      @id @default(uuid())
-  name      String
+  id          String      @id @default(uuid())
+  name        String
   /// URL-safe form of the name, used by the frontend routes.
-  slug      String      @unique
-  kind      TrackerKind
-  baseUrl   String
+  slug        String      @unique
+  kind        TrackerKind
+  baseUrl     String
   /// Overrides the link shape derived from `kind`. `{key}` is always
   /// substituted; `{owner}` and `{repo}` only make sense for git-hosted kinds,
   /// which resolve them per pull request.
   urlTemplate String?
   /// Kind-specific settings: Jira project keys or JQL, Linear team, ...
   config      Json?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
 
   sources     SourceTracker[]
   ticketRules TicketRule[]
@@ -494,8 +700,8 @@ model StoredPullRequest {
 }
 
 model StoredPipeline {
-  id          String    @id @default(uuid())
-  source      Source    @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  id          String   @id @default(uuid())
+  source      Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
   sourceId    String
   repo        String
   externalId  String
@@ -514,15 +720,15 @@ model StoredPipeline {
 }
 
 model StoredDeployment {
-  id          String   @id @default(uuid())
-  source      Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
-  sourceId    String
-  repo        String
-  externalId  String
-  environment String
-  ref         String
+  id             String   @id @default(uuid())
+  source         Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId       String
+  repo           String
+  externalId     String
+  environment    String
+  ref            String
   /// PipelineStatus — `unknown` when the status call was given up.
-  status      String
+  status         String
   /// Where the environment can be reached, when the platform states one. Null
   /// is the common case, and also what a run degraded under the API reserve
   /// leaves behind on GitHub — the status call carries both.
@@ -530,9 +736,9 @@ model StoredDeployment {
   /// Where the deployment itself is read on the platform — the run on GitHub,
   /// the job or the environment on GitLab. Null when neither states one, which
   /// on GitHub includes every run degraded under the reserve.
-  url         String?
-  createdAt   DateTime
-  seenAt      DateTime
+  url            String?
+  createdAt      DateTime
+  seenAt         DateTime
 
   @@unique([sourceId, externalId])
   @@index([sourceId, createdAt])

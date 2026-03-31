@@ -5,6 +5,7 @@ import { DashboardModule } from '../dashboard/dashboard.module';
 import { DoraModule } from '../dora/dora.module';
 import { JobsModule } from '../jobs/jobs.module';
 import { ApiQuotaModule } from '../api-quota/api-quota.module';
+import { VersionReadingStoreModule } from '../version-rules/version-reading-store.module';
 
 /**
  * Reads nothing of its own: it is the one place that puts the collected view,
@@ -16,7 +17,7 @@ import { ApiQuotaModule } from '../api-quota/api-quota.module';
  * on — which the DORA service already holds the events for.
  */
 @Module({
-  imports: [DashboardModule, DoraModule, JobsModule, ApiQuotaModule],
+  imports: [DashboardModule, DoraModule, JobsModule, ApiQuotaModule, VersionReadingStoreModule],
   controllers: [OverviewController],
   providers: [OverviewService],
   exports: [OverviewService],

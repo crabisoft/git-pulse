@@ -80,6 +80,12 @@ export class UpdateSourceDto {
   @IsString({ each: true })
   envRuleIds?: string[];
 
+  /** Version rules this source's environments are read with. Replaces the set. */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  versionRuleIds?: string[];
+
   /** Supplied means "these are the trackers now" — the set is replaced. */
   @IsOptional()
   @IsArray()
