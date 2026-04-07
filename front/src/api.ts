@@ -54,6 +54,12 @@ import type {
   TicketRulePublic,
   TrackerKind,
   TrackerPublic,
+  EnvironmentVersion,
+  VersionAuthKind,
+  VersionFormat,
+  VersionPreview,
+  VersionProbeOutcome,
+  VersionRulePublic,
 } from '@repo/shared';
 
 // Relative by default (same-origin, via the Vite dev proxy / nginx). An absolute
@@ -273,6 +279,49 @@ export interface CreateTicketRuleInput {
 
 export type UpdateTicketRuleInput = Partial<CreateTicketRuleInput>;
 
+export interface CreateVersionRuleInput {
+  name: string;
+  /** Confines the rule to the environments this matches. Empty means all. */
+  environment?: string;
+  /** Confines the rule to the repos this matches. Empty means all. */
+  repo?: string;
+  urlTemplate: string;
+  /** Omitted means `json`. */
+  format?: VersionFormat;
+  template: string;
+  /** Required by `text`, ignored by the parsed formats. */
+  pattern?: string;
+  headers?: Record<string, string>;
+  authKind?: VersionAuthKind;
+  authHeader?: string;
+  /** Written once and never read back; the rule only reports `hasSecret`. */
+  secret?: string;
+  priority?: number;
+}
+
+/** Omitting the secret keeps the stored one; sending an empty string clears it. */
+export type UpdateVersionRuleInput = Partial<CreateVersionRuleInput>;
+
+/**
+ * Trying a rule out. `body` is the default way in and touches no network — a
+ * response pasted from wherever its author already had it open. `url` is read
+ * only when no body was given.
+ */
+export interface VersionPreviewInput {
+  body?: string;
+  url?: string;
+  format?: VersionFormat;
+  template: string;
+  pattern?: string;
+  headers?: Record<string, string>;
+  authKind?: VersionAuthKind;
+  authHeader?: string;
+  /** For a rule being written, which has no stored secret yet. */
+  secret?: string;
+  /** For a saved one, so its secret never travels to the browser and back. */
+  ruleId?: string;
+}
+
 export interface CreateTrackerInput {
   name: string;
   kind: TrackerKind;
@@ -449,6 +498,35 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ name, rules, repo }),
     }),
+
+  /** The whole catalogue, like the classification rules: sources opt into it. */
+  listVersionRules: (page?: PageQuery) =>
+    request<Page<VersionRulePublic>>(`/version-rules${qs({ ...page })}`),
+  createVersionRule: (input: CreateVersionRuleInput) =>
+    request<VersionRulePublic>('/version-rules', { method: 'POST', body: JSON.stringify(input) }),
+  updateVersionRule: (id: string, input: UpdateVersionRuleInput) =>
+    request<VersionRulePublic>(`/version-rules/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  deleteVersionRule: (id: string) => request<void>(`/version-rules/${id}`, { method: 'DELETE' }),
+  /**
+   * Runs a candidate rule over one response, saving nothing. The backend is the
+   * only place a path is resolved: the editor sends the template and gets back
+   * both the tree it builds paths from and what the template produced, so the
+   * two can never disagree about what a path means.
+   */
+  previewVersionRule: (input: VersionPreviewInput) =>
+    request<VersionPreview>('/version-rules/preview', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  /** What this source's environments are running, as last read. */
+  sourceVersions: (sourceId: string, signal?: AbortSignal) =>
+    request<EnvironmentVersion[]>(`/sources/${sourceId}/versions`, { signal }),
+  /** Reads them again now, rather than at the next collection. */
+  probeSourceVersions: (sourceId: string) =>
+    request<VersionProbeOutcome>(`/sources/${sourceId}/versions/probe`, { method: 'POST' }),
 
   /** Every rule; each names the tracker it belongs to. */
   listTicketRules: (page?: PageQuery) =>

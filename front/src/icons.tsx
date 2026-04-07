@@ -43,6 +43,16 @@ export function TestIcon(props: IconProps) {
   );
 }
 
+/** A tag — what a version rule reads back out of a running environment. */
+export function TagIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M20.6 13.4 12 22l-9-9V3h10l7.6 7.6a2 2 0 0 1 0 2.8Z" />
+      <path d="M7.5 7.5h.01" />
+    </Svg>
+  );
+}
+
 export function DeleteIcon(props: IconProps) {
   return (
     <Svg {...props}>

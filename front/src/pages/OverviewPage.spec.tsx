@@ -95,6 +95,9 @@ function report(over: Partial<OverviewReport> = {}): OverviewReport {
       quotaLeft: 0.42,
     },
     events: [],
+    // Empty by default, which is both what an install with no version rule
+    // sends and what a visitor is shown whatever the rules say.
+    versions: [],
     period: { from: '2026-07-01T00:00:00Z', to: '2026-07-30T00:00:00Z', windowDays: 30 },
     warnings: [],
     ...over,

@@ -30,6 +30,7 @@ export const AVAILABLE_DIRECTIONS: readonly OverviewDirection[] = [
   'control',
   'instrument',
   'stream',
+  'versions',
 ];
 
 export function isAvailable(direction: OverviewDirection): boolean {

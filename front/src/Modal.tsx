@@ -12,6 +12,7 @@ export function Modal({
   subtitle,
   footer,
   onClose,
+  wide,
   children,
 }: {
   title: ReactNode;
@@ -20,6 +21,11 @@ export function Modal({
   subtitle?: ReactNode;
   footer?: ReactNode;
   onClose: () => void;
+  /**
+   * For a dialog holding two panes side by side rather than a form. The default
+   * width is what a column of fields wants; anything wider only spreads them.
+   */
+  wide?: boolean;
   children: ReactNode;
 }) {
   const { t } = useTranslation();
@@ -35,7 +41,7 @@ export function Modal({
   return (
     <div className="modal-backdrop" onClick={onClose}>
       <div
-        className="modal"
+        className={wide ? 'modal wide' : 'modal'}
         role="dialog"
         aria-modal="true"
         aria-label={label}

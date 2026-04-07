@@ -14,7 +14,13 @@ import { DirectionSwitch } from '../DirectionSwitch';
 import { BoardView } from '../overview/BoardView';
 import { InstrumentView } from '../overview/InstrumentView';
 import { StreamView } from '../overview/StreamView';
-import { defaultAxes } from '../overview/axes';
+import { VersionsView } from '../overview/VersionsView';
+import {
+  DEFAULT_VERSION_AXES,
+  defaultAxes,
+  resolveAxes,
+  versionAxisKeys,
+} from '../overview/axes';
 
 /**
  * What is running, how fast it is going out, and what is in the way — read
@@ -64,6 +70,16 @@ export function OverviewPage({
   const layout = (partial: Pick<OverviewState, 'groupBy' | 'axes'>) =>
     setQuery((q) => ({ ...q, ...partial }));
   const selectedRepos = useMemo(() => new Set(query.filters.repos), [query.filters.repos]);
+  /**
+   * Whether anything is narrowing the report. The period is left out on
+   * purpose: it is always set, so counting it would make every page "filtered"
+   * and the distinction it is drawn for — an empty view because of a choice, or
+   * because there is nothing — would say nothing.
+   */
+  const narrowing =
+    (query.filters.repos?.length ?? 0) > 0 ||
+    Object.keys(query.filters.dimensions ?? {}).length > 0 ||
+    Boolean(query.filters.meta);
 
   const dimensions = report?.dimensions ?? {};
   const environments = report?.environments ?? [];
@@ -72,7 +88,36 @@ export function OverviewPage({
     query.groupBy === undefined
       ? defaultGroupBy(dimensions, environments.length)
       : query.groupBy || null;
-  const crossing = query.axes ?? defaultAxes(dimensions);
+  /**
+   * The crossing in force, resolved against what *this* direction can cross.
+   *
+   * One pair travels in the address and the two grids do not take the same
+   * keys: `repo` crosses the versions and means nothing to the matrix. A pair
+   * the current direction cannot honour falls back to that direction's own
+   * default rather than rendering an empty grid, which is what makes walking
+   * matrix → versions → matrix safe. The address keeps what it held: it still
+   * belongs to the direction that wrote it.
+   */
+  const crossing =
+    direction === 'versions'
+      ? resolveAxes(query.axes, versionAxisKeys(dimensions), DEFAULT_VERSION_AXES)
+      : resolveAxes(query.axes, Object.keys(dimensions), defaultAxes(dimensions));
+
+  /**
+   * Moves one axis of the crossing. Shared by both grids because the rule is:
+   * crossing a key with itself says nothing, so the *other* axis steps aside
+   * rather than the choice being refused.
+   */
+  const changeAxes = (next: { rows?: string; columns?: string }, available: string[]) => {
+    if (!crossing) return;
+    const rows = next.rows ?? crossing.rows;
+    const columns =
+      next.columns ??
+      (rows === crossing.columns
+        ? (available.find((key) => key !== rows) ?? crossing.columns)
+        : crossing.columns);
+    layout({ axes: { rows, columns } });
+  };
 
   return (
     <div className="overview">
@@ -125,7 +170,10 @@ export function OverviewPage({
           onChange={(meta) => filter({ meta })}
           disabled={loading}
         />
-        {direction !== 'instrument' && (
+        {/* The fold rearranges a list of environments. The matrix crosses two
+            dimensions of its own, and the version grid is already a repo per
+            row — neither has a list to fold. */}
+        {direction !== 'instrument' && direction !== 'versions' && (
           <GroupByFilter
             keys={Object.keys(dimensions)}
             value={fold}
@@ -150,22 +198,22 @@ export function OverviewPage({
             <InstrumentView
               report={report}
               axes={crossing}
-              onAxesChange={(next) => {
-                if (!crossing) return;
-                const rows = next.rows ?? crossing.rows;
-                // Crossing a dimension with itself says nothing; the other axis
-                // steps aside rather than the choice being refused.
-                const columns =
-                  next.columns ??
-                  (rows === crossing.columns
-                    ? (Object.keys(dimensions).find((key) => key !== rows) ?? crossing.columns)
-                    : crossing.columns);
-                layout({ axes: { rows, columns } });
-              }}
+              onAxesChange={(next) => changeAxes(next, Object.keys(dimensions))}
               staleHours={staleHours}
             />
           ) : direction === 'stream' ? (
             <StreamView report={report} sourceId={sourceId} query={settled.filters} />
+          ) : direction === 'versions' ? (
+            <VersionsView
+              report={report}
+              slug={slug}
+              // Never null for this direction: its default is a constant pair
+              // every reading carries, so there is always a grid to draw.
+              axes={crossing ?? DEFAULT_VERSION_AXES}
+              onAxesChange={(next) => changeAxes(next, versionAxisKeys(dimensions))}
+              filtered={narrowing}
+              onClearFilters={() => filter({ repos: [], dimensions: {}, meta: '' })}
+            />
           ) : (
             <BoardView report={report} fold={fold} slug={slug} staleHours={staleHours} />
           )}

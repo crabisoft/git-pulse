@@ -108,9 +108,11 @@
 /* The control room: hairlines instead of cards, and a tighter rhythm. Held to
    shape alone — the colours are the mode's business, whichever direction is
    in effect. The stream shares its shape: it is a different composition, not a
-   different skin. */
+   different skin. So does the version grid, which is a dense table read by
+   position: air between its cells would only push the columns apart. */
 :root[data-direction="control"],
-:root[data-direction="stream"] {
+:root[data-direction="stream"],
+:root[data-direction="versions"] {
   --radius: 3px;
   --density: 14px;
 }
@@ -154,6 +156,14 @@ body {
 }
 a { color: var(--accent-deep); text-decoration: none; }
 a:hover { text-decoration: underline; }
+/* An action that belongs inside a sentence, beside the links it reads with. A
+   button because it does something to this page rather than going somewhere —
+   an anchor with no destination is a link a screen reader announces wrongly. */
+.link-button {
+  border: none; background: none; padding: 0; font: inherit;
+  color: var(--accent-deep); cursor: pointer;
+}
+.link-button:hover { text-decoration: underline; }
 
 .app { min-height: 100vh; }
 
@@ -462,6 +472,8 @@ h3.with-help, h2.with-help { display: flex; align-items: center; gap: 6px; }
   width: min(720px, 100%); max-height: min(80vh, 720px); display: flex; flex-direction: column;
   padding: 18px 20px;
 }
+/* Two panes rather than a column of fields — see the `wide` prop. */
+.modal.wide { width: min(1060px, 100%); }
 .modal-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .modal-head h3 { margin: 0 0 8px; }
 .modal-sub { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
@@ -1223,6 +1235,79 @@ tr.is-active > td, .card.is-active { background: color-mix(in srgb, var(--accent
 .wall-exit { transition: none; } }
 
 /* ─────────────────────────────────────────────────────────────────────
+ * Installed versions
+ *
+ * Two places: the rule editor, where a response is read and a template built
+ * from it, and the deployments list, where one line says what an environment
+ * answers.
+ * ───────────────────────────────────────────────────────────────────── */
+
+/* The form and the response, side by side — see the dialog's `wide`. */
+.version-editor { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.version-try { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.version-try h4 { margin: 0; }
+.version-try label { display: flex; flex-direction: column; gap: 5px; font-size: .85rem; color: var(--muted); }
+.version-try-url { display: flex; gap: 8px; }
+.version-try-url input { flex: 1; min-width: 0; }
+
+.version-result { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border-radius: var(--radius); border: 1px solid var(--line); }
+.version-result .cr-label { margin-bottom: 0; }
+.version-result.ok { border-color: color-mix(in srgb, var(--good) 45%, var(--line)); background: color-mix(in srgb, var(--good) 8%, transparent); }
+.version-result.ok strong { color: var(--good); }
+/* Not an error: a template that reads nothing yet is the ordinary state of one
+   being written. Neutral, and it says why underneath. */
+.version-result.bad { border-style: dashed; }
+
+/* The parsed response. Scrolls on its own so a deep document never stretches
+   the dialog past the form beside it. */
+.response-tree { font-family: var(--mono); font-size: .78rem; max-height: 260px; overflow: auto; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); }
+.rt-branch > summary { cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 1px 0; }
+.rt-leaf { display: flex; align-items: baseline; gap: 6px; padding: 1px 0; }
+.rt-key { color: var(--muted); }
+.rt-count { color: var(--muted); font-size: .7rem; }
+/* A value is a button because clicking it is the point — styled as text so the
+   tree still reads as a document rather than as a toolbar. */
+button.rt-value { border: none; background: none; padding: 1px 4px; border-radius: 5px; font: inherit; color: var(--ink); cursor: pointer; text-align: left; }
+button.rt-value:hover, button.rt-value:focus-visible { background: color-mix(in srgb, var(--accent) 18%, transparent); color: var(--accent-deep); }
+.rt-value.unpickable { color: var(--muted); text-decoration: underline dotted; }
+
+/* The versions direction reuses the matrix shape — same grid, same scroll, same
+   breakpoints — and only says something different in its cells. */
+.versions-matrix .matrix-row-head a { color: inherit; text-decoration: none; }
+.versions-matrix .matrix-row-head a:hover { color: var(--accent); }
+.version-cell .matrix-ref { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+/* A cell that could not be read: the warning tone, never the neutral one an
+   unread crossing gets — "it stopped answering" and "there is nothing here"
+   are different facts and must not share a colour. */
+.version-cell.failed .matrix-ref { color: var(--warn); font-family: var(--sans); font-size: .8rem; }
+/* A cell whose readings disagree names no version — see the Cell component —
+   so it is worded rather than monospaced: there is no release to read here. */
+.version-cell.mixed .matrix-ref { font-family: var(--sans); font-size: .8rem; color: var(--crit); }
+.version-drift { color: var(--crit); }
+
+/* What an environment answers, on the deployment row it describes. */
+.version-reading { display: inline-flex; align-items: baseline; gap: 4px; flex-wrap: wrap; }
+.version-reading.match .mono { color: var(--good); }
+.version-reading.differs .mono { color: var(--crit); }
+.version-reading.failed { color: var(--warn); }
+/* Never read, and never recoverable — see DeployedVersion. Muted rather than
+   warned about: nothing is wrong with the deployment, and there is nothing to
+   go and fix. */
+.version-reading.never { color: var(--muted); font-style: italic; }
+/* The environment's current version standing in for a reading nobody took.
+   Deliberately quieter than a confirmed one: it says something true about the
+   environment and nothing about this deployment, and the two must not be
+   mistaken for each other at a glance. */
+.version-reading.live .mono { color: var(--muted); }
+.pill.version-live {
+  background: var(--surface-2); color: var(--muted);
+  border: 1px dashed var(--line); white-space: nowrap;
+}
+/* Its own class rather than a pipeline status: a version gap is not a run that
+   failed, and the day one of the two changes colour the other must not. */
+.pill.version-gap { background: color-mix(in srgb, var(--crit) 15%, transparent); color: var(--crit); white-space: nowrap; }
+
+/* ─────────────────────────────────────────────────────────────────────
  * Narrow screens
  *
  * Gathered here rather than beside each rule, unlike the handful of
@@ -1296,6 +1381,10 @@ tr.is-active > td, .card.is-active { background: color-mix(in srgb, var(--accent
      centred, so opening one does not move its first field under the thumb. */
   .modal-backdrop { padding: 12px; align-items: flex-start; }
   .modal { max-height: calc(100dvh - 24px); }
+
+  /* The response goes under the form: side by side, neither half is wide
+     enough to read a path in. */
+  .version-editor { grid-template-columns: 1fr; }
 
   .account-head { gap: 12px; }
   .avatar-lg { width: 42px; height: 42px; font-size: 1rem; }

@@ -21,10 +21,13 @@ import {
   type SourceCoverage,
   type SourceMode,
   type SourcePublic,
+  type CodedMessage,
   type ConnectionTestResult,
+  type VersionProbeOutcome,
   type WebhookSetup,
   type PageInfo,
   type TrackerPublic,
+  type VersionRulePublic,
 } from '@repo/shared';
 import {
   api,
@@ -41,6 +44,7 @@ import {
   PlusIcon,
   StarIcon,
   SyncIcon,
+  TagIcon,
   TestIcon,
 } from '../icons';
 import { IconButton } from '../IconButton';
@@ -76,6 +80,8 @@ interface FormState {
   installationId: string;
   /** Classification rules applied here, from the global catalogue. */
   envRuleIds: string[];
+  /** Version rules this source's environments are read with. */
+  versionRuleIds: string[];
   /** Trackers this source's pull requests may reference. */
   trackerIds: string[];
   /** One of `trackerIds`, or empty for "collect no incident". */
@@ -101,6 +107,7 @@ const EMPTY: FormState = {
   privateKey: '',
   installationId: '',
   envRuleIds: [],
+  versionRuleIds: [],
   trackerIds: [],
   incidentTrackerId: '',
 };
@@ -123,6 +130,7 @@ function toInput(form: FormState): CreateSourceInput {
       trackNewRepos: form.trackNewRepos,
     },
     envRuleIds: form.envRuleIds,
+    versionRuleIds: form.versionRuleIds,
     trackerIds: form.trackerIds,
     // Empty means none; the API spells that null.
     incidentTrackerId: form.incidentTrackerId || null,
@@ -165,6 +173,7 @@ function toForm(source: SourcePublic): FormState {
     // covered everything unless it named inclusions.
     trackNewRepos: source.scope.trackNewRepos ?? (source.scope.include ?? []).length === 0,
     envRuleIds: source.envRuleIds,
+    versionRuleIds: source.versionRuleIds,
     trackerIds: source.trackerIds,
     incidentTrackerId: source.incidentTrackerId ?? '',
   };
@@ -220,6 +229,8 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
   /** Source whose deep re-read is being set up, before it is asked for. */
   const [refreshing, setRefreshing] = useState<SourcePublic | null>(null);
   const [rebuilding, setRebuilding] = useState<SourcePublic | null>(null);
+  /** Outcome of a manual version reading, per source. */
+  const [probed, setProbed] = useState<Record<string, ConnectionTestResult | 'pending'>>({});
   /** Queued re-reads being followed, per source. Dropped once they settle. */
   const [jobs, setJobs] = useState<Record<string, JobHandle>>({});
 
@@ -371,6 +382,40 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
   }
 
   /**
+   * Reads what this source's environments are running, now.
+   *
+   * On the **saved** source and from the list rather than from the edit form:
+   * the probe runs against the rules the source is stored with, so a button
+   * inside an unsaved form would read with the old selection while showing the
+   * new one — and the result would look like a broken rule rather than an
+   * unsaved one.
+   *
+   * The outcome is worth three different sentences. A source with no rule
+   * attached, and one whose rules found no environment to describe, both come
+   * back as zeroes; reporting "done" to either would be a polite lie to
+   * somebody who just asked for a reading and got none.
+   */
+  async function probe(id: string) {
+    setProbed((cur) => ({ ...cur, [id]: 'pending' }));
+    try {
+      const outcome = await api.probeSourceVersions(id);
+      // Only a reading actually taken counts as success: a run that found
+      // nothing to read did not fail, but it did not do what was asked either,
+      // and the row has to look different from one that worked.
+      setProbed((cur) => ({
+        ...cur,
+        [id]: { ok: outcome.probed > 0, message: probeMessage(outcome) },
+      }));
+    } catch (err) {
+      setProbed((cur) => ({ ...cur, [id]: { ok: false, message: apiErrorInfo(err) } }));
+    }
+    // It wrote readings, which is what the coverage line counts. It spends no
+    // platform budget — these calls go to the customer's own applications —
+    // so the gauges have nothing to say about it.
+    await loadCoverage();
+  }
+
+  /**
    * Runs a collection now rather than waiting for the cron. On a stored source
    * this is also what fills the store: the ingestion is part of collecting it,
    * not a schedule of its own.
@@ -492,6 +537,7 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
           {sources.map((s) => {
             const ts = tested[s.id];
             const cs = collected[s.id];
+            const ps = probed[s.id];
             /** Absent until the coverage call answers, and on nothing else. */
             const held = coverageBySource.get(s.id);
             return (
@@ -538,6 +584,13 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
                       {ts === 'pending'
                         ? t('common.testing')
                         : `${ts.ok ? '✓' : '✗'} ${t(ts.message.code, ts.message.params)}`}
+                    </div>
+                  )}
+                  {ps && (
+                    <div className={`source-test ${ps === 'pending' ? '' : ps.ok ? 'ok' : 'err'}`}>
+                      {ps === 'pending'
+                        ? t('sources.probe.running')
+                        : `${ps.ok ? '✓' : '✗'} ${t(ps.message.code, ps.message.params)}`}
                     </div>
                   )}
                   {cs && (
@@ -595,6 +648,19 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
                       <DeepSyncIcon />
                     </IconButton>
                   )}
+                  {/* Reads this source's environments now. On the saved source
+                      and never inside the edit form: the run uses the rules the
+                      source is stored with, and a button beside an unsaved
+                      selection would answer for the old one. */}
+                  <IconButton
+                    label={t('sources.probe.action')}
+                    // A second click must not send a second round of requests
+                    // to somebody's production application.
+                    disabled={ps === 'pending'}
+                    onClick={() => void probe(s.id)}
+                  >
+                    <TagIcon />
+                  </IconButton>
                   {/* Replaying costs no listing, so it is offered whatever the
                       mode: what it needs is already collected. */}
                   <IconButton
@@ -810,6 +876,41 @@ function RebuildDialog({
   );
 }
 
+/**
+ * What a probing run is worth saying, out of four numbers and two counts.
+ *
+ * Three outcomes look identical in the figures and mean entirely different
+ * things, and only the first of them is about the version rules at all:
+ *
+ * - **no rule attached** — nothing was ever going to happen, and the fix is one
+ *   page away;
+ * - **rules attached, nothing read** — either no deployment has been collected
+ *   for them to describe, or none of the environments could be addressed. This
+ *   is the diagnosis nothing else in the application gives: the rule editor's
+ *   preview knows a response, never a deployment;
+ * - **read** — the figures, with what went wrong or what moved.
+ */
+function probeMessage(outcome: VersionProbeOutcome): CodedMessage {
+  if (outcome.rules === 0) return { code: 'sources.probe.noRules' };
+  if (outcome.environments === 0) return { code: 'sources.probe.noEnvironments' };
+  if (outcome.probed === 0) {
+    return { code: 'sources.probe.noneRead', params: { count: outcome.environments } };
+  }
+  if (outcome.failed > 0) {
+    return {
+      code: 'sources.probe.someFailed',
+      params: { count: outcome.probed, failed: outcome.failed },
+    };
+  }
+  if (outcome.changed > 0) {
+    return {
+      code: 'sources.probe.changed',
+      params: { count: outcome.probed, changed: outcome.changed },
+    };
+  }
+  return { code: 'sources.probe.ok', params: { count: outcome.probed } };
+}
+
 /** A secret just issued, and the platform it has to be declared on. */
 interface IssuedWebhook {
   setup: WebhookSetup;
@@ -876,6 +977,7 @@ function SourceDialog({
   const [error, setError] = useState<string | null>(null);
   const [trackers, setTrackers] = useState<TrackerPublic[]>([]);
   const [envRules, setEnvRules] = useState<EnvRulePublic[]>([]);
+  const [versionRules, setVersionRules] = useState<VersionRulePublic[]>([]);
   /**
    * The repos to pick from, and the picking. Null until asked for: reading them
    * costs the source a provider call, and most edits here are about something
@@ -893,12 +995,14 @@ function SourceDialog({
     Promise.all([
       api.listTrackers({ limit: PAGE_LIMIT_MAX }).then(({ items }) => items),
       // One request per target: the catalogue is listed one target at a time.
+      api.listVersionRules({ limit: PAGE_LIMIT_MAX }).then(({ items }) => items),
       ...(['environment', 'repository', 'incident'] as RuleTarget[]).map((target) =>
         api.listEnvRules(target, { limit: PAGE_LIMIT_MAX }).then(({ items }) => items),
       ),
     ]).then(
-      ([loadedTrackers, ...perTarget]) => {
+      ([loadedTrackers, loadedVersionRules, ...perTarget]) => {
         setTrackers(loadedTrackers as TrackerPublic[]);
+        setVersionRules(loadedVersionRules as VersionRulePublic[]);
         setEnvRules((perTarget as EnvRulePublic[][]).flat());
       },
       (err) => {
@@ -976,6 +1080,7 @@ function SourceDialog({
   }, [repos]);
 
   const selectedEnvRules = useMemo(() => new Set(form.envRuleIds), [form.envRuleIds]);
+  const selectedVersionRules = useMemo(() => new Set(form.versionRuleIds), [form.versionRuleIds]);
   const selectedTrackers = useMemo(() => new Set(form.trackerIds), [form.trackerIds]);
 
   /** Detaching the tracker that supplied incidents clears the designation too. */
@@ -1296,6 +1401,28 @@ function SourceDialog({
             onChange={(next) => set('envRuleIds', [...next])}
             emptyLabel={
               envRules.length === 0 ? t('sources.form.noEnvRules') : t('sources.form.noneSelected')
+            }
+          />
+        </label>
+
+        <label>
+          {t('sources.form.versionRules')}{' '}
+          <span className="hint">{t('sources.form.versionRulesHint')}</span>
+          <MultiSelect
+            block
+            options={versionRules.map((rule) => ({
+              value: rule.id,
+              label: rule.name,
+              // What the rule is confined to: two rules named after the same
+              // application differ by the environment they answer for.
+              hint: rule.environment ?? t('versionRules.everyEnvironment'),
+            }))}
+            selected={selectedVersionRules}
+            onChange={(next) => set('versionRuleIds', [...next])}
+            emptyLabel={
+              versionRules.length === 0
+                ? t('sources.form.noVersionRules')
+                : t('sources.form.noneSelected')
             }
           />
         </label>

@@ -67,6 +67,7 @@ const preview: Preview = {
           { value: 'control', title: 'Control room' },
           { value: 'instrument', title: 'Instrument' },
           { value: 'stream', title: 'Stream' },
+          { value: 'versions', title: 'Versions' },
         ],
         dynamicTitle: true,
       },

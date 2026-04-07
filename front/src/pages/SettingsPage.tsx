@@ -9,6 +9,7 @@ import {
   LinkIcon,
   ServerIcon,
   SlidersIcon,
+  TagIcon,
   TicketIcon,
   UsersIcon,
 } from '../icons';
@@ -18,6 +19,7 @@ import { UsersSettings } from './settings/UsersSettings';
 import { SourcesPage } from './SourcesPage';
 import { EnvRulesPage } from './EnvRulesPage';
 import { TicketRulesPage } from './TicketRulesPage';
+import { VersionRulesPage } from './VersionRulesPage';
 import { TrackersPage } from './TrackersPage';
 import { LlmProvidersPage } from './LlmProvidersPage';
 
@@ -28,6 +30,7 @@ export type SettingsSection =
   | 'trackers'
   | 'env'
   | 'tickets'
+  | 'versions'
   | 'ai'
   | 'jobs';
 
@@ -38,6 +41,9 @@ const SECTIONS: { key: SettingsSection; icon: ReactNode }[] = [
   { key: 'trackers', icon: <LinkIcon /> },
   { key: 'env', icon: <LayersIcon /> },
   { key: 'tickets', icon: <TicketIcon /> },
+  // Beside the other rule catalogues: it is one, and it reads what a
+  // classification rule names.
+  { key: 'versions', icon: <TagIcon /> },
   { key: 'ai', icon: <KeyIcon /> },
   // Last, and on its own: everything above configures the install, this one
   // watches it run.
@@ -60,6 +66,7 @@ export const SECTION_PATHS: Record<SettingsSection, string> = {
   trackers: '/settings/trackers',
   env: '/settings/environments',
   tickets: '/settings/tickets',
+  versions: '/settings/versions',
   ai: '/settings/ai',
   jobs: '/settings/jobs',
 };
@@ -120,6 +127,7 @@ export function SettingsPage({
         {section === 'trackers' && <TrackersPage sources={sources} />}
         {section === 'env' && <EnvRulesPage />}
         {section === 'tickets' && <TicketRulesPage />}
+        {section === 'versions' && <VersionRulesPage />}
         {section === 'ai' && <LlmProvidersPage />}
         {section === 'jobs' && <JobsSettings sources={sources} />}
       </div>

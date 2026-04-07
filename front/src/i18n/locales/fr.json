@@ -70,6 +70,7 @@
       "sources": "Sources",
       "env": "Environnements",
       "tickets": "Tickets",
+      "versions": "Versions",
       "trackers": "Trackers",
       "users": "Comptes",
       "ai": "Fournisseurs IA",
@@ -80,6 +81,7 @@
       "sources": "Plateformes Git connectées",
       "env": "Règles de classification",
       "tickets": "Rattachement PR → ticket",
+      "versions": "Ce que font tourner les environnements",
       "trackers": "Jira, Linear, issues",
       "users": "Qui peut se connecter",
       "ai": "Modèles que l’installation peut appeler",
@@ -320,6 +322,40 @@
     "ticketRule": {
       "notFound": "Règle de ticket introuvable.",
       "invalidPattern": "Expression régulière invalide : {{pattern}}"
+    },
+    "version": {
+      "bodyTooLarge": "La réponse est plus volumineuse que ce qu'un endpoint de version devrait renvoyer.",
+      "forbiddenAddress": "Cette adresse résout vers un réseau privé ou interne, que cette installation refuse de lire.",
+      "groupMissing": "Le motif ne capture aucun groupe nommé « {{group}} ».",
+      "httpStatus": "L'endpoint a répondu {{status}}.",
+      "invalidUrl": "« {{url}} » n'est pas une adresse lisible.",
+      "noAttribute": "L'environnement ne porte aucun attribut « {{name}} », dont l'URL a besoin.",
+      "noEnvironmentUrl": "La plateforme n'a publié aucune adresse pour cet environnement, et l'URL en dépend.",
+      "noMatch": "Le motif « {{pattern}} » ne correspond à rien dans la réponse.",
+      "noRef": "Le déploiement n'indique aucune référence, dont l'URL a besoin.",
+      "pathAmbiguous": "« {{path}} » désigne {{count}} valeurs ; précisez laquelle, par exemple avec [0] ou [clé=valeur].",
+      "pathMissing": "La réponse ne contient rien à « {{path}} ».",
+      "pathNotAValue": "« {{path}} » désigne une branche de la réponse, pas une valeur.",
+      "pathUnreadable": "« {{path}} » n'est pas un chemin lisible.",
+      "patternMissing": "Une règle texte a besoin d'un motif.",
+      "patternUnreadable": "Expression régulière invalide : {{pattern}}",
+      "redirected": "L'endpoint redirige, ce qui n'est pas suivi : un secret ne doit pas partir vers une adresse jamais vérifiée.",
+      "templateEmptyPath": "Le modèle « {{template}} » contient un espace réservé vide.",
+      "templateUnclosed": "Le modèle « {{template}} » contient un espace réservé jamais refermé.",
+      "timeout": "L'endpoint n'a pas répondu à temps.",
+      "unknownPlaceholder": "L'URL utilise l'espace réservé « {{name}} », qui ne fait pas partie des valeurs portées par un déploiement.",
+      "unparsable": "La réponse n'est pas lisible en {{format}} : {{detail}}",
+      "unreachable": "L'endpoint n'a pas pu être joint : {{reason}}",
+      "unsupportedScheme": "Seules les adresses http et https sont lues."
+    },
+    "versionRule": {
+      "authHeaderRequired": "Un en-tête personnalisé exige son nom.",
+      "invalidPattern": "Expression régulière invalide : {{pattern}}",
+      "notFound": "Règle introuvable.",
+      "patternRequired": "Une règle texte a besoin d'un motif.",
+      "previewNeedsInput": "Collez une réponse ou indiquez une adresse à lire.",
+      "templateReadsNothing": "« {{template}} » ne lit rien dans la réponse : il lui faut au moins un espace réservé {chemin}, sans quoi elle rapporterait éternellement la même version.",
+      "urlNotAddressable": "L'URL doit commencer par http(s):// ou par {environmentUrl}."
     },
     "tracker": {
       "notFound": "Tracker introuvable."
@@ -577,6 +613,9 @@
       "noIncidentTracker": "Aucun",
       "envRules": "Règles de classification",
       "envRulesHint": "catalogue global de la section Environnements ; les règles de ticket, elles, suivent leur tracker",
+      "versionRules": "Règles de version",
+      "versionRulesHint": "lisent la version que font tourner les environnements de cette source",
+      "noVersionRules": "Aucune règle de version définie pour l'instant.",
       "noEnvRules": "Aucune règle définie pour l'instant.",
       "noneSelected": "Aucune sélection",
       "noTrackerDeclared": "Aucun tracker déclaré : commencez par la section Trackers.",
@@ -674,6 +713,20 @@
       "queued": "Rejeu mis en file.",
       "defaultDays": "Autant de jours que la fenêtre de reporting",
       "windowNote": "Ceci dit combien de jours sont réécrits, pas ce que chacun mesure : chaque relevé rejoué porte sur la fenêtre de reporting se terminant à sa propre date, comme le fait la collecte planifiée. Pour changer cela, modifiez la fenêtre dans les Réglages, puis rejouez."
+    },
+    "probe": {
+      "action": "Lire les versions installées",
+      "running": "Lecture des environnements…",
+      "noRules": "Aucune règle de version n'est rattachée à cette source — rattachez-en une dans Réglages › Versions.",
+      "noEnvironments": "Les règles sont rattachées, mais aucun déploiement n'a encore été collecté qu'elles puissent décrire.",
+      "noneRead_one": "{{count}} environnement trouvé, qu'aucune règle n'a su adresser.",
+      "noneRead_other": "{{count}} environnements trouvés, qu'aucune règle n'a su adresser.",
+      "ok_one": "{{count}} environnement lu, inchangé.",
+      "ok_other": "{{count}} environnements lus, inchangés.",
+      "changed_one": "{{count}} environnement lu ; {{changed}} tourne désormais sur une autre version.",
+      "changed_other": "{{count}} environnements lus ; {{changed}} tournent désormais sur une autre version.",
+      "someFailed_one": "{{count}} environnement lu, dont {{failed}} n'a rien renvoyé d'exploitable.",
+      "someFailed_other": "{{count}} environnements lus, dont {{failed}} n'ont rien renvoyé d'exploitable."
     }
   },
   "ticketRules": {
@@ -716,6 +769,77 @@
       "owner": "Org / groupe"
     },
     "noTracker": "Déclarez d'abord un tracker dans la section Trackers."
+  },
+  "versionRules": {
+    "listTitle": "Règles de version",
+    "listEmpty": "Aucune règle pour l'instant.",
+    "addTitle": "Ajouter une règle",
+    "editTitle": "Modifier « {{name}} »",
+    "added": "Règle ajoutée.",
+    "updated": "Règle mise à jour.",
+    "deleted": "Règle supprimée.",
+    "deleteTitle": "Supprimer la règle",
+    "confirmDelete": "Supprimer la règle « {{name}} » ? Les environnements qu'elle lit cesseront de rapporter une version dès la prochaine collecte ; les lectures déjà faites sont conservées.",
+    "hint": "Une règle relit par HTTP la version qu'un environnement fait tourner. Définie une fois pour toute l'installation, puis activée source par source — comme les règles de classification, un endpoint de version étant une propriété de l'application et non de l'hébergeur de dépôts.",
+    "everyEnvironment": "Tous les environnements",
+    "hasSecret": "authentifiée",
+    "format": {
+      "json": "JSON",
+      "xml": "XML",
+      "text": "Texte (RegEx)"
+    },
+    "auth": {
+      "none": "Aucune",
+      "bearer": "Jeton Bearer",
+      "basic": "Basic",
+      "header": "En-tête personnalisé"
+    },
+    "form": {
+      "name": "Nom",
+      "environment": "Environnement (RegEx)",
+      "environmentHint": "les environnements auxquels la règle répond ; vide = tous",
+      "environmentPlaceholder": "ex. : ^prod",
+      "repo": "Dépôt (RegEx)",
+      "repoHint": "restreint davantage ; vide = tous les dépôts",
+      "urlTemplate": "URL",
+      "urlTemplateHint": "{environmentUrl} est l'adresse publiée par la plateforme ; {repo}, {environment}, {ref} et {attr.…} viennent du déploiement",
+      "format": "Format de la réponse",
+      "pattern": "Motif (RegEx)",
+      "patternHint": "groupes nommés que le modèle lit, ex. : Version:\\s*(?<v>[\\d.]+)",
+      "template": "Modèle de version",
+      "templateHint": "du texte et des espaces réservés {chemin} — cliquez une valeur à droite pour en insérer un",
+      "templatePlaceholder": "ex. : {build.version}-{build.number}",
+      "authKind": "Authentification",
+      "authHeader": "Nom de l'en-tête",
+      "secret": "Secret",
+      "secretHint": "stocké chiffré, jamais renvoyé à ce formulaire",
+      "secretKept": "un secret est enregistré ; laissez vide pour le conserver",
+      "headers": "En-têtes supplémentaires",
+      "headersHint": "envoyés à chaque lecture ; n'y mettez jamais de secret",
+      "headerName": "Nom",
+      "headerValue": "Valeur",
+      "addHeader": "Ajouter un en-tête",
+      "priority": "Priorité",
+      "priorityHint": "la plus basse l'emporte quand deux règles visent le même environnement",
+      "submit": "Ajouter la règle"
+    },
+    "try": {
+      "title": "Essayer",
+      "hint": "Collez ce que répond votre endpoint — rien n'est requêté. Cliquez ensuite la valeur voulue : le chemin s'écrit tout seul dans le modèle.",
+      "body": "Réponse",
+      "bodyPlaceholder": "{ \"build\": { \"version\": \"1.4.2\", \"number\": \"87\" } }",
+      "url": "Adresse à lire",
+      "urlPlaceholder": "https://…/actuator/info",
+      "read": "Lire l'adresse",
+      "reading": "Lecture…",
+      "result": "Version lue",
+      "nothing": "Le modèle n'a rien produit.",
+      "noTree": "Une règle texte lit les groupes nommés du motif ; il n'y a pas d'arbre à parcourir."
+    },
+    "tree": {
+      "insert": "Insérer {{path}} dans le modèle",
+      "unpickable": "Cette clé contient un caractère que le langage de chemin ne sait pas écrire."
+    }
   },
   "trackers": {
     "listTitle": "Trackers de tickets",
@@ -856,6 +980,37 @@
     "refType": "Ou saisir",
     "refTypeHint": "un sha de commit, ou toute ref que la plateforme résout",
     "refApply": "Comparer"
+  },
+  "versions": {
+    "running": "Version en ligne",
+    "current": "état actuel",
+    "currentHint": "Ce que cet environnement répond aujourd'hui. Aucune lecture n'a été prise pendant que ce déploiement était en ligne : ce n'est donc pas une version qu'on le sait avoir livrée — quelque chose a pu y être mis depuis.",
+    "neverRead": "non lue",
+    "neverReadHint": "Aucune sonde n'a atteint cet environnement pendant que ce déploiement était en ligne. C'est irrattrapable : interroger l'environnement maintenant répond sur ce qui tourne maintenant.",
+    "readAfter": "Lue {{delay}} après le déploiement.",
+    "differs": "écart",
+    "status": {
+      "ok": "lue",
+      "unreachable": "injoignable",
+      "noMatch": "introuvable",
+      "skipped": "non lue"
+    },
+    "age": {
+      "minute_one": "il y a {{count}} min",
+      "minute_other": "il y a {{count}} min",
+      "hour_one": "il y a {{count}} h",
+      "hour_other": "il y a {{count}} h",
+      "day_one": "il y a {{count}} jour",
+      "day_other": "il y a {{count}} jours"
+    },
+    "delay": {
+      "second_one": "{{count}} seconde",
+      "second_other": "{{count}} secondes",
+      "minute_one": "{{count}} minute",
+      "minute_other": "{{count}} minutes",
+      "hour_one": "{{count}} heure",
+      "hour_other": "{{count}} heures"
+    }
   },
   "jobs": {
     "queues": "Files",
@@ -1003,6 +1158,25 @@
       "more": "+{{count}}",
       "alsoHere": "Aussi sur ce croisement : {{names}}. Croisez une autre dimension pour les séparer."
     },
+    "versions": {
+      "title": "Ce qui tourne, et où",
+      "count_one": "{{count}} environnement lu",
+      "count_other": "{{count}} environnements lus",
+      "behind": "en retard",
+      "behindHint": "Une version plus récente de ce dépôt tourne sur un autre environnement.",
+      "mixed": "Plusieurs versions",
+      "mixedHint": "ces environnements ne sont pas d'accord",
+      "driftHint": "L'environnement répond une version différente de la référence qui y a été déployée ({{ref}}).",
+      "empty": "Aucun environnement n'a encore été lu. Il faut écrire une règle de version et l'activer sur cette source pour voir quelque chose ici.",
+      "filteredOut": "Aucun environnement ne correspond aux filtres en cours. Les versions les suivent comme le reste de la page.",
+      "clearFilters": "Effacer les filtres",
+      "configure": "Règles de version",
+      "signedOut": "Ce que fait tourner chaque environnement n'est montré qu'aux comptes connectés : cela nomme la version exposée sur chaque adresse publique.",
+      "axis": {
+        "repo": "Dépôt",
+        "environment": "Environnement"
+      }
+    },
     "stream": {
       "title": "Journal",
       "window": "{{hours}} dernières heures",
@@ -1027,7 +1201,8 @@
     "direction": {
       "control": "Salle de contrôle",
       "instrument": "Tableau d'instruments",
-      "stream": "Flux de livraison"
+      "stream": "Flux de livraison",
+      "versions": "Versions"
     },
     "mode": {
       "system": "Système",

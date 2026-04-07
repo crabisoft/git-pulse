@@ -70,6 +70,7 @@
       "sources": "Sources",
       "env": "Environments",
       "tickets": "Tickets",
+      "versions": "Versions",
       "trackers": "Trackers",
       "users": "Accounts",
       "ai": "AI providers",
@@ -80,6 +81,7 @@
       "sources": "Connected Git platforms",
       "env": "Classification rules",
       "tickets": "PR → ticket linking",
+      "versions": "What environments are running",
       "trackers": "Jira, Linear, issues",
       "users": "Who may sign in",
       "ai": "Models the install may call",
@@ -320,6 +322,40 @@
     "ticketRule": {
       "notFound": "Ticket rule not found.",
       "invalidPattern": "Invalid regular expression: {{pattern}}"
+    },
+    "version": {
+      "bodyTooLarge": "The response is larger than a version endpoint should answer with.",
+      "forbiddenAddress": "This address resolves to a private or internal network, which this install will not read.",
+      "groupMissing": "The pattern captures no group named “{{group}}”.",
+      "httpStatus": "The endpoint answered {{status}}.",
+      "invalidUrl": "“{{url}}” is not a readable address.",
+      "noAttribute": "The environment carries no attribute “{{name}}”, which the URL needs.",
+      "noEnvironmentUrl": "The platform published no address for this environment, and the URL is built from one.",
+      "noMatch": "The pattern “{{pattern}}” matches nothing in the response.",
+      "noRef": "The deployment states no ref, which the URL needs.",
+      "pathAmbiguous": "“{{path}}” names {{count}} values; say which one, e.g. with [0] or [key=value].",
+      "pathMissing": "The response holds nothing at “{{path}}”.",
+      "pathNotAValue": "“{{path}}” names a branch of the response, not a value.",
+      "pathUnreadable": "“{{path}}” is not a readable path.",
+      "patternMissing": "A text rule needs a pattern.",
+      "patternUnreadable": "Invalid regular expression: {{pattern}}",
+      "redirected": "The endpoint redirected, which is not followed: a secret must not travel to an address that was never checked.",
+      "templateEmptyPath": "The template “{{template}}” holds an empty placeholder.",
+      "templateUnclosed": "The template “{{template}}” has a placeholder that is never closed.",
+      "timeout": "The endpoint did not answer in time.",
+      "unknownPlaceholder": "The URL uses the placeholder “{{name}}”, which is not one of the values a deployment carries.",
+      "unparsable": "The response is not readable as {{format}}: {{detail}}",
+      "unreachable": "The endpoint could not be reached: {{reason}}",
+      "unsupportedScheme": "Only http and https addresses are read."
+    },
+    "versionRule": {
+      "authHeaderRequired": "A custom header needs its name.",
+      "invalidPattern": "Invalid regular expression: {{pattern}}",
+      "notFound": "Rule not found.",
+      "patternRequired": "A text rule needs a pattern.",
+      "previewNeedsInput": "Paste a response or give an address to read.",
+      "templateReadsNothing": "“{{template}}” reads nothing from the response: it needs at least one {path} placeholder, or it would report the same version for ever.",
+      "urlNotAddressable": "The URL must start with http(s):// or with {environmentUrl}."
     },
     "tracker": {
       "notFound": "Tracker not found."
@@ -577,6 +613,9 @@
       "noIncidentTracker": "None",
       "envRules": "Classification rules",
       "envRulesHint": "global catalogue from the Environments section; ticket rules follow their tracker instead",
+      "versionRules": "Version rules",
+      "versionRulesHint": "read the version this source’s environments are running",
+      "noVersionRules": "No version rule defined yet.",
       "noEnvRules": "No rule defined yet.",
       "noneSelected": "None selected",
       "noTrackerDeclared": "No tracker declared yet — start with the Trackers section.",
@@ -674,6 +713,20 @@
       "queued": "Replay queued.",
       "defaultDays": "As many days as the reporting window",
       "windowNote": "This says how many days are rewritten, not what each of them measures: every replayed reading covers the reporting window ending on its own day, as the scheduled collection does. To change that, change the window in Settings, then replay."
+    },
+    "probe": {
+      "action": "Read the installed versions",
+      "running": "Reading the environments…",
+      "noRules": "No version rule is attached to this source — attach one under Settings › Versions.",
+      "noEnvironments": "The rules are attached, but no deployment has been collected yet for them to describe.",
+      "noneRead_one": "{{count}} environment found, and no rule could address it.",
+      "noneRead_other": "{{count}} environments found, and no rule could address any of them.",
+      "ok_one": "{{count}} environment read, unchanged.",
+      "ok_other": "{{count}} environments read, unchanged.",
+      "changed_one": "{{count}} environment read; {{changed}} now runs a different version.",
+      "changed_other": "{{count}} environments read; {{changed}} now run a different version.",
+      "someFailed_one": "{{count}} environment read, {{failed}} of which answered nothing usable.",
+      "someFailed_other": "{{count}} environments read, {{failed}} of which answered nothing usable."
     }
   },
   "ticketRules": {
@@ -716,6 +769,77 @@
       "owner": "Org / group"
     },
     "noTracker": "Declare a tracker first, in the Trackers section."
+  },
+  "versionRules": {
+    "listTitle": "Version rules",
+    "listEmpty": "No rule yet.",
+    "addTitle": "Add a rule",
+    "editTitle": "Edit “{{name}}”",
+    "added": "Rule added.",
+    "updated": "Rule updated.",
+    "deleted": "Rule deleted.",
+    "deleteTitle": "Delete the rule",
+    "confirmDelete": "Delete the rule “{{name}}”? The environments it reads will stop reporting a version at the next collection; the readings already taken are kept.",
+    "hint": "A rule reads the version an environment is running back out of it, over HTTP. Defined once for the whole install, then enabled source by source — like the classification rules, since a version endpoint is a property of an application rather than of a repository host.",
+    "everyEnvironment": "Every environment",
+    "hasSecret": "authenticated",
+    "format": {
+      "json": "JSON",
+      "xml": "XML",
+      "text": "Text (RegEx)"
+    },
+    "auth": {
+      "none": "None",
+      "bearer": "Bearer token",
+      "basic": "Basic",
+      "header": "Custom header"
+    },
+    "form": {
+      "name": "Name",
+      "environment": "Environment (RegEx)",
+      "environmentHint": "which environments this rule answers for; empty means all of them",
+      "environmentPlaceholder": "e.g. ^prod",
+      "repo": "Repository (RegEx)",
+      "repoHint": "narrows it further; empty means every repo",
+      "urlTemplate": "URL",
+      "urlTemplateHint": "{environmentUrl} is the address the platform published; {repo}, {environment}, {ref} and {attr.…} come from the deployment",
+      "format": "Response format",
+      "pattern": "Pattern (RegEx)",
+      "patternHint": "named groups the template reads, e.g. Version:\\s*(?<v>[\\d.]+)",
+      "template": "Version template",
+      "templateHint": "literal text and {path} placeholders — click a value on the right to insert one",
+      "templatePlaceholder": "e.g. {build.version}-{build.number}",
+      "authKind": "Authentication",
+      "authHeader": "Header name",
+      "secret": "Secret",
+      "secretHint": "stored encrypted, never sent back to this form",
+      "secretKept": "one is stored; leave empty to keep it",
+      "headers": "Extra headers",
+      "headersHint": "sent with every read; never put a secret here",
+      "headerName": "Name",
+      "headerValue": "Value",
+      "addHeader": "Add a header",
+      "priority": "Priority",
+      "priorityHint": "lower wins when two rules claim the same environment",
+      "submit": "Add the rule"
+    },
+    "try": {
+      "title": "Try it",
+      "hint": "Paste what your endpoint answers — nothing is requested. Then click the value you want: the path writes itself into the template.",
+      "body": "Response",
+      "bodyPlaceholder": "{ \"build\": { \"version\": \"1.4.2\", \"number\": \"87\" } }",
+      "url": "Address to read",
+      "urlPlaceholder": "https://…/actuator/info",
+      "read": "Read it",
+      "reading": "Reading…",
+      "result": "Version read",
+      "nothing": "The template produced nothing.",
+      "noTree": "Text rules read the pattern’s named groups; there is no tree to pick from."
+    },
+    "tree": {
+      "insert": "Insert {{path}} into the template",
+      "unpickable": "This key holds a character the path language cannot spell."
+    }
   },
   "trackers": {
     "listTitle": "Ticket trackers",
@@ -856,6 +980,37 @@
     "refType": "Or type one",
     "refTypeHint": "a commit sha, or any ref the platform resolves",
     "refApply": "Compare"
+  },
+  "versions": {
+    "running": "Live version",
+    "current": "current state",
+    "currentHint": "What this environment answers today. No reading was taken while this deployment was the live one, so this is not a version it is known to have delivered — something may have been put there since.",
+    "neverRead": "not read",
+    "neverReadHint": "No probe reached this environment while this deployment was the live one. It cannot be recovered: asking the environment now answers about what is running now.",
+    "readAfter": "Read {{delay}} after the deployment.",
+    "differs": "differs",
+    "status": {
+      "ok": "read",
+      "unreachable": "unreachable",
+      "noMatch": "not found",
+      "skipped": "not read"
+    },
+    "age": {
+      "minute_one": "{{count}} min ago",
+      "minute_other": "{{count}} min ago",
+      "hour_one": "{{count}} h ago",
+      "hour_other": "{{count}} h ago",
+      "day_one": "{{count}} day ago",
+      "day_other": "{{count}} days ago"
+    },
+    "delay": {
+      "second_one": "{{count}} second",
+      "second_other": "{{count}} seconds",
+      "minute_one": "{{count}} minute",
+      "minute_other": "{{count}} minutes",
+      "hour_one": "{{count}} hour",
+      "hour_other": "{{count}} hours"
+    }
   },
   "jobs": {
     "queues": "Queues",
@@ -1002,6 +1157,25 @@
       "more": "+{{count}}",
       "alsoHere": "Also on this crossing: {{names}}. Cross another dimension to separate them."
     },
+    "versions": {
+      "title": "What is running where",
+      "count_one": "{{count}} environment read",
+      "count_other": "{{count}} environments read",
+      "behind": "behind",
+      "behindHint": "A newer release of this repo is running on another environment.",
+      "mixed": "Several releases",
+      "mixedHint": "these environments do not agree",
+      "driftHint": "The environment answers a different release from the ref deployed to it ({{ref}}).",
+      "empty": "No environment has been read yet. A version rule has to be written and enabled on this source before anything appears here.",
+      "filteredOut": "No environment matches the filters in force. The versions obey them like the rest of the page.",
+      "clearFilters": "Clear the filters",
+      "configure": "Version rules",
+      "signedOut": "What each environment is running is only shown to signed-in accounts: it names the release exposed on every public address.",
+      "axis": {
+        "repo": "Repository",
+        "environment": "Environment"
+      }
+    },
     "stream": {
       "title": "Journal",
       "window": "last {{hours}} hours",
@@ -1026,7 +1200,8 @@
     "direction": {
       "control": "Control room",
       "instrument": "Instrument panel",
-      "stream": "Delivery stream"
+      "stream": "Delivery stream",
+      "versions": "Versions"
     },
     "mode": {
       "system": "System",

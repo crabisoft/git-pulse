@@ -53,6 +53,7 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
   'trackers',
   'env',
   'tickets',
+  'versions',
   'ai',
   'jobs',
 ];
