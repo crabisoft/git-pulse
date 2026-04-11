@@ -34,6 +34,7 @@ is the distinction every other document leans on.
 | [Deployments](deployments.md) | The deployment list, what each one carried, the changelog archive |
 | [Release notes](release-notes.md) | Generating them from a commit range, and rewriting them with a model |
 | [Classification rules](classification-rules.md) | The RegEx engine that turns a name into dimensions |
+| [Installed versions](versions.md) | Reading back what an environment actually runs, and what the probe refuses to do |
 | [Ticket references](ticket-references.md) | Trackers, ticket rules, and the links they resolve to |
 
 ## Running and changing it

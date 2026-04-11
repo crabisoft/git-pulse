@@ -1,7 +1,8 @@
 # Disk and retention
 
-Most of what the database holds is bounded by a sweep. One table is not, by
-design, and it is the one that grows for ever.
+Most of what the database holds is bounded by a sweep. A few tables are not, by
+design — one of them grows for ever and dwarfs the rest, and the others are kept
+because nobody could reconstruct them if they went.
 
 ## What is swept, and what is not
 
@@ -38,8 +39,24 @@ Never swept:
 - **`MetricSnapshot`**, deliberately. It is the metric history, and dropping its
   tail would silently shorten every chart. It grows by roughly
   *metrics × dimension combinations* per collection.
-- **`DeploymentChangelog`**, deliberately. It is the one table that cannot be
-  rebuilt from the platform.
+- **`DeploymentChangelog`**, deliberately. It is one of the tables that cannot
+  be rebuilt from the platform.
+- **`EnvironmentVersion`** — not spared so much as bounded by construction: one
+  row per `(source, repo, environment)`, overwritten at every reading. An
+  install with forty environments has forty rows, whatever the probing rate.
+- **`VersionChange` and `DeploymentVersion`**, deliberately, and for the reason
+  that protects `DeploymentChangelog`: **a version cannot be read after the
+  fact**. Everything the sweep touches can be fetched from the platform again if
+  it were dropped; nobody — not us, not the provider — can say later what an
+  environment was running last month. Asking it today answers about today.
+
+  Their size follows the **deployment rate, not the probing rate**:
+  `DeploymentVersion` gets one row per deployment and `VersionChange` one per
+  version that actually moved, however often the probes run. An install
+  deploying fifty times a day writes about 18 000 narrow rows a year — two
+  orders of magnitude under `MetricSnapshot`, which writes that many in a week.
+  If either of them ever leads the table below, something is wrong upstream:
+  look for a probe writing a different version on every reading.
 
 ## Forcing it, checking it, waiting for it
 

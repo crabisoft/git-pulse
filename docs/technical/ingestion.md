@@ -170,6 +170,24 @@ the providers' own forms the boxes read *Pull requests*, *Workflow runs* and
 and *Deployment events* on GitLab — the dialog that issues the secret names them
 that way, since it is read next to those forms.
 
+### A deployment event does one thing more
+
+Every other event ends at the store. A **successful** deployment event also
+queues a reading of the environment it just reached — see [Installed
+versions](versions.md) — because a version is the one thing here that cannot be
+collected late: asking an environment tomorrow what it was running today gets
+tomorrow's answer.
+
+It is queued rather than read on the spot, and on a queue of its own: the
+reading waits half a minute for the application to finish restarting, and an
+ingestion worker asleep for thirty seconds is a worker not writing the rest of
+the burst. Failed and running events queue nothing — they put nothing on the
+environment.
+
+The write comes first and the reading is best-effort behind it: a queue that
+refuses the job must not fail an ingestion that has already happened, and the
+scheduled probe covers that environment within its interval anyway.
+
 `push` is deliberately absent: no table holds commits. So is
 `pull_request_review`, which looks like a way to fill `firstReviewAt` and is not:
 it reports *a* review, with no way of telling whether it is the first, so a hook

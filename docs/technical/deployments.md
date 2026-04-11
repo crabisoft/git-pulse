@@ -25,6 +25,33 @@ extracting an attribute literally named `meta` is entirely plausible.
 > Two implementations of "what does an omitted `to` mean" would drift, and a
 > period is what every number on screen is relative to.
 
+The payload also carries what each row's environment was running — see
+[Installed versions](versions.md) — which is what tells a pipeline that went
+green apart from a deployment that actually arrived. Three fields, because a
+row can be in three states:
+
+| Field | What it is |
+|---|---|
+| `versions` | the reading **frozen against each listed deployment**, at most one per row |
+| `currentVersions` | what each environment answers **now**, one per (repo, environment) |
+| `versionRules` | how many version rules the source has attached |
+
+A row shows its frozen reading when it has one — that is the strong claim, made
+about the deployment itself. Failing that, and **only on the most recent
+deployment of its environment**, it shows the current reading, marked as the
+environment's state rather than as something that deployment delivered. On an
+older row that would simply be false: something newer went out since. Everything
+else reads "not read", which is a fact and not a gap — a version cannot be read
+after the event.
+
+The fallback exists because the frozen rows only start the day version rules do:
+without it, every deployment older than the feature would be blank for ever.
+
+`versionRules` is what decides whether the column appears at all, and
+deliberately not "are there any readings". A source configured five minutes ago
+has rules and nothing read, which is exactly when somebody goes looking for the
+column to find out why it is empty.
+
 Every ref on the page — the deployed one, and the base it is compared against —
 is a **link to the platform's page for it**. Unlike an environment's address
 this one is derivable, so it is built rather than read: `refUrl` takes the

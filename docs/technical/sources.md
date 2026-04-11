@@ -98,6 +98,12 @@ read tags and commits, which are not stored.
 > did: changing a rule takes effect on the next page load, with nothing to
 > re-ingest. Only the platform data is stored, never what we make of it.
 
+[Version rules](versions.md) are the exception to that last sentence, and
+knowingly: what an environment answered can only be known by asking it at the
+time, so the answer is written down. They are attached to a source the same way
+classification rules are — `versionRuleIds` on the source form, from a catalogue
+that belongs to no source.
+
 ### What a period costs, either way
 
 Anything reporting over a period — DORA, the deployments list — now asks its

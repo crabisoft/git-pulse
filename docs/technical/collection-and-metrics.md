@@ -49,7 +49,8 @@ flowchart TD
     A[collect sourceId] --> B[1. Ingestion<br/>stored sources only]
     B --> C[2. Summary snapshots<br/>4 values]
     C --> D[3. DORA snapshots<br/>1 row per metric × combination]
-    D --> E[4. Changelog archiving]
+    D --> E[4. Version readings<br/>what each environment answers]
+    E --> F[5. Changelog archiving]
 
     B -.->|failure| C
     C -.->|DORA failure| E
@@ -68,13 +69,35 @@ flowchart TD
 3. **DORA snapshots** (`dora.snapshot`) — the report is computed, then **one row
    per metric and per combination of dimensions** is written.
 
-4. **Changelog archiving** — the one step whose work cannot be caught up later:
+4. **Version readings** (`versions.probeSource`) — each environment with a
+   version rule is asked what it is running. Before the archiving rather than
+   after it: what a reading confirms is the deployment that just went out, and
+   queueing it behind a batch of comparisons would confirm it a good deal later.
+   Bounded by an interval and a batch cap — see [Installed
+   versions](versions.md) — so an install with no version rule pays one query
+   per collection to learn it still has nothing to read.
+
+5. **Changelog archiving** — the one step whose work cannot be caught up later:
    a deployment whose contents nobody archived before its environment
    disappeared is a changelog no future run will ever produce.
 
 Every step is *best-effort*: a failed ingestion does not stop the snapshot of
 what is stored — that is a real reading of a view that has stopped moving, not a
 hole in the series.
+
+### The second trigger, which is not on this diagram
+
+A version reading is the only work in the install with a **second way in**: a
+deployment webhook queues one for the environment it just reached, waits half a
+minute for the application to come back, and reads it then. It is on a queue of
+its own, deduplicated per environment, and it is described where it belongs —
+[Installed versions](versions.md).
+
+The two triggers coexist without arbitration, and deliberately so: the interval
+the scheduled probe already respects means it does not re-read what an event
+read a minute ago. A source with no webhook behaves exactly as it did before
+events existed, which is what makes the event an acceleration rather than a
+prerequisite — the same stance the ingestion takes.
 
 ## 4. Where the data is stored
 
@@ -100,10 +123,23 @@ One row = **one frozen value, at one instant, for one combination of
 dimensions**. It is not recomputable data: it carries the dimensions **as they
 were classified at the moment of capture**.
 
+### What environments answer
+
+| Table | Contents |
+|---|---|
+| `EnvironmentVersion` | one row per `(source, repo, environment)` — what it runs **now** |
+| `VersionChange` | a row each time that version differs from the reading before it |
+| `DeploymentVersion` | one row per deployment — what its environment answered **while it was live** |
+
+Three tables and no redundancy between them: they answer three questions that
+diverge the moment anything goes wrong. The reasoning is in [Installed
+versions](versions.md), and it is worth reading before touching any of them.
+
 ### The rest
 
 `DeploymentChangelog` (contents of archived deployments), `WebhookDelivery`
-(delivery traceability), `SyncState` (ingestion cursors).
+(delivery traceability), `SyncState` (ingestion cursors), `VersionRule` and
+`SourceVersionRule` (the rules, and which sources opted into them).
 
 ## 5. The retention sweep
 
@@ -116,6 +152,13 @@ whatever is older than that source's depth (`historyDays`, falling back to
 
 **`MetricSnapshot` is never swept.** The metric history accumulates
 indefinitely.
+
+**Neither are the version tables**, for three different reasons. `EnvironmentVersion`
+is bounded by construction — one row per environment, overwritten. `VersionChange`
+and `DeploymentVersion` are written on change and per deployment, and neither can
+be reconstructed: nobody can go back and ask an environment what it was running
+last month. See [Disk and retention](../runbooks/disk-and-retention.md) for the
+orders of magnitude.
 
 ## 6. How a metric is computed
 
