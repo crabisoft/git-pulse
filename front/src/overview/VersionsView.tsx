@@ -34,6 +34,7 @@ export function VersionsView({
   onAxesChange,
   filtered,
   onClearFilters,
+  onOpenHistory,
 }: {
   report: OverviewReport;
   slug: string;
@@ -48,6 +49,11 @@ export function VersionsView({
    */
   filtered: boolean;
   onClearFilters: () => void;
+  /**
+   * Opens the timeline of one environment. Given the pair rather than a cell:
+   * a cell can fold several readings, and a timeline is about one environment.
+   */
+  onOpenHistory: (pair: { repo: string; environment: string }) => void;
 }) {
   const { t } = useTranslation();
   const { state } = useAuth();
@@ -89,7 +95,7 @@ export function VersionsView({
           <Link to="/settings/versions">{t('overview.versions.configure')}</Link>
         </p>
       ) : (
-        <Grid judged={judged} axes={axes} slug={slug} />
+        <Grid judged={judged} axes={axes} slug={slug} onOpenHistory={onOpenHistory} />
       )}
     </section>
   );
@@ -149,7 +155,17 @@ function axisLabel(t: Translate, axis: string): string {
     : axis;
 }
 
-function Grid({ judged, axes, slug }: { judged: JudgedReading[]; axes: Axes; slug: string }) {
+function Grid({
+  judged,
+  axes,
+  slug,
+  onOpenHistory,
+}: {
+  judged: JudgedReading[];
+  axes: Axes;
+  slug: string;
+  onOpenHistory: (pair: { repo: string; environment: string }) => void;
+}) {
   const { t } = useTranslation();
   const { rows, columns, cells } = pivotVersions(judged, axes.rows, axes.columns);
   const byRow = new Map(rows.map((row) => [row, cells.filter((cell) => cell.row === row)]));
@@ -178,6 +194,7 @@ function Grid({ judged, axes, slug }: { judged: JudgedReading[]; axes: Axes; slu
             columns={columns}
             cells={byRow.get(row) ?? []}
             slug={slug}
+            onOpenHistory={onOpenHistory}
           />
         ))}
       </div>
@@ -191,6 +208,7 @@ function Row({
   columns,
   cells,
   slug,
+  onOpenHistory,
 }: {
   row: string;
   /** What the heading is a value of — only a repo has a page to open. */
@@ -198,6 +216,7 @@ function Row({
   columns: string[];
   cells: VersionCell[];
   slug: string;
+  onOpenHistory: (pair: { repo: string; environment: string }) => void;
 }) {
   const { t } = useTranslation();
   const byColumn = new Map(cells.map((cell) => [cell.column, cell]));
@@ -215,7 +234,7 @@ function Row({
         )}
       </div>
       {columns.map((column) => (
-        <Cell key={column} cell={byColumn.get(column)} />
+        <Cell key={column} cell={byColumn.get(column)} onOpenHistory={onOpenHistory} />
       ))}
     </>
   );
@@ -236,7 +255,13 @@ function Row({
  *   stopped answering must never look like one still serving last week's
  *   version.
  */
-function Cell({ cell }: { cell: VersionCell | undefined }) {
+function Cell({
+  cell,
+  onOpenHistory,
+}: {
+  cell: VersionCell | undefined;
+  onOpenHistory: (pair: { repo: string; environment: string }) => void;
+}) {
   const { t } = useTranslation();
   const readings = cell?.readings ?? [];
 
@@ -252,10 +277,12 @@ function Cell({ cell }: { cell: VersionCell | undefined }) {
   const detail = readings
     .map(({ reading }) => `${reading.repo} · ${reading.environment}: ${reading.version ?? '—'}`)
     .join('\n');
+  const pair = singlePair(cell);
+  const open = pair ? () => onOpenHistory(pair) : undefined;
 
   if (cell.mixed) {
     return (
-      <div className="matrix-cell ko version-cell mixed" title={detail}>
+      <CellShell className="ko version-cell mixed" title={detail} onOpen={open}>
         <span className="matrix-ref">
           {t('overview.versions.mixed')}
           <span className="matrix-more">
@@ -263,7 +290,7 @@ function Cell({ cell }: { cell: VersionCell | undefined }) {
           </span>
         </span>
         <span className="matrix-sub muted">{t('overview.versions.mixedHint')}</span>
-      </div>
+      </CellShell>
     );
   }
 
@@ -272,12 +299,12 @@ function Cell({ cell }: { cell: VersionCell | undefined }) {
   if (cell.version === null) {
     const failed = readings[0].reading;
     return (
-      <div className="matrix-cell idle version-cell failed" title={detail}>
+      <CellShell className="idle version-cell failed" title={detail} onOpen={open}>
         <span className="matrix-ref">{t(`versions.status.${failed.status}`)}</span>
         <span className="matrix-sub muted">
           {failed.error ? t(failed.error.code, failed.error.params) : ageLabel(t, failed.observedAt)}
         </span>
-      </div>
+      </CellShell>
     );
   }
 
@@ -289,7 +316,7 @@ function Cell({ cell }: { cell: VersionCell | undefined }) {
   const agreement = agreesWithRef(newest.version, newest.ref);
 
   return (
-    <div className={`matrix-cell ${cell.behind ? 'ko' : 'ok'} version-cell`} title={detail}>
+    <CellShell className={`${cell.behind ? 'ko' : 'ok'} version-cell`} title={detail} onOpen={open}>
       <span className="matrix-ref mono">
         {cell.version}
         {cell.behind && (
@@ -317,8 +344,53 @@ function Cell({ cell }: { cell: VersionCell | undefined }) {
         )}
         {ageLabel(t, newest.observedAt)}
       </span>
-    </div>
+    </CellShell>
   );
+}
+
+/**
+ * A cell, opened or not.
+ *
+ * A real `<button>` where there is a timeline behind it: it is an action, so it
+ * has to answer the keyboard, take focus and announce itself as one — none of
+ * which a `div` with an onClick does, however many handlers are bolted onto it.
+ * Everywhere else a plain cell, because a control that does nothing is worse
+ * than no control.
+ */
+function CellShell({
+  className,
+  title,
+  onOpen,
+  children,
+}: {
+  className: string;
+  title: string;
+  onOpen: (() => void) | undefined;
+  children: React.ReactNode;
+}) {
+  if (!onOpen) return <div className={`matrix-cell ${className}`} title={title}>{children}</div>;
+  return (
+    <button type="button" className={`matrix-cell openable ${className}`} title={title} onClick={onOpen}>
+      {children}
+    </button>
+  );
+}
+
+/**
+ * The one environment a cell speaks for, or null when it speaks for several.
+ *
+ * A timeline is the story of one `(repo, environment)`. Crossed on `client` a
+ * cell can hold four of them, and opening whichever came first would answer a
+ * question nobody asked — so such a cell simply does not open.
+ */
+function singlePair(cell: VersionCell): { repo: string; environment: string } | null {
+  const pairs = new Map(
+    cell.readings.map(({ reading }) => [
+      `${reading.repo}\u0000${reading.environment}`,
+      { repo: reading.repo, environment: reading.environment },
+    ]),
+  );
+  return pairs.size === 1 ? [...pairs.values()][0] : null;
 }
 
 function ageLabel(t: Translate, observedAt: string): string {

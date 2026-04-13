@@ -253,3 +253,84 @@ describe('freezing a reading against its deployment', () => {
     expect(frozen()?.create).toMatchObject({ delaySec: 0 });
   });
 });
+
+/** A store whose timeline reads are captured, so the window can be asserted. */
+function readable(rows: Array<Record<string, unknown>>, oldest: unknown = null) {
+  const findMany = vi.fn().mockResolvedValue(rows);
+  const prisma = {
+    versionChange: {
+      findMany,
+      count: vi.fn().mockResolvedValue(rows.length),
+      findFirst: vi.fn().mockResolvedValue(oldest),
+    },
+    // The three reads go out together, and the service reads their results
+    // back positionally — which is what makes a reordering of the queue show
+    // up here rather than as a wrong number on a page.
+    $transaction: vi.fn().mockImplementation((ops: unknown[]) => Promise.all(ops)),
+  };
+  return {
+    store: new VersionReadingStore(prisma as never, classifier({}) as never),
+    findMany,
+  };
+}
+
+function change(version: string, at: string, deploymentId: string | null = 'dep-1') {
+  return { version, observedAt: new Date(at), deploymentId, ref: `v${version}` };
+}
+
+describe('VersionReadingStore.history', () => {
+  it('reads the newest first, and asks for no more than the page', async () => {
+    const rows = [change('1.4.2', '2026-08-01T10:00:00.000Z')];
+    const { store, findMany } = readable(rows);
+
+    const history = await store.history('src-1', 'acme/api', 'prod', { limit: 25, offset: 0 });
+
+    expect(findMany.mock.calls[0][0]).toMatchObject({
+      orderBy: { observedAt: 'desc' },
+      skip: 0,
+      take: 25,
+    });
+    expect(history.changes.items[0].until).toBeNull();
+  });
+
+  it('over-reads one row on a page that does not start at the newest', async () => {
+    // The row above the window is what gives the page's first entry an end. It
+    // is read, used, and never handed out.
+    const rows = [
+      change('1.5.0', '2026-08-02T09:00:00.000Z'),
+      change('1.4.2', '2026-08-01T10:00:00.000Z'),
+      change('1.4.1', '2026-07-28T10:00:00.000Z'),
+    ];
+    const { store, findMany } = readable(rows);
+
+    const history = await store.history('src-1', 'acme/api', 'prod', { limit: 2, offset: 2 });
+
+    expect(findMany.mock.calls[0][0]).toMatchObject({ skip: 1, take: 3 });
+    expect(history.changes.items).toHaveLength(2);
+    // The over-read row is the successor of the first entry, not an entry.
+    expect(history.changes.items[0].version).toBe('1.4.2');
+    expect(history.changes.items[0].until).toBe('2026-08-02T09:00:00.000Z');
+  });
+
+  it('says where the record begins, whatever page is being read', async () => {
+    // A short timeline is not a quiet environment: it may be a rule written
+    // yesterday, and only this can tell the two apart.
+    const { store } = readable(
+      [change('1.4.2', '2026-08-01T10:00:00.000Z')],
+      change('1.0.0', '2026-07-01T08:00:00.000Z'),
+    );
+
+    const history = await store.history('src-1', 'acme/api', 'prod', { limit: 25, offset: 0 });
+
+    expect(history.firstSeenAt).toBe('2026-07-01T08:00:00.000Z');
+  });
+
+  it('answers an environment nothing has ever been read on', async () => {
+    const { store } = readable([]);
+
+    const history = await store.history('src-1', 'acme/api', 'prod', { limit: 25, offset: 0 });
+
+    expect(history.changes.items).toEqual([]);
+    expect(history.firstSeenAt).toBeNull();
+  });
+});

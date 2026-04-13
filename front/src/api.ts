@@ -58,6 +58,7 @@ import type {
   VersionAuthKind,
   VersionFormat,
   VersionPreview,
+  VersionHistory,
   VersionProbeOutcome,
   VersionRulePublic,
 } from '@repo/shared';
@@ -524,6 +525,21 @@ export const api = {
   /** What this source's environments are running, as last read. */
   sourceVersions: (sourceId: string, signal?: AbortSignal) =>
     request<EnvironmentVersion[]>(`/sources/${sourceId}/versions`, { signal }),
+  /**
+   * Every version one environment has run, newest first. Asked for a pair
+   * rather than a source: the same environment name in two repos is two
+   * different stories.
+   */
+  versionHistory: (
+    sourceId: string,
+    pair: { repo: string; environment: string },
+    page?: PageQuery,
+    signal?: AbortSignal,
+  ) =>
+    request<VersionHistory>(
+      `/sources/${sourceId}/versions/history${qs({ ...pair, ...page })}`,
+      { signal },
+    ),
   /** Reads them again now, rather than at the next collection. */
   probeSourceVersions: (sourceId: string) =>
     request<VersionProbeOutcome>(`/sources/${sourceId}/versions/probe`, { method: 'POST' }),

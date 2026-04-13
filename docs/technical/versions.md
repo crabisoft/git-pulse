@@ -252,6 +252,30 @@ rows. It is also the only place a version that moved **without a deployment**
 leaves a mark — a manual restart on an old image, a rollback done outside the
 platform, a drift nobody declared.
 
+It is read from **a cell of the version grid**, which is where the question
+arises: one is looking at a version and wants to know since when, and what was
+there before. The cell already knows the repo and the environment a dedicated
+page would have to ask for again, so it opens the timeline directly — as a real
+button, since it is an action and answers the keyboard like one. The pair
+travels in the address beside the fold and the axes: a timeline nobody can paste
+into a conversation is worth half of what it should be.
+
+Three things that timeline has to get right:
+
+- **A change with no deployment is the headline, not an edge case.** It is
+  marked as such and stands out on the rail: something moved the version and the
+  platform knows nothing about it, which is the one reading no per-deployment
+  record can produce.
+- **Durations are computed across page boundaries.** A version ends when the
+  next one begins, so the first entry of any page but the first depends on a row
+  that is *not on that page*. The store over-reads one row to close it — a
+  timeline that is right in the middle and wrong at every joint would be worse
+  than one with no durations at all.
+- **The record starts when the rule started reading**, and the page says so
+  under every page of the list. A short timeline is not a stable environment: it
+  may be a rule written yesterday, and letting silence read as evidence is the
+  mistake this note exists to prevent.
+
 `DeploymentVersion` — one row per deployment, written by the same probe path
 that updates the current state, so there is no second mechanism to keep in step.
 It copies the repo, the environment, the ref and the deployment time rather than
@@ -298,6 +322,7 @@ the reader is the only one who can weigh that.
 | `DELETE /api/version-rules/:id` | Delete, secret included |
 | `POST /api/version-rules/preview` | Run a candidate rule over a pasted body, or over one it reads |
 | `GET /api/sources/:id/versions` | What each environment was last seen running |
+| `GET /api/sources/:id/versions/history` | Every version one environment has run, newest first — takes `repo` and `environment` |
 | `POST /api/sources/:id/versions/probe` | Read them all again now, interval ignored |
 
 Everything except `GET /api/sources/:id/versions` is **admin-only**. That is not

@@ -8,6 +8,7 @@ import { Viewer } from '../auth/access.decorator';
 import { CreateVersionRuleDto } from './dto/create-version-rule.dto';
 import { UpdateVersionRuleDto } from './dto/update-version-rule.dto';
 import { PreviewVersionRuleDto } from './dto/preview-version-rule.dto';
+import { VersionHistoryDto } from './dto/version-history.dto';
 
 /**
  * Everything here is admin-only by default — the level a route that says
@@ -60,6 +61,24 @@ export class VersionRulesController {
   @Get('sources/:id/versions')
   versions(@Param('id') id: string) {
     return this.store.latest(id);
+  }
+
+  /**
+   * Every version that has run on one environment, newest first.
+   *
+   * A report like the readings above, so it follows the dashboard's own level
+   * rather than the catalogue's: it says what has been running where, which is
+   * what the overview already shows — not what the install is configured to do.
+   */
+  @Viewer()
+  @Get('sources/:id/versions/history')
+  async history(@Param('id') id: string, @Query() query: VersionHistoryDto) {
+    return this.store.history(
+      id,
+      query.repo,
+      query.environment,
+      toWindow(query, await this.settings.pageSize()),
+    );
   }
 
   /**

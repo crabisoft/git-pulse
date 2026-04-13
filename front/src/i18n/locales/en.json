@@ -1010,6 +1010,16 @@
       "minute_other": "{{count}} minutes",
       "hour_one": "{{count}} hour",
       "hour_other": "{{count}} hours"
+    },
+    "history": {
+      "title": "Versions of {{repo}} · {{environment}}",
+      "empty": "No version change on record for this environment yet. The record starts when a rule first reads it.",
+      "current": "running now",
+      "held": "held for {{duration}}",
+      "deployment": "Deployed {{ref}}",
+      "unexplained": "no deployment",
+      "unexplainedHint": "The version changed and no deployment explains it — a restart on another image, a rollback done outside the platform, or a drift. This is the one thing a per-deployment record cannot show.",
+      "since": "Readings of this environment start on {{at}}. A short timeline may mean a recently written rule rather than a quiet environment."
     }
   },
   "jobs": {

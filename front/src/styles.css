@@ -1283,6 +1283,27 @@ button.rt-value:hover, button.rt-value:focus-visible { background: color-mix(in 
 /* A cell whose readings disagree names no version — see the Cell component —
    so it is worded rather than monospaced: there is no release to read here. */
 .version-cell.mixed .matrix-ref { font-family: var(--sans); font-size: .8rem; color: var(--crit); }
+/* A cell with a timeline behind it is a button — see CellShell. Reset to the
+   grid's own look so the affordance is the pointer and the focus ring rather
+   than a control drawn inside a table. */
+button.matrix-cell.openable {
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+  border: none; border-top: 1px solid var(--line); border-left: 1px solid var(--line);
+  width: 100%;
+}
+button.matrix-cell.openable:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+
+/* The timeline itself: one version per row, newest first. */
+.version-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.version-entry { padding: 10px 12px; border-left: 3px solid var(--line); background: var(--surface-2); border-radius: 0 var(--radius) var(--radius) 0; }
+/* A version nothing in the platform explains. Marked on the rail as well as in
+   words: it is the one thing this timeline knows that nothing else does, and
+   scanning for it must not mean reading every line. */
+.version-entry.unexplained { border-left-color: var(--crit); }
+.version-entry-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.version-entry-version { font-size: .95rem; }
+.version-entry-meta { font-size: .78rem; margin-top: 2px; }
+.version-timeline-start { margin-top: 12px; }
 .version-drift { color: var(--crit); }
 
 /* What an environment answers, on the deployment row it describes. */

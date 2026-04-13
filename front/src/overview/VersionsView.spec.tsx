@@ -44,6 +44,7 @@ function renderView(
     onAxesChange?: () => void;
     filtered?: boolean;
     onClearFilters?: () => void;
+    onOpenHistory?: () => void;
   } = {},
 ) {
   const report = { versions, dimensions: options.dimensions ?? {} } as OverviewReport;
@@ -56,6 +57,7 @@ function renderView(
         onAxesChange={options.onAxesChange ?? vi.fn()}
         filtered={options.filtered ?? false}
         onClearFilters={options.onClearFilters ?? vi.fn()}
+        onOpenHistory={options.onOpenHistory ?? vi.fn()}
       />
     </MemoryRouter>,
   );
@@ -262,5 +264,61 @@ describe('a cell holding several readings', () => {
     const cell = container.querySelector('.version-cell.mixed');
     expect(cell?.getAttribute('title')).toContain('acme/api · prod: 1.4.2');
     expect(cell?.getAttribute('title')).toContain('acme/web · prod: 2.0.0');
+  });
+});
+
+describe('opening the timeline of a cell', () => {
+  it('makes a cell that has a story a real button', async () => {
+    signedIn(true);
+    const onOpenHistory = vi.fn();
+    renderView([reading()], { onOpenHistory });
+
+    // A button, not a div with a click handler: it takes focus, answers the
+    // keyboard and announces itself as an action.
+    const cell = screen.getByRole('button', { name: /1.4.2/ });
+    await userEvent.click(cell);
+
+    expect(onOpenHistory).toHaveBeenCalledWith({ repo: 'acme/api', environment: 'prod' });
+  });
+
+  it('opens from the keyboard as well as the pointer', async () => {
+    signedIn(true);
+    const onOpenHistory = vi.fn();
+    renderView([reading()], { onOpenHistory });
+
+    const cell = screen.getByRole('button', { name: /1.4.2/ });
+    cell.focus();
+    // Focusable and activated by Enter, both of which come free with a button
+    // and neither of which a div with an onClick has.
+    expect(document.activeElement).toBe(cell);
+    await userEvent.keyboard('{Enter}');
+
+    expect(onOpenHistory).toHaveBeenCalled();
+  });
+
+  it('reads nothing until the cell is clicked', () => {
+    signedIn(true);
+    const onOpenHistory = vi.fn();
+    renderView([reading()], { onOpenHistory });
+
+    // Rendering the grid asks for no timeline: forty cells would otherwise be
+    // forty requests nobody made.
+    expect(onOpenHistory).not.toHaveBeenCalled();
+  });
+
+  it('does not open a cell that speaks for several environments', async () => {
+    // Crossed on a dimension, one cell can hold four pairs. A timeline is the
+    // story of one environment, and picking one of them would answer a
+    // question nobody asked.
+    signedIn(true);
+    renderView(
+      [
+        reading({ repo: 'acme/api', attributes: { client: 'acme' } }),
+        reading({ repo: 'acme/web', attributes: { client: 'acme' } }),
+      ],
+      { dimensions: { client: ['acme'] }, axes: { rows: 'client', columns: 'environment' } },
+    );
+
+    expect(screen.queryByRole('button', { name: /1.4.2/ })).toBeNull();
   });
 });

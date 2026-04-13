@@ -1010,6 +1010,16 @@
       "minute_other": "{{count}} minutes",
       "hour_one": "{{count}} heure",
       "hour_other": "{{count}} heures"
+    },
+    "history": {
+      "title": "Versions de {{repo}} · {{environment}}",
+      "empty": "Aucun changement de version enregistré pour cet environnement. L'historique commence à la première lecture d'une règle.",
+      "current": "en cours",
+      "held": "tenue {{duration}}",
+      "deployment": "Déploiement de {{ref}}",
+      "unexplained": "sans déploiement",
+      "unexplainedHint": "La version a changé et aucun déploiement ne l'explique — un redémarrage sur une autre image, un rollback hors plateforme, ou une dérive. C'est la seule chose qu'un enregistrement par déploiement ne peut pas montrer.",
+      "since": "Les lectures de cet environnement commencent le {{at}}. Une frise courte peut signifier une règle écrite récemment plutôt qu'un environnement stable."
     }
   },
   "jobs": {

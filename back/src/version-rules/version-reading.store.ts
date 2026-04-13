@@ -3,10 +3,13 @@ import type {
   CodedMessage,
   DeploymentVersion,
   EnvironmentVersion,
+  VersionHistory,
   VersionProbeStatus,
 } from '@repo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { EnvRulesService, subjectKey } from '../env-rules/env-rules.service';
+import { toPage, type PageWindow } from '../common/pagination';
+import { toEntries } from './version-history';
 import { pairKey, type LastReading } from './pending-probes';
 
 /** One reading, on its way to the store. */
@@ -218,6 +221,49 @@ export class VersionReadingStore {
         update: frozen,
       }),
     ];
+  }
+
+  /**
+   * The timeline of one environment: every version that arrived on it, newest
+   * first, and how long each held.
+   *
+   * The window is widened by one row on the way in whenever it does not start
+   * at the newest change, and that extra row never leaves this method — it
+   * exists only to give the page's first entry an end. See `toEntries`.
+   *
+   * `firstSeenAt` is read separately and is not the same thing as the last page
+   * of this list: it says where the *record* begins whatever page is being
+   * looked at, which is what keeps a two-entry timeline from being mistaken for
+   * a quiet environment when the rule was written on Tuesday.
+   */
+  async history(
+    sourceId: string,
+    repo: string,
+    environment: string,
+    window: PageWindow,
+  ): Promise<VersionHistory> {
+    const where = { sourceId, repo, environment };
+    // One row earlier than asked for, unless the window already starts at the
+    // newest change and there is nothing newer to read.
+    const overRead = window.offset > 0 ? 1 : 0;
+
+    const [rows, total, oldest] = await this.prisma.$transaction([
+      this.prisma.versionChange.findMany({
+        where,
+        orderBy: { observedAt: 'desc' },
+        skip: window.offset - overRead,
+        take: window.limit + overRead,
+      }),
+      this.prisma.versionChange.count({ where }),
+      this.prisma.versionChange.findFirst({ where, orderBy: { observedAt: 'asc' } }),
+    ]);
+
+    const newer = overRead > 0 ? (rows[0] ?? null) : null;
+    const page = overRead > 0 ? rows.slice(1) : rows;
+    return {
+      changes: toPage(toEntries(page, newer), total, window),
+      firstSeenAt: oldest?.observedAt.toISOString() ?? null,
+    };
   }
 
   /**

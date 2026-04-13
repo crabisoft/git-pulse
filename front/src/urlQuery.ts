@@ -121,6 +121,15 @@ export interface OverviewState {
   /** Which dimensions the matrix crosses. Absent means it proposes a pair. */
   axes?: { rows: string; columns: string };
   /**
+   * The environment whose version timeline is open, if any.
+   *
+   * Here rather than in component state for the reason the fold and the axes
+   * are: a timeline nobody can paste into a conversation is worth half of what
+   * it should be, and "the version went backwards on this environment" is
+   * precisely the kind of thing one sends to somebody else.
+   */
+  history?: { repo: string; environment: string };
+  /**
    * Read as a wall screen. Carried here so that changing a filter does not
    * quietly hand the monitor back its navigation bar — every rewrite of the
    * address goes through this codec.
@@ -132,6 +141,8 @@ export const overviewCodec: UrlCodec<OverviewState> = {
   parse: (params) => {
     const rows = params.get('rows');
     const columns = params.get('columns');
+    const historyRepo = params.get('historyRepo');
+    const historyEnv = params.get('historyEnv');
     return {
       filters: { ...doraFrom(params), meta: params.get('meta') ?? '' },
       // `has` and not the value: an empty `groupBy` is "flat by choice", which
@@ -141,6 +152,11 @@ export const overviewCodec: UrlCodec<OverviewState> = {
       // Half a crossing is not a choice; it takes both to override the pair
       // the matrix would have proposed.
       ...(rows && columns ? { axes: { rows, columns } } : {}),
+      // Both halves or neither: a timeline is about one environment of one
+      // repo, and half a pair names no environment at all.
+      ...(historyRepo && historyEnv
+        ? { history: { repo: historyRepo, environment: historyEnv } }
+        : {}),
       ...(params.has(WALL_PARAM) ? { wall: true } : {}),
     };
   },
@@ -151,6 +167,10 @@ export const overviewCodec: UrlCodec<OverviewState> = {
     if (query.axes) {
       params.set('rows', query.axes.rows);
       params.set('columns', query.axes.columns);
+    }
+    if (query.history) {
+      params.set('historyRepo', query.history.repo);
+      params.set('historyEnv', query.history.environment);
     }
     if (query.wall) params.set(WALL_PARAM, '');
     return params;

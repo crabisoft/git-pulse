@@ -15,6 +15,7 @@ import { BoardView } from '../overview/BoardView';
 import { InstrumentView } from '../overview/InstrumentView';
 import { StreamView } from '../overview/StreamView';
 import { VersionsView } from '../overview/VersionsView';
+import { VersionTimeline } from '../overview/VersionTimeline';
 import {
   DEFAULT_VERSION_AXES,
   defaultAxes,
@@ -213,9 +214,27 @@ export function OverviewPage({
               onAxesChange={(next) => changeAxes(next, versionAxisKeys(dimensions))}
               filtered={narrowing}
               onClearFilters={() => filter({ repos: [], dimensions: {}, meta: '' })}
+              // Rearranges nothing and narrows nothing: it opens a dialog, and
+              // it travels in the address so the timeline can be sent to
+              // somebody. Hence `setQuery` rather than `filter` or `layout`.
+              onOpenHistory={(history) => setQuery((current) => ({ ...current, history }))}
             />
           ) : (
             <BoardView report={report} fold={fold} slug={slug} staleHours={staleHours} />
+          )}
+
+          {/* Mounted only while a pair is open — nothing is read before the
+              cell is clicked, and closing it drops the request with it. */}
+          {query.history && (
+            <VersionTimeline
+              sourceId={sourceId}
+              slug={slug}
+              repo={query.history.repo}
+              environment={query.history.environment}
+              onClose={() =>
+                setQuery(({ history: _closed, ...rest }) => rest)
+              }
+            />
           )}
 
           {/* Folded lists are a thing to click; there is nobody to click. */}

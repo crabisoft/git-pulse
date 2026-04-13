@@ -784,6 +784,54 @@ export interface DeploymentVersion {
   delaySec: number;
 }
 
+/**
+ * One version arriving on an environment, and how long it stayed.
+ *
+ * The entries `VersionChange` was written for: not what runs there, but what
+ * has run there and in what order — the only record that survives the version
+ * after it.
+ */
+export interface VersionChangeEntry {
+  version: string;
+  /** When this version was first read on the environment. */
+  observedAt: string;
+  /**
+   * When the next version replaced it, or null for the one still running.
+   *
+   * Read off the neighbouring change rather than stored, which makes it a
+   * property of a *pair* of rows — so a page boundary has to be crossed to
+   * compute the first entry of any page but the first. The backend over-reads
+   * by one row for exactly that reason: a duration that is right in the middle
+   * of a page and wrong at every joint would be worse than no duration at all.
+   */
+  until: string | null;
+  /**
+   * The deployment that put it there, when one did.
+   *
+   * **Null is the interesting case**, not the degenerate one: the version
+   * changed and nothing in the platform explains it — a container restarted by
+   * hand on an older image, a rollback done outside the pipeline, a drift
+   * nobody declared. It is the one thing this table knows that the frozen
+   * per-deployment rows cannot.
+   */
+  deploymentId: string | null;
+  ref: string | null;
+}
+
+/** A pair's timeline, and where its record begins. */
+export interface VersionHistory {
+  changes: Page<VersionChangeEntry>;
+  /**
+   * The oldest change on record for this pair, null when there is none.
+   *
+   * What stops a short timeline from being read as a stable environment: the
+   * record starts when the rule started reading, and a rule written yesterday
+   * has nothing to say about last month. Silence is not evidence, and this is
+   * what lets the page say so.
+   */
+  firstSeenAt: string | null;
+}
+
 /** What one probing run did, as the collection job reports it. */
 export interface VersionProbeOutcome {
   /** Environments a request was actually made for. */
