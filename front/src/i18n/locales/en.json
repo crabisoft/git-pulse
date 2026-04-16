@@ -1163,6 +1163,7 @@
       "rows": "rows",
       "columns": "columns",
       "needsTwo": "A matrix needs two dimensions to cross. Your rules extract only one: add a capture group, or switch to the control room.",
+      "empty": "No environment known, under this filter. The period does not apply here: this matrix shows what is running.",
       "noTier": "no published scale",
       "more": "+{{count}}",
       "alsoHere": "Also on this crossing: {{names}}. Cross another dimension to separate them."
