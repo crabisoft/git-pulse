@@ -241,6 +241,58 @@ const ENVIRONMENT = (
 const OK = ['success', 'success', 'success', 'success', 'success'];
 
 /** An `OverviewReport`: what the dashboard reads in one call. */
+/**
+ * What a wide estate looks like: five applications on fifteen environments.
+ *
+ * Deliberately wider than any screen the harness opens. The porthole this
+ * fixture exists to catch only appears once the grid is wider than the text
+ * column — three environments would prove nothing, and would have passed
+ * before the escape was written just as happily as after it.
+ */
+const VERSION_ENVIRONMENTS = [
+  'canary',
+  'demo',
+  'dev',
+  'integration',
+  'load',
+  'perf',
+  'preprod',
+  'prod-ap',
+  'prod-eu',
+  'prod-us',
+  'qa',
+  'sandbox',
+  'staging',
+  'training',
+  'uat',
+];
+
+const VERSION_REPOS = [
+  'acme/checkout-service',
+  'acme/identity-provider',
+  'acme/notification-worker',
+  'acme/reporting-api',
+  'acme/storefront',
+];
+
+export const ENVIRONMENT_VERSIONS = VERSION_REPOS.flatMap((repo, r) =>
+  VERSION_ENVIRONMENTS.map((environment, e) => ({
+    repo,
+    environment,
+    version: `${2 + (r % 3)}.${(e % 5) + 1}.${(r + e) % 9}`,
+    deploymentId: `dep-${r}-${e}`,
+    ref: `v${2 + (r % 3)}.${(e % 5) + 1}.${(r + e) % 9}`,
+    ruleId: 'vr-1',
+    url: `https://${environment}.example.test/version`,
+    status: (r + e) % 11 === 0 ? 'unreachable' : 'ok',
+    error: (r + e) % 11 === 0 ? { code: 'errors.version.timeout' } : null,
+    attributes: { client: r % 2 === 0 ? 'northwind' : 'globex' },
+    metaEnvironments: environment.startsWith('prod') ? ['prod'] : [],
+    observedAt: '2025-07-31T09:40:00Z',
+    changedAt: '2025-07-30T18:10:00Z',
+  })),
+);
+
 export const OVERVIEW = {
   sourceId: 'src-1',
   environments: [
@@ -271,6 +323,25 @@ export const OVERVIEW = {
       ['acme/identity-provider'],
       'feat/passkey-enrolment',
       ['failed', 'success'],
+    ),
+  ],
+  // What runs now, which no period narrows. The same list here: a fixture that
+  // says nothing about the difference is one where the two are the same, and
+  // the matrix reads this one rather than the window above it.
+  running: [
+    ENVIRONMENT(
+      'production',
+      { client: 'northwind', app: 'checkout' },
+      ['acme/checkout-service'],
+      'release/2025.07.31',
+      [...OK, 'success'],
+    ),
+    ENVIRONMENT(
+      'production-eu',
+      { client: 'globex', app: 'identity' },
+      ['acme/identity-provider'],
+      'v4.2.0',
+      OK,
     ),
   ],
   dimensions: { client: ['globex', 'northwind'], app: ['checkout', 'identity'] },
@@ -341,6 +412,7 @@ export const OVERVIEW = {
   })),
   period: { from: '2025-07-01T00:00:00Z', to: '2025-07-31T00:00:00Z', windowDays: 30 },
   warnings: [],
+  versions: ENVIRONMENT_VERSIONS,
 };
 
 const SAMPLE = (i: number, label: string, value: number | null) => ({
@@ -454,6 +526,10 @@ export const ROUTES: Array<[RegExp, unknown]> = [
   [/\/api\/sources\/[^/]+\/metrics\/series/, METRIC_SERIES],
   [/\/api\/sources\/[^/]+\/metrics/, METRIC_SNAPSHOTS],
   [/\/api\/sources(\/[^/]+)?(\?|$)/, SOURCES],
+  // Answers as a list, like the two below it. Left unmatched it fell through
+  // to the page envelope, and the sources page crashed iterating an object —
+  // which is how a fixture gap reads on screen.
+  [/\/api\/coverage/, []],
   [/\/api\/quotas/, []],
   [/\/api\/budgets/, []],
   [/\/api\/env-rules/, EMPTY_PAGE],

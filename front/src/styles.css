@@ -165,7 +165,19 @@ a:hover { text-decoration: underline; }
 }
 .link-button:hover { text-decoration: underline; }
 
-.app { min-height: 100vh; }
+/*
+ * The shell, and the width everything inside it can measure itself against.
+ *
+ * `container-type: inline-size` is here so a wide table can ask how much room
+ * the page really has — see `.matrix-scroll` — without going through `100vw`,
+ * which counts the scrollbar the page does not have to itself.
+ *
+ * It has one consequence worth knowing: a container is a containing block for
+ * fixed-position descendants, so a dialog rendered inside it would anchor to
+ * the shell rather than to the window. That is why `Modal` renders through a
+ * portal into `<body>`, outside this box — see the component.
+ */
+.app { min-height: 100vh; container-type: inline-size; }
 
 /* Topbar */
 .topbar {
@@ -1107,11 +1119,51 @@ tr.is-active > td, .card.is-active { background: color-mix(in srgb, var(--accent
 .matrix-head .section-head { flex: 1; min-width: 160px; margin-bottom: 0; }
 .matrix-axes { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .matrix-axes select { height: 30px; padding: 0 26px 0 9px; font-size: .8rem; }
-.matrix-scroll { overflow-x: auto; margin-top: 8px; }
+/*
+ * A wide table reads through the whole window, not through the text column.
+ *
+ * `.content` caps itself at a measure that is right for prose and wrong for a
+ * grid of twenty environments: left inside it, the grid scrolls sideways in a
+ * 1180px porthole while the screen has half as much again to spare. So the
+ * scroller takes the width it needs — `fit-content` — and is allowed to reach
+ * out of the column, up to the page's own gutters.
+ *
+ * The reach is measured **from the shell, not from the window**: `100cqw` is
+ * the width of `.app`, which excludes the scrollbar, where `100vw` does not —
+ * and a page that scrolls vertically would gain a dozen pixels of horizontal
+ * overflow, which is precisely the defect this rule exists to remove.
+ *
+ * Two behaviours fall out of one expression rather than out of a breakpoint
+ * somebody chose:
+ * - few columns: `fit-content` is narrower than the column, `--escape` changes
+ *   nothing, and the grid sits exactly where it always did;
+ * - many: the grid spreads to the window's gutters and scrolls only if even
+ *   that is not enough.
+ *
+ * In wall mode `.content` drops its cap and its padding, so the free space it
+ * measures is negative and the escape floors itself at zero — the wrapper
+ * neutralises itself there instead of adding a second offset to a page that is
+ * already full width. Below 900px there is no free space either, so the narrow
+ * rules keep the layout they describe.
+ */
+.matrix-scroll {
+  /* Half the room `.content` leaves either side of itself: the shell's width,
+     less this box's own, less the page padding the grid should stop at. */
+  --escape: max(0px, (100cqw - 100% - 48px) / 2);
+  overflow-x: auto;
+  margin-top: 8px;
+  width: fit-content;
+  max-width: calc(100% + 2 * var(--escape));
+  margin-inline: calc(-1 * var(--escape));
+  /* The frame moves to the scroller, so it stays put while the grid slides
+     under it — and so the grid stops being its own scroll container, which is
+     what a sticky column inside it needs. */
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
 .matrix {
   display: grid; gap: 1px; min-width: 480px;
-  background: var(--line); border: 1px solid var(--line);
-  border-radius: var(--radius); overflow: hidden;
+  background: var(--line);
 }
 .matrix > * { background: var(--surface); padding: 9px 12px; min-width: 0; }
 .matrix-corner, .matrix-column, .matrix-row-head {
@@ -1122,6 +1174,19 @@ tr.is-active > td, .card.is-active { background: color-mix(in srgb, var(--accent
   text-transform: none; letter-spacing: .03em; font-size: .8rem;
   font-weight: 600; color: var(--ink); overflow-wrap: anywhere;
 }
+/*
+ * The row names stay put while the grid slides under them. A wide table
+ * scrolled sideways loses the repo, and the repo is what gives the version
+ * being read its meaning — "1.4.2" alone is not an answer to anything.
+ *
+ * Opaque, and deliberately so: the grid paints `--line` behind its 1px gaps, so
+ * a sticky cell with a translucent or absent background would show the cells
+ * travelling underneath it. `--surface-2` is already set on these three above.
+ */
+.matrix-row-head, .matrix-corner { position: sticky; left: 0; z-index: 1; }
+/* Over the column headings as well as over the rows: it is the one cell that
+   sits in both frozen tracks. */
+.matrix-corner { z-index: 2; }
 /* A severity stripe rather than a tinted cell: the grid stays readable at a
    glance without the colour swallowing the version it is about. */
 .matrix-cell { display: flex; flex-direction: column; gap: 3px; border-left: 3px solid transparent; }

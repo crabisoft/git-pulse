@@ -1,10 +1,19 @@
 import { useEffect, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { CancelIcon } from './icons';
 
 /**
  * Centered dialog: closes on backdrop click and on Escape. The caller owns the
  * body and the footer actions.
+ *
+ * Rendered into `<body>` rather than where it was written, for the reason the
+ * multiselect's menu already is: a dialog belongs to the window, not to the box
+ * that opened it. `position: fixed` only means "against the window" while no
+ * ancestor is a containing block for it — and the shell became one when it
+ * started publishing its width to the wide tables inside it. A dialog anchored
+ * to the shell would sit at the top of the document, off screen, on any page
+ * that had been scrolled.
  */
 export function Modal({
   title,
@@ -38,7 +47,7 @@ export function Modal({
     return () => document.removeEventListener('keydown', onKey);
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div className="modal-backdrop" onClick={onClose}>
       <div
         className={wide ? 'modal wide' : 'modal'}
@@ -67,7 +76,8 @@ export function Modal({
 
         {footer && <div className="modal-foot">{footer}</div>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

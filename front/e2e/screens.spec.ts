@@ -23,7 +23,13 @@ const WIDTHS = [
  * A readiness selector may match either rendering: the deployment rows are a
  * table on a wide screen and a card list on a phone, which is the point.
  */
-const PAGES = [
+const PAGES: Array<{
+  name: string;
+  path: string;
+  ready: string;
+  /** Run before measuring, for a page whose state is not in its address. */
+  prepare?: (page: Page) => Promise<void>;
+}> = [
   { name: 'deployments', path: '/deployments/acme-platform', ready: 'table, .card-list' },
   { name: 'changelogs', path: '/changelogs/acme-platform', ready: '.page-head' },
   { name: 'users', path: '/settings/users', ready: 'table, .card-list' },
@@ -32,6 +38,23 @@ const PAGES = [
   // The widest table the settings hold: six columns of what is in flight.
   { name: 'settings-jobs', path: '/settings/jobs', ready: 'table.data, .card-list' },
   { name: 'account', path: '/account', ready: '.account-head' },
+  /**
+   * The widest thing the application draws: five repos over fifteen
+   * environments. It is the case the text column used to hide — a grid of three
+   * fits inside 1180px and proves nothing about a grid that does not.
+   *
+   * The direction is not in the address, so it is switched the way a reader
+   * switches it. That also keeps the fixture honest: what is measured is the
+   * grid the application actually renders, not one assembled for the test.
+   */
+  {
+    name: 'overview-versions',
+    path: '/dashboard/acme-platform',
+    ready: '.versions-matrix',
+    prepare: async (page) => {
+      await page.locator('.direction-switch select').selectOption('versions');
+    },
+  },
 ];
 
 /** Answers every API call from the fixtures, so a screen never waits on a network. */
@@ -83,6 +106,7 @@ for (const size of WIDTHS) {
       test(`${target.name} fits`, async ({ page }) => {
         await stubApi(page);
         await page.goto(target.path);
+        await target.prepare?.(page);
         await page.locator(target.ready).first().waitFor({ timeout: 10_000 });
 
         await page.screenshot({
@@ -134,5 +158,66 @@ test.describe('phone navigation', () => {
     await burger.click();
     await expect(page.getByRole('link', { name: 'DORA' })).toBeVisible();
     await page.screenshot({ path: 'e2e/screens/nav-drawer-phone.png' });
+  });
+});
+
+/**
+ * The porthole, measured rather than assumed.
+ *
+ * The overflow check above passes just as happily on a grid trapped in the
+ * 1180px text column — it never overflowed, it was merely unreadable. What is
+ * asserted here is the thing that was actually wrong: at 1440px the grid has to
+ * use the window, and at every width it has to stop at the window's edge.
+ */
+test.describe('a wide grid reads through the window', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  async function openVersions(page: Page) {
+    await stubApi(page);
+    await page.goto('/dashboard/acme-platform');
+    await page.locator('.direction-switch select').selectOption('versions');
+    await page.locator('.versions-matrix').waitFor({ timeout: 10_000 });
+  }
+
+  test('reaches past the text column, and stops at the page gutter', async ({ page }) => {
+    await openVersions(page);
+
+    const grid = (await page.locator('.matrix-scroll').boundingBox())!;
+    const column = (await page.locator('.content').boundingBox())!;
+
+    // Wider than the column that used to hold it: fifteen environments no
+    // longer read through a 1180px slot on a 1440px screen.
+    expect(grid.width).toBeGreaterThan(column.width);
+    // And no further than the page's own margins, which is what keeps the
+    // document from scrolling sideways.
+    expect(grid.x).toBeGreaterThanOrEqual(24);
+    expect(Math.round(grid.x + grid.width)).toBeLessThanOrEqual(1440 - 24);
+  });
+
+  test('keeps the repo beside the version while the grid scrolls', async ({ page }) => {
+    await openVersions(page);
+
+    const head = page.locator('.versions-matrix .matrix-row-head').first();
+    const before = (await head.boundingBox())!;
+    await page.locator('.matrix-scroll').evaluate((el) => el.scrollBy(400, 0));
+
+    // A wide table scrolled sideways loses the repo, and the repo is what
+    // gives the version being read its meaning.
+    const after = (await head.boundingBox())!;
+    expect(Math.round(after.x)).toBe(Math.round(before.x));
+  });
+
+  test('leaves a grid that fits exactly where it was', async ({ page }) => {
+    await stubApi(page);
+    await page.goto('/dashboard/acme-platform');
+    await page.locator('.direction-switch select').selectOption('instrument');
+    await page.locator('.matrix').waitFor({ timeout: 10_000 });
+
+    const grid = (await page.locator('.matrix-scroll').boundingBox())!;
+    const column = (await page.locator('.content').boundingBox())!;
+
+    // Two dimensions crossed is a handful of columns: `fit-content` is narrower
+    // than the column, so the escape has nothing to do and does nothing.
+    expect(grid.width).toBeLessThanOrEqual(column.width);
   });
 });
