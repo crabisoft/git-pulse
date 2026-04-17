@@ -275,22 +275,55 @@ const VERSION_REPOS = [
   'acme/storefront',
 ];
 
+/** What each repository is currently on, and versions itself independently. */
+const CURRENT_RELEASE: Record<string, string> = {
+  'acme/checkout-service': '2.5.0',
+  'acme/identity-provider': '3.4.0',
+  'acme/notification-worker': '4.3.0',
+  'acme/reporting-api': '2.8.0',
+  'acme/storefront': '3.6.0',
+};
+
+/** The few environments that are not on it, and how they are not. */
+const MINORS_BEHIND: Record<string, number> = { canary: 1, dev: 2 };
+/** Given a newer release that never came up: it still answers the current one. */
+const DRIFTED = 'preprod';
+/** Stopped answering. A reading that failed states no release at all. */
+const SILENT = 'sandbox';
+
+/**
+ * One reading per (repo, environment), most of them agreeing.
+ *
+ * The releases used to be derived from the two indices, which spread them
+ * evenly and left fourteen environments in fifteen behind the last one. That is
+ * arithmetic rather than an estate anybody runs, and it made `behind` — the
+ * exception the grid exists to surface — the background of every screenshot.
+ * Three environments are singled out instead, one per thing the grid can say.
+ */
 export const ENVIRONMENT_VERSIONS = VERSION_REPOS.flatMap((repo, r) =>
-  VERSION_ENVIRONMENTS.map((environment, e) => ({
-    repo,
-    environment,
-    version: `${2 + (r % 3)}.${(e % 5) + 1}.${(r + e) % 9}`,
-    deploymentId: `dep-${r}-${e}`,
-    ref: `v${2 + (r % 3)}.${(e % 5) + 1}.${(r + e) % 9}`,
-    ruleId: 'vr-1',
-    url: `https://${environment}.example.test/version`,
-    status: (r + e) % 11 === 0 ? 'unreachable' : 'ok',
-    error: (r + e) % 11 === 0 ? { code: 'errors.version.timeout' } : null,
-    attributes: { client: r % 2 === 0 ? 'northwind' : 'globex' },
-    metaEnvironments: environment.startsWith('prod') ? ['prod'] : [],
-    observedAt: '2025-07-31T09:40:00Z',
-    changedAt: '2025-07-30T18:10:00Z',
-  })),
+  VERSION_ENVIRONMENTS.map((environment, e) => {
+    const [major, minor] = CURRENT_RELEASE[repo].split('.').map(Number);
+    const lag = MINORS_BEHIND[environment] ?? 0;
+    const version = `${major}.${minor - lag}.0`;
+    const silent = environment === SILENT;
+    return {
+      repo,
+      environment,
+      version: silent ? null : version,
+      deploymentId: `dep-${r}-${e}`,
+      // The drifted one was deployed the next release and never took it, which
+      // is the whole reason the version is read back rather than assumed.
+      ref: environment === DRIFTED ? `v${major}.${minor + 1}.0` : `v${version}`,
+      ruleId: 'vr-1',
+      url: `https://${environment}.example.test/version`,
+      status: silent ? 'unreachable' : 'ok',
+      error: silent ? { code: 'errors.version.timeout' } : null,
+      attributes: { client: r % 2 === 0 ? 'northwind' : 'globex' },
+      metaEnvironments: environment.startsWith('prod') ? ['prod'] : [],
+      observedAt: '2025-07-31T09:40:00Z',
+      changedAt: '2025-07-30T18:10:00Z',
+    };
+  }),
 );
 
 export const OVERVIEW = {
