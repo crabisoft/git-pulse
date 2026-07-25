@@ -1,0 +1,21 @@
+# Read the Docs builds the user guide from this repository.
+#
+# Versions are the branches and tags of the repository: `latest` follows the
+# default branch, and a tag published on GitHub becomes a version of its own
+# without anything here changing.
+version: 2
+
+build:
+  os: ubuntu-24.04
+  tools:
+    python: "3.12"
+
+sphinx:
+  configuration: docs/user/source/conf.py
+  # A missing reference or an unreadable image is a broken page, not a note in
+  # a log nobody reads.
+  fail_on_warning: true
+
+python:
+  install:
+    - requirements: docs/user/requirements.txt

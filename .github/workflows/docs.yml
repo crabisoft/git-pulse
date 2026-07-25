@@ -1,0 +1,43 @@
+name: User guide
+
+# The guide is published by Read the Docs, which builds with warnings fatal. A
+# dead cross-reference or a figure whose file was never committed fails there,
+# after the merge — this is the same build, before it.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/user/**'
+      - '.readthedocs.yaml'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - 'docs/user/**'
+      - '.readthedocs.yaml'
+      - '.github/workflows/docs.yml'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  guide:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The same version Read the Docs builds with — see .readthedocs.yaml.
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: docs/user/requirements.txt
+
+      - run: pip install -r docs/user/requirements.txt
+
+      - name: Build the guide
+        run: make -C docs/user html

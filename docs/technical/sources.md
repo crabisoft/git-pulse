@@ -12,6 +12,11 @@ between calling the provider on every request and reading a store.
 
 ### What to grant it
 
+The table below maps each permission to **the calls that need it**. The user
+guide covers the same ground from the other end — how to create the App or the
+token, and what each missing grant leaves empty on screen: [Platform
+credentials](../user/source/credentials.rst). Change one and check the other.
+
 Everything below is **read-only**: no call any connector makes writes anything.
 Publishing release notes back as a platform release will be the first exception,
 and it is not implemented yet.

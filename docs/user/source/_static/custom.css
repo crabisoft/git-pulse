@@ -1,0 +1,38 @@
+/*
+ * What the Read the Docs theme does that this guide cannot live with.
+ *
+ * Three rules, and the second is the one that matters: the theme forbids
+ * wrapping inside every table cell, which is defensible for a table of short
+ * values and wrong for these, whose cells hold sentences. Left alone, each
+ * table grows past the page and carries a horizontal scrollbar with it —
+ * on a wide screen as much as on a narrow one.
+ */
+
+/* The article is capped at 800px by default: a column of prose between two
+   fields of grey on anything wider than a laptop, and the reason the tables had
+   nowhere to grow into. Raised rather than removed — past this, a line of prose
+   is wider than an eye tracks comfortably, and the tables have long since had
+   all the room they need. The theme already centres what it caps. */
+.wy-nav-content {
+  max-width: 2000px;
+}
+
+/* Cells wrap, headers included. The `overflow: auto` the theme puts on the
+   wrapper is kept as it is — with wrapping restored it stops firing on prose,
+   and stays available for the rare thing that genuinely cannot fold. */
+.wy-table-responsive table td,
+.wy-table-responsive table th,
+.rst-content table.docutils thead,
+.wy-table thead {
+  white-space: normal;
+}
+
+/* Inline literals are nowrap too, so one regex or one long path in a cell would
+   set that column's width on its own. Broken only where it cannot fit, which on
+   a full-width layout is close to never. */
+.rst-content code,
+.rst-content tt,
+code {
+  white-space: normal;
+  overflow-wrap: break-word;
+}

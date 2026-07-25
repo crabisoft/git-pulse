@@ -44,6 +44,7 @@ is the distinction every other document leans on.
 | [Running it](operations.md) | The Docker stacks, published images, background jobs, migrations |
 | [The demo dataset](demo.md) | `make demo` — a fictional organization, no credential involved |
 | [Tests](testing.md) | What the suites cover, and what they deliberately do not |
+| [The user guide](user-guide.md) | Where it lives, how Read the Docs builds it per version, and how its screenshots are made |
 
 ## When something is wrong
 

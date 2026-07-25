@@ -122,11 +122,16 @@ public access — lives in the database and is edited from **Settings**.
 
 ## Documentation
 
-Everything is under **[`docs/`](docs/)** — [`technical/`](docs/technical/) for
-how it works, [`runbooks/`](docs/runbooks/) for what to do when something is
-wrong. Start with [Collection and metrics](docs/technical/collection-and-metrics.md):
-it explains what is stored and what is recomputed on every request, which is
-what makes the rest make sense.
+**Using it** — the [user guide](docs/user/) explains what each page
+answers, what the figures on it mean, and which setting moves them. Read the
+Docs publishes it, one build per version.
+
+**Running and changing it** — everything is under **[`docs/`](docs/)**:
+[`technical/`](docs/technical/) for how it works, [`runbooks/`](docs/runbooks/)
+for what to do when something is wrong. Start with
+[Collection and metrics](docs/technical/collection-and-metrics.md): it explains
+what is stored and what is recomputed on every request, which is what makes the
+rest make sense.
 
 | | |
 |---|---|

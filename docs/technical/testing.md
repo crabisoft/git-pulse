@@ -72,3 +72,7 @@ what it proves.
 The screenshots in the README come from the same fixtures, through the layout
 suite's harness rather than through Storybook — they are pictures of pages, and
 the pages are what a reader wants to see.
+
+The [user guide](user-guide.md) has a suite of its own, on the same harness and
+asserting no more than the first — a different list of pages, moving for
+different reasons. Neither suite runs under `npm run test:layout`.
