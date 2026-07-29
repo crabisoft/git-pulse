@@ -64,6 +64,23 @@ npm run screenshots -w @repo/front   # rewrites docs/images/*.png
 Regenerate them when a change alters what those pages look like, and commit the
 images with it.
 
+The [user guide](docs/technical/user-guide.md) has a second, separate set — its
+own pages, moving for its own reasons:
+
+```bash
+npm run screenshots:docs -w @repo/front   # rewrites docs/user/source/images/*.png
+```
+
+The guide itself is reStructuredText, built with warnings fatal, so a dead
+cross-reference or a page left out of the table of contents fails CI. Build it
+the way CI does, without installing anything on the host:
+
+```bash
+make docs                            # Sphinx runs in the dev container
+```
+
+It writes `docs/user/build/html/` — open `index.html`.
+
 If your change touches `back/prisma/schema.prisma`, include the generated
 migration:
 

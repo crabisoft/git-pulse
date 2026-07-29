@@ -1,8 +1,28 @@
 # Dev image: Node + OpenSSL (Prisma needs system libssl, absent from the slim
-# base). Source code is bind-mounted at runtime, so nothing is copied here.
+# base), plus the Python toolchain the user guide is built with. Source code is
+# bind-mounted at runtime, so nothing of it is copied here.
 ARG NODE_IMAGE=node:24-slim
 FROM ${NODE_IMAGE}
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends openssl ca-certificates \
+  && apt-get install -y --no-install-recommends \
+       openssl ca-certificates make python3 python3-venv \
   && rm -rf /var/lib/apt/lists/*
+
+# Sphinx builds the guide in `docs/user/`. It lives in a virtualenv of its own
+# because Debian's Python is externally managed, and because the guide's pinned
+# versions have no business meeting the system packages.
+#
+# The requirements file is the one thing copied at build time, and deliberately:
+# installing it into the image is what makes `make docs` a build rather than a
+# download. Editing it means rebuilding the image, which `make dev` does.
+ENV DOCS_VENV=/opt/docs-venv
+COPY docs/user/requirements.txt /tmp/docs-requirements.txt
+RUN python3 -m venv $DOCS_VENV \
+  && $DOCS_VENV/bin/pip install --no-cache-dir -r /tmp/docs-requirements.txt \
+  && rm /tmp/docs-requirements.txt
+
+# Sphinx calls `setlocale(LC_ALL, "")` on startup and dies where the locale is
+# unset, which a slim image is.
+ENV LANG=C.UTF-8
+
 WORKDIR /app

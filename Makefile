@@ -6,7 +6,7 @@ mode ?= dev
 # Where `make backup` writes. Override with `out=/somewhere/else`.
 out ?= backup
 
-.PHONY: help install build typecheck test storybook \
+.PHONY: help install build typecheck test storybook docs \
         dev dev-down logs restart restart-back ps \
         prod prod-down \
         migrate deploy studio db-reset psql sh-back set-password \
@@ -38,6 +38,20 @@ test: ## Run the unit tests (pure engines: classification, DORA, tickets)
 # the ones the dev stack installs belong to root. Needs `make dev` first.
 storybook: ## Component catalogue on http://localhost:6006 (needs the dev stack up)
 	$(COMPOSE) dev exec front npm run storybook -w @repo/front -- --host 0.0.0.0 --no-open
+
+# In the back container for the same reason, and because that is where Sphinx
+# is: the dev image carries it in a virtualenv, so nothing has to be installed
+# on the host to build the guide. Warnings are fatal here exactly as they are on
+# Read the Docs — see docs/technical/user-guide.md.
+#
+# As the calling user, not as root. The build writes into the bind-mounted tree
+# rather than into a named volume — the point is to open the result in a browser
+# on the host — and everything else this stack writes there is kept out of it
+# precisely because a root-owned file needs sudo to delete.
+docs: ## Build the user guide (HTML in docs/user/build/html; needs the dev stack up)
+	$(COMPOSE) dev exec --user $$(id -u):$$(id -g) back \
+		sh -c 'make -C docs/user html SPHINXBUILD=$$DOCS_VENV/bin/sphinx-build'
+	@echo "Open docs/user/build/html/index.html"
 
 # ─── Docker: development (watch / HMR) ───────────────────────────────
 dev: ## Start the dev stack (db + redis + back watch + front HMR)
