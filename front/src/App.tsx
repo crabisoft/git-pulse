@@ -19,6 +19,7 @@ import {
   type OverviewDirection,
   type SourcePublic,
 } from '@repo/shared';
+import logo from './assets/logo.png';
 import { api, apiErrorInfo } from './api';
 import { useAuth } from './auth';
 import { apply as applyDisplay, effective, watchSystem } from './display';
@@ -256,8 +257,8 @@ function AppShell() {
       {!wall && (
       <header className="topbar">
         <div className="brand">
-          <span className="brand-dot" />
-          <strong>Git Dashboard</strong>
+          <img className="brand-logo" src={logo} alt="" width={24} height={24} />
+          <strong>Git Pulse</strong>
           <span className="brand-sub">{t('brand.subtitle')}</span>
         </div>
         <MainNav module={module} withSource={withSource} />

@@ -56,7 +56,7 @@ jobs:
       # The images are how the project is meant to be deployed, so a broken
       # Dockerfile is a broken release.
       - name: Build the API image
-        run: docker build -f .docker/Dockerfile.back -t git-dashboard-back:ci .
+        run: docker build -f .docker/Dockerfile.back -t git-pulse-back:ci .
 
       - name: Build the web image
-        run: docker build -f .docker/Dockerfile.front -t git-dashboard-front:ci .
+        run: docker build -f .docker/Dockerfile.front -t git-pulse-front:ci .

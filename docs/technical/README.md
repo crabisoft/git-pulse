@@ -1,6 +1,6 @@
 # Technical documentation
 
-How Git Dashboard works, one subject per file. Written for whoever operates it
+How Git Pulse works, one subject per file. Written for whoever operates it
 or changes it — the reasoning behind a behaviour is here, not only the
 behaviour.
 
@@ -14,7 +14,7 @@ is the distinction every other document leans on.
 |---|---|
 | [Architecture](architecture.md) | Stack, monorepo layout, and what each module owns |
 | [Collection and metrics](collection-and-metrics.md) | Where data lives, when it is written, when a figure is computed |
-| [The web application](frontend.md) | Routing, slugs, request pacing, and the component catalogue |
+| [The web application](frontend.md) | Routing, slugs, request pacing, the component catalogue, and the icon set |
 | [API conventions](api.md) | Pagination on list routes, and cancelling an abandoned request |
 | [Accounts and access](authentication.md) | The four access levels, sessions, sign-in throttling, recovery |
 

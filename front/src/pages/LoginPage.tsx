@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { PASSWORD_MIN_LENGTH } from '@repo/shared';
+import logo from '../assets/logo.png';
 import { api, apiErrorInfo } from '../api';
 import { useAuth } from '../auth';
 
@@ -47,8 +48,8 @@ export function LoginPage({ setup }: { setup: boolean }) {
     <div className="auth-shell">
       <section className="panel auth-card">
         <div className="brand auth-brand">
-          <span className="brand-dot" />
-          <strong>Git Dashboard</strong>
+          <img className="brand-logo" src={logo} alt="" width={32} height={32} />
+          <strong>Git Pulse</strong>
         </div>
         <h2>{t(setup ? 'auth.setupTitle' : 'auth.signInTitle')}</h2>
         <p className="muted auth-lead">{t(setup ? 'auth.setupLead' : 'auth.signInLead')}</p>

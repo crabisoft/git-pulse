@@ -118,6 +118,7 @@ make migrate name=add_something
 | `back/src/env-rules/` | environment classification from a branch or job name |
 | `back/src/sources/connectors/` | one file per platform, behind a shared interface |
 | `front/src/pages/` | one file per screen |
+| `front/public/` | the icon set, served from the root of the bundle |
 | `packages/shared/` | types shared by both sides |
 | `docs/technical/` | the technical documentation, one subject per file |
 

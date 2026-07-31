@@ -13,7 +13,7 @@ services:
       dockerfile: .docker/Dockerfile.dev
       args:
         NODE_IMAGE: ${NODE_IMAGE:-node:24-slim}
-    image: git-dashboard-dev
+    image: git-pulse-dev
     working_dir: /app
     # The shared package is compiled once, then kept under `tsc --watch` in the
     # background: the back consumes its dist, so without that watcher a shared
@@ -56,7 +56,7 @@ services:
 
   front:
     build: *dev-build
-    image: git-dashboard-dev
+    image: git-pulse-dev
     working_dir: /app
     command: >
       sh -c "npm install

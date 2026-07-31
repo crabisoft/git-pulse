@@ -1,4 +1,8 @@
-# Git Dashboard
+<p align="center">
+  <img src="docs/images/logo.png" alt="" width="120" height="120">
+</p>
+
+# Git Pulse
 
 **Self-hosted monitoring for Git platforms.** Live pull requests and pipelines,
 DORA metrics with their history, deployment changelogs kept before the platform
@@ -72,7 +76,7 @@ Everything the connectors do is **read-only**.
 One file, published images, no clone and no build:
 
 ```bash
-curl -O https://raw.githubusercontent.com/CrabiSoft/git-dashboard/main/.docker/docker-compose.ghcr.yml
+curl -O https://raw.githubusercontent.com/crabisoft/git-pulse/main/.docker/docker-compose.ghcr.yml
 docker compose -f docker-compose.ghcr.yml up -d
 ```
 
@@ -98,8 +102,8 @@ GitHub or GitLab account involved. See [the demo dataset](docs/technical/demo.md
 Requires Docker and Node 24+.
 
 ```bash
-git clone https://github.com/CrabiSoft/git-dashboard.git
-cd git-dashboard
+git clone https://github.com/crabisoft/git-pulse.git
+cd git-pulse
 make dev
 ```
 

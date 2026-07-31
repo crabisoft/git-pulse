@@ -2,7 +2,7 @@
 User guide
 ==========
 
-Git Dashboard reports on the Git platforms it reads: what is deployed where,
+Git Pulse reports on the Git platforms it reads: what is deployed where,
 how fast changes get out, what is in the way, and what each release carried. It
 writes nothing back — every credential it holds is read-only.
 

@@ -186,7 +186,8 @@ a:hover { text-decoration: underline; }
   border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 10;
 }
 .brand { display: flex; align-items: center; gap: 8px; font-size: 1.05rem; white-space: nowrap; }
-.brand-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+.brand-logo { display: block; width: 24px; height: 24px; }
+.auth-brand .brand-logo { width: 32px; height: 32px; }
 .brand-sub { color: var(--muted); font-size: .8rem; font-family: var(--mono); }
 .main-nav { display: contents; }
 /* Revealed by the narrow layout below, which is the only place it means

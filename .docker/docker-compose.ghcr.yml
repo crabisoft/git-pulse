@@ -1,6 +1,6 @@
-# Git Dashboard, from the published images — no clone, no build.
+# Git Pulse, from the published images — no clone, no build.
 #
-#   curl -O https://raw.githubusercontent.com/CrabiSoft/git-dashboard/main/.docker/docker-compose.ghcr.yml
+#   curl -O https://raw.githubusercontent.com/crabisoft/git-pulse/main/.docker/docker-compose.ghcr.yml
 #   docker compose -f docker-compose.ghcr.yml up -d
 #   open http://localhost:8080
 #
@@ -40,7 +40,7 @@ services:
       retries: 10
 
   back:
-    image: ${API_IMAGE:-ghcr.io/crabisoft/git-dashboard/api:latest}
+    image: ${API_IMAGE:-ghcr.io/crabisoft/git-pulse/api:latest}
     restart: unless-stopped
     environment:
       API_PORT: 3001
@@ -64,7 +64,7 @@ services:
         condition: service_healthy
 
   front:
-    image: ${WEB_IMAGE:-ghcr.io/crabisoft/git-dashboard/web:latest}
+    image: ${WEB_IMAGE:-ghcr.io/crabisoft/git-pulse/web:latest}
     restart: unless-stopped
     ports:
       - "${WEB_PORT:-8080}:80"

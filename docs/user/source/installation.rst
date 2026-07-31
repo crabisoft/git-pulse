@@ -39,7 +39,7 @@ file wires them to a database and a Redis:
 
 .. code-block:: bash
 
-   curl -O https://raw.githubusercontent.com/CrabiSoft/git-dashboard/main/.docker/docker-compose.ghcr.yml
+   curl -O https://raw.githubusercontent.com/crabisoft/git-pulse/main/.docker/docker-compose.ghcr.yml
    docker compose -f docker-compose.ghcr.yml up -d
 
 The application is on http://localhost:8080, **API included** — one origin, one
@@ -59,8 +59,8 @@ them. Needs Docker and Node 24+.
 
 .. code-block:: bash
 
-   git clone https://github.com/CrabiSoft/git-dashboard.git
-   cd git-dashboard
+   git clone https://github.com/crabisoft/git-pulse.git
+   cd git-pulse
    make dev
 
 Two stacks, and they are not the same thing:

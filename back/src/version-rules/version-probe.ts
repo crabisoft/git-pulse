@@ -86,7 +86,7 @@ export async function probe(request: ProbeRequest): Promise<ProbeResult> {
     method: 'GET',
     headers: {
       accept: 'application/json, application/xml, text/xml, text/plain;q=0.9, */*;q=0.8',
-      'user-agent': 'git-dashboard-version-probe',
+      'user-agent': 'git-pulse-version-probe',
       ...request.headers,
       ...authHeaders(request.auth),
     },

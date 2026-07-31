@@ -45,8 +45,8 @@ every push to `main`, and again with a version on every `v*` tag:
 
 | Image | Holds |
 |---|---|
-| `ghcr.io/<owner>/git-dashboard/api` | the compiled API; applies the migrations, then starts |
-| `ghcr.io/<owner>/git-dashboard/web` | the built bundle behind nginx, which also proxies `/api` |
+| `ghcr.io/<owner>/git-pulse/api` | the compiled API; applies the migrations, then starts |
+| `ghcr.io/<owner>/git-pulse/web` | the built bundle behind nginx, which also proxies `/api` |
 
 `docker-compose.ghcr.yml` is what runs them, and it is deliberately
 **standalone**: it chains no override and reads none of the repository's `.env`

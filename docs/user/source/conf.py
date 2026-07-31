@@ -5,7 +5,7 @@ axis: it builds a branch or a tag per version and serves them side by side, so
 a reader on 1.4 gets the guide of 1.4 rather than the guide of `main`.
 """
 
-project = "Git Dashboard"
+project = "Git Pulse"
 author = "CrabiSoft"
 copyright = "2026, CrabiSoft"
 
@@ -18,7 +18,7 @@ extensions = [
 # address whoever runs the application, not whoever reads it. They are linked
 # for what they are — files on GitHub.
 extlinks = {
-    "repo": ("https://github.com/CrabiSoft/git-dashboard/blob/main/%s", "%s"),
+    "repo": ("https://github.com/crabisoft/git-pulse/blob/main/%s", "%s"),
 }
 
 exclude_patterns = []
@@ -26,6 +26,8 @@ exclude_patterns = []
 html_theme = "sphinx_rtd_theme"
 html_title = f"{project} — user guide"
 html_show_sourcelink = False
+html_logo = "_static/logo.png"
+html_favicon = "_static/favicon.ico"
 
 # Full width, and tables that wrap rather than scroll sideways. See the file
 # itself for what the theme does that this undoes.

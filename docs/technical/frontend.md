@@ -116,3 +116,35 @@ release.
 > nothing renders it until somebody opens it. What a component *does* is still
 > the unit suites' business, and whether a page fits a phone is still the
 > layout suite's.
+
+## The icon set
+
+The same mark is served twice, because two things ask for it in two ways.
+
+**`front/public/`** is copied to the root of the bundle untouched, which is
+where a browser looks for icons it was never told about — and nginx reaches
+them before the SPA fallback, `try_files $uri` matching the file first.
+
+| File | Asked for by |
+|---|---|
+| `favicon.ico` (48, 32, 16) | the tab, and anything that guesses at `/favicon.ico` |
+| `favicon-96x96.png` | the tab, where a browser prefers PNG |
+| `apple-touch-icon.png` (180) | iOS, added to a home screen |
+| `web-app-manifest-{192,512}.png` | the manifest, installed as an application |
+| `site.webmanifest` | the name and colours of that installed application |
+
+**`front/src/assets/logo.png`** (96) is the one in the topbar and on the two
+pages that show without a session. It is imported rather than linked, so the
+bundler hashes it and a replacement is never served from a stale cache — which
+is exactly what the icons above cannot have, their URLs being fixed.
+
+Every file is transparent **but `apple-touch-icon.png`, which is white**: iOS
+composites a home-screen icon onto black, and a mark drawn in dark navy would
+lose its outline against it.
+
+Replacing the mark means regenerating all of them from one square source, plus
+the two copies the documentation reads on its own — `docs/images/logo.png` for
+the README and `docs/user/source/_static/` for the guide, which Sphinx points
+`html_logo` and `html_favicon` at. Then regenerate
+[both screenshot suites](user-guide.md#screenshots): the topbar is in every
+picture either of them takes.

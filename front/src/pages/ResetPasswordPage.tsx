@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { PASSWORD_MIN_LENGTH, type PasswordResetTarget } from '@repo/shared';
+import logo from '../assets/logo.png';
 import { api, apiErrorInfo } from '../api';
 import { useAuth } from '../auth';
 
@@ -53,8 +54,8 @@ export function ResetPasswordPage({ token }: { token: string }) {
     <div className="auth-shell">
       <section className="panel auth-card">
         <div className="brand auth-brand">
-          <span className="brand-dot" />
-          <strong>Git Dashboard</strong>
+          <img className="brand-logo" src={logo} alt="" width={32} height={32} />
+          <strong>Git Pulse</strong>
         </div>
         <h2>{t('reset.title')}</h2>
 

@@ -1,6 +1,6 @@
 # Security policy
 
-Git Dashboard holds credentials for the Git platforms it reads — a GitHub App
+Git Pulse holds credentials for the Git platforms it reads — a GitHub App
 private key, a GitHub or GitLab token, webhook secrets. A flaw here can expose
 an organization's whole source history, so security reports are welcome and
 taken seriously.
