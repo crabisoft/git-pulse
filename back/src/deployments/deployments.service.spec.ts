@@ -24,6 +24,8 @@ function build(versions: {
   frozen?: unknown[];
   latest?: unknown[];
   rules?: number;
+  deployments?: Deployment[];
+  addresses?: { rules: unknown[]; declared: unknown[] };
 }) {
   const store = {
     frozenFor: vi.fn().mockResolvedValue(versions.frozen ?? []),
@@ -34,7 +36,7 @@ function build(versions: {
     {
       for: vi.fn().mockResolvedValue({
         listRepositories: vi.fn().mockResolvedValue(['acme/api']),
-        listDeployments: vi.fn().mockResolvedValue([deployment()]),
+        listDeployments: vi.fn().mockResolvedValue(versions.deployments ?? [deployment()]),
       }),
     } as never,
     {
@@ -44,6 +46,11 @@ function build(versions: {
     } as never,
     {} as never,
     { classifyByPair: vi.fn().mockResolvedValue(new Map()) } as never,
+    {
+      addressBook: vi
+        .fn()
+        .mockResolvedValue(versions.addresses ?? { rules: [], declared: [] }),
+    } as never,
     {} as never,
     { get: vi.fn().mockResolvedValue({ doraWindowDays: 30 }) } as never,
     {} as never,
@@ -90,5 +97,54 @@ describe('what the deployments report says about versions', () => {
     const report = await service.list('src-1', {}, WINDOW);
 
     expect(report.versionRules).toBe(0);
+  });
+});
+
+describe('where the listed deployments say their environment answers', () => {
+  it('addresses an environment the platform published nothing for', async () => {
+    const { service } = build({
+      deployments: [deployment({ environment: 'acme-prod' })],
+      addresses: {
+        rules: [
+          {
+            name: 'clients',
+            pattern: '^(?<client>\\w+)-prod$',
+            urlTemplate: 'https://{client}.example.test',
+            mode: 'fill',
+            priority: 100,
+          },
+        ],
+        declared: [],
+      },
+    });
+
+    const report = await service.list('src-1', {}, WINDOW);
+
+    expect(report.deployments.items[0].environmentUrl).toBe('https://acme.example.test');
+  });
+
+  it('leaves a published address alone unless a rule says to replace it', async () => {
+    const rules = [
+      {
+        name: 'clients',
+        pattern: '.*',
+        urlTemplate: 'https://derived.example.test',
+        mode: 'fill',
+        priority: 100,
+      },
+    ];
+    const listed = [deployment({ environmentUrl: 'https://published.test' })];
+
+    const filling = build({ deployments: listed, addresses: { rules, declared: [] } });
+    const overwriting = build({
+      deployments: listed,
+      addresses: { rules: [{ ...rules[0], mode: 'overwrite' }], declared: [] },
+    });
+
+    expect((await filling.service.list('src-1', {}, WINDOW)).deployments.items[0].environmentUrl)
+      .toBe('https://published.test');
+    expect(
+      (await overwriting.service.list('src-1', {}, WINDOW)).deployments.items[0].environmentUrl,
+    ).toBe('https://derived.example.test');
   });
 });

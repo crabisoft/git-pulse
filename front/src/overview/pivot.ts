@@ -57,9 +57,16 @@ export function pivotEnvironments(
     else byCrossing.set(crossing, [env]);
   }
   // Sorted once per crossing rather than compared one by one: the cell needs
-  // the whole order, not just its head.
+  // the whole order, not just its head. A declared environment sorts last —
+  // the cell shows the head as what runs at that crossing, and one that was
+  // deployed to says more about it than one that never was.
   for (const held of byCrossing.values()) {
-    held.sort((a, b) => msOf(b.lastDeployAt) - msOf(a.lastDeployAt));
+    held.sort((a, b) => {
+      if (a.lastDeployAt === null || b.lastDeployAt === null) {
+        return (a.lastDeployAt === null ? 1 : 0) - (b.lastDeployAt === null ? 1 : 0);
+      }
+      return msOf(b.lastDeployAt) - msOf(a.lastDeployAt);
+    });
   }
 
   const cells = rows.flatMap((row) =>

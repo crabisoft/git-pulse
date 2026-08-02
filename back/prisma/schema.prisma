@@ -62,6 +62,8 @@ model Source {
   updatedAt       DateTime   @updatedAt
 
   envRules       SourceEnvRule[]
+  envUrlRules    SourceEnvUrlRule[]
+  manualEnvs     ManualEnvironment[]
   versionRules   SourceVersionRule[]
   versions       EnvironmentVersion[]
   versionChanges VersionChange[]
@@ -158,6 +160,104 @@ model SourceEnvRule {
 
   @@id([sourceId, ruleId])
   @@index([ruleId])
+}
+
+/// Whether an address we derive may replace one the platform published.
+///
+/// `fill` is the default and the reason the module exists: neither host states
+/// an environment's address unless somebody configured one, so most deployments
+/// arrive with nothing to link to. `overwrite` is the exception — the platform
+/// published an address, and it is the wrong one: an internal hostname, a
+/// preview URL that has since moved, a load balancer nobody outside the cluster
+/// can reach.
+enum EnvUrlMode {
+  fill
+  overwrite
+}
+
+/// Where an environment answers, derived from its name.
+///
+/// Defined once for the whole install and enabled source by source, like
+/// EnvRule and VersionRule, and for the same reason: an address follows a
+/// naming convention — one host per client, one path per environment — and a
+/// convention rarely stops at one repository host.
+///
+/// The rule is *selected*, not accumulated — see `urlFor`. An environment has
+/// one address, so the most specific rule has to win outright, where a
+/// classification rule contributes a piece and lets the others contribute
+/// theirs.
+model EnvUrlRule {
+  id          String     @id @default(uuid())
+  name        String
+  /// Pattern the environment name must match. Its named groups are what the
+  /// template addresses — `(?<client>[a-z]+)-prod` feeds `{client}` — which is
+  /// the whole point: the name already carries the address, spelled the way
+  /// whoever named it spelled it.
+  pattern     String
+  /// Pattern the repo must match. Null means every repo — an address is a
+  /// property of the environment, not of what deploys into it.
+  repo        String?
+  /// Placeholders: the pattern's own named groups, plus {environment} {repo}
+  /// {ref} {attr.*}. A placeholder nothing resolves leaves the deployment's own
+  /// address in place rather than producing one with a hole in it.
+  urlTemplate String
+  mode        EnvUrlMode @default(fill)
+  /// Client-defined priority (lower wins when two rules claim an environment).
+  priority    Int        @default(100)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  sources SourceEnvUrlRule[]
+
+  @@index([priority])
+}
+
+/// Which address rules apply to a source. Written from the source, like
+/// SourceEnvRule and SourceVersionRule.
+model SourceEnvUrlRule {
+  source    Source     @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId  String
+  rule      EnvUrlRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  ruleId    String
+  createdAt DateTime   @default(now())
+
+  @@id([sourceId, ruleId])
+  @@index([ruleId])
+}
+
+/// An environment somebody wrote down, because the source does not report it.
+///
+/// Everything else here is derived from deployments, which is what a source
+/// hands over. Some environments are deployed to by means the platform never
+/// sees — an appliance shipped to a customer, a release installed by hand — and
+/// they are exactly the ones an operator most wants a version read from. So
+/// they are declared, and from then on they are environments like any other.
+///
+/// It also answers for environments the source *does* report, when the name
+/// matches: a literal statement of where something answers beats any pattern.
+model ManualEnvironment {
+  id          String     @id @default(uuid())
+  source      Source     @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId    String
+  /// The repo this environment belongs to, empty when it belongs to none.
+  ///
+  /// Empty rather than null: everything downstream is keyed on the pair, and in
+  /// Postgres two nulls are distinct — a nullable column would let the same
+  /// environment be declared twice with the constraint none the wiser.
+  repo        String     @default("")
+  environment String
+  /// Where it answers. Null declares the environment without claiming an
+  /// address, which is worth doing on its own: it makes the environment exist
+  /// for the rules to speak about.
+  url         String?
+  /// Attributes forced on it, as a classification rule would contribute — a
+  /// declared environment is classified by nothing, since no name was matched.
+  attributes  Json?
+  mode        EnvUrlMode @default(fill)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@unique([sourceId, repo, environment])
 }
 
 /// How a response is read. `json` and `xml` are parsed into one shape and

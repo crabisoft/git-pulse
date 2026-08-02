@@ -101,6 +101,14 @@ export class OverviewService {
       collected.latest.filter(
         (d) => matches(d.attributes, dimensionFilter) && carriesMeta(d.metaEnvironments, query.meta),
       ),
+      // Declared environments belong to this question and not to the one above:
+      // they run something now, and they were never deployed to inside any
+      // period. Filtered on the same terms — a declaration carries the
+      // attributes it was given, and belongs to no meta-environment, so a
+      // filter on one leaves it out as it would any environment no rule groups.
+      collected.declared.filter(
+        (e) => matches(e.attributes, dimensionFilter) && carriesMeta([], query.meta),
+      ),
     );
     const { stalePrHours } = await this.settings.get();
 

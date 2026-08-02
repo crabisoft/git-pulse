@@ -18,6 +18,7 @@ function env(
     lastDeployAt,
     lastStatus: 'success',
     ref: 'v2.14.1',
+    declared: false,
     recent: ['success'],
   };
 }

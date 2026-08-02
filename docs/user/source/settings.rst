@@ -142,6 +142,108 @@ is the answer production gives.
    Deleting a rule does not rewrite what it already classified. Environments
    lose its attributes **on the next collection**, not immediately.
 
+.. _settings-addresses:
+
+Addresses
+=========
+
+Where an environment answers — the address behind the **Open the environment**
+link, and where the version probe (:ref:`settings-versions`) sends its request.
+
+Most deployments arrive without one. GitHub states an environment's address only
+when a deployment status was configured with one, GitLab only when the
+environment declares an external URL, so an install typically watches
+environments it cannot open. This section supplies the missing address.
+
+Rules
+-----
+
+A rule derives an address from the environment's **name**. Like the
+classification rules, rules are defined once for the whole install and enabled
+source by source.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 72
+
+   * - Field
+     - Meaning
+   * - **Environment pattern**
+     - A RegEx, matched **unanchored**. Its named groups are what the address is
+       built from — ``(?<client>\w+)-prod``
+   * - **Address**
+     - Literal text and placeholders: the pattern's own groups, plus
+       ``{environment}``, ``{repo}``, ``{ref}`` and ``{attr.…}`` from the
+       classification. Must start with ``http://`` or ``https://``
+   * - **When the platform published an address**
+     - *fill* leaves it alone — the rule speaks only for the environments that
+       have none, which is most of them. *overwrite* replaces it, for the
+       addresses that are published and wrong
+   * - **Priority**
+     - **Lower wins.** Unlike a classification rule, only one address rule
+       applies: an environment has one address
+   * - **Repo**
+     - A RegEx confining the rule. Empty applies everywhere
+
+**Try the rule set** runs it against a name you type. The published address is a
+field of the test on purpose: it decides the answer as much as the rules do, and
+a rule that fills is silent whenever the platform said something.
+
+A **Repo** field appears as soon as one of the rules under test is confined to
+one, and it offers your source's own repository names — on GitLab a repository
+carries its whole namespace, so the string a rule is matched against is rarely
+the bare name. Leave it empty and the confined rules are **left out of the test
+entirely**, which the dialog says rather than reporting that nothing addressed
+the environment: an environment belonging to no repo is not a wildcard, and a
+rule confined to ``extranet`` has nothing to say about one.
+
+.. note::
+
+   A placeholder that resolves to nothing makes the rule **silent for that
+   environment** rather than producing an address with a hole in it. A rule
+   addressing ``{attr.client}`` says nothing about the environments no
+   classification rule named a client for.
+
+   Placeholders are spelled **exactly** as the pattern names them, capital
+   letters included: a pattern capturing ``(?<Customer>…)`` feeds ``{Customer}``
+   and not ``{customer}``. It is the common slip, and it looks from the outside
+   exactly like a pattern that failed to match — so the tester names the rule
+   that claimed the environment *and* the placeholder that cost it the address,
+   rather than reporting that nothing addressed it.
+
+Declared environments
+---------------------
+
+Some environments never reach the platform — an appliance shipped to a customer,
+a release installed by hand. Declare them here, per source, and they become
+environments like any other: a row on the boards, and a version read on the same
+terms as everything else.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 72
+
+   * - Field
+     - Meaning
+   * - **Name**
+     - What the boards fold on
+   * - **Repo**
+     - Empty when it belongs to none, which a customer instance usually does
+   * - **Address**
+     - Where it answers, starting with ``http://`` or ``https://`` as a rule's
+       does. Optional — declaring it without an address still makes the
+       environment exist for the rules to speak about
+   * - **Attributes**
+     - Forced, since no name was matched and nothing classified it
+
+A declaration is the last word on an address: it beats any rule, being somebody
+stating outright where a named environment lives. Where the source *does* deploy
+to that name, no second row appears — the one built from deployments says more —
+but the declaration still decides the address.
+
+Its row carries no deployment count, no last status and no ref, because it never
+had any. That is the row saying what it is, rather than inventing a history.
+
 .. _settings-trackers:
 
 Trackers
@@ -189,11 +291,34 @@ Like a classification rule, a version rule is written once for the whole install
 and then enabled source by source — a version endpoint is a property of an
 application, not of a repository host.
 
-**Which rule answers** is a selection, not an accumulation: among the rules whose
-*Environment* and *Repository* patterns match, the **lowest priority number wins
-outright** and the others stay silent. A version is a single reading; there is
-nothing to merge. Both patterns are optional, both are matched unanchored, and
-an empty one means *every one of them*.
+**Which rule answers** is not an accumulation: a version is a single reading,
+and there is nothing to merge. The rules whose *Environment* and *Repository*
+patterns match are **tried one after another, lowest priority number first**,
+until one of them reaches the application. Both patterns are optional, both are
+matched unanchored, and an empty one means *every one of them*.
+
+Several rules on one environment are how you cover an application that states
+its version at more than one address — an actuator on the installs upgraded this
+year, a static file on the ones that are not. You do not have to know which is
+which: write both, give the usual one the lower number, and each environment
+settles on the one that answers for it.
+
+.. note::
+
+   The order has one exception, and it is what keeps this cheap: **the rule that
+   answered last time is tried first**, whatever its priority. So an environment
+   pays the addresses that do not exist once, not every quarter of an hour.
+
+   Not when *you* ask, though. **Read the installed versions**, on the source,
+   walks the order you declared — so a rule you have just written is tried
+   straight away rather than shadowed by the one already working.
+
+   A rule stops the walk as soon as its response **parses as the format it
+   declared** — even if the template then reads no version out of it. At that
+   point the rule has reached the right application and the template is what
+   needs fixing; trying another address would show a version read from somewhere
+   you never meant to ask. A response that fails, or that is not the declared
+   format at all, simply hands over to the next rule.
 
 **Where it reads**
 
@@ -204,9 +329,9 @@ an empty one means *every one of them*.
    * - Placeholder in the URL
      - Resolves to
    * - ``{environmentUrl}``
-     - The address the platform published for that environment. Neither
-       platform states one unless it was explicitly configured, which is why
-       the second shape below exists
+     - The address of that environment — the one the platform published, or the
+       one :ref:`settings-addresses` supplied for it, which is what makes this
+       placeholder usable at all on most installs
    * - ``{repo}`` ``{environment}`` ``{ref}``
      - The deployment's own fields
    * - ``{attr.<key>}``

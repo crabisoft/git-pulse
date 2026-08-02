@@ -6,7 +6,16 @@ import { FilterField } from '../Filters';
 import { Gauge } from './Gauge';
 import { tierOf, toTierValue } from './gauge';
 import { pivotEnvironments } from './pivot';
-import { Delta, Friction, SectionHead, sinceLabel, sparkTone, toneOf } from './parts';
+import {
+  Delta,
+  Friction,
+  matrixScrollClass,
+  SectionHead,
+  sinceLabel,
+  sparkTone,
+  statusKey,
+  toneOf,
+} from './parts';
 
 /**
  * Direction B — the instrument panel.
@@ -150,7 +159,7 @@ function Matrix({
   const { rows, columns, cells } = pivotEnvironments(report.running, axes.rows, axes.columns);
 
   return (
-    <div className="matrix-scroll">
+    <div className={matrixScrollClass(columns.length)}>
       <div
         className="matrix"
         style={{ gridTemplateColumns: `minmax(96px, .7fr) repeat(${columns.length}, minmax(128px, 1fr))` }}
@@ -200,7 +209,7 @@ function Row({
         return (
           <div key={column} className={`matrix-cell ${toneOf(env.lastStatus)}`} title={env.name}>
             <span className="matrix-ref mono">
-              {env.ref}
+              {env.ref ?? '—'}
               {/* The cell shows what is running here now. Two dimensions are
                   crossed and the rules may extract more, so others can share
                   the crossing — unsaid, the axes would hide them. */}
@@ -216,7 +225,8 @@ function Row({
               )}
             </span>
             <span className={`state ${toneOf(env.lastStatus)} matrix-sub`}>
-              {t(`status.${env.lastStatus}`)} · {sinceLabel(env.lastDeployAt)}
+              {t(statusKey(env.lastStatus))}
+              {env.lastDeployAt !== null && ` · ${sinceLabel(env.lastDeployAt)}`}
             </span>
           </div>
         );

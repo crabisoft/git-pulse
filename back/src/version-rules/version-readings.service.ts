@@ -5,16 +5,19 @@ import { SettingsService } from '../settings/settings.service';
 import { DeploymentsService } from '../deployments/deployments.service';
 import { VersionRulesService, type ResolvedVersionRule } from './version-rules.service';
 import { VersionReadingStore, type NewReading } from './version-reading.store';
+import { EnvUrlsService } from '../env-urls/env-urls.service';
 import {
   PROBE_BATCH,
   PROBE_MIN_INTERVAL_MINUTES,
   latestPerEnvironment,
+  pairKey,
   selectProbes,
+  withDeclared,
   type ProbeCandidate,
 } from './pending-probes';
-import { probeUrl, ruleFor } from './version-target';
+import { preferring, probeUrl, rulesFor, type ProbeSubject } from './version-target';
 import { probe } from './version-probe';
-import { extractVersion } from './version-template';
+import { blamesTheAddress, extractVersion } from './version-template';
 
 /**
  * How many environments are read at once.
@@ -89,6 +92,7 @@ export class VersionReadingsService {
     private readonly store: VersionReadingStore,
     private readonly deployments: DeploymentsService,
     private readonly settings: SettingsService,
+    private readonly envUrls: EnvUrlsService,
   ) {}
 
   /**
@@ -111,7 +115,13 @@ export class VersionReadingsService {
     const period = resolvePeriod({}, (await this.settings.get()).doraWindowDays);
     const deployments = await this.deployments.classified(sourceId, period, signal);
     const readings = await this.store.lastReadings(sourceId);
-    const candidates = latestPerEnvironment(deployments);
+    // The declared environments come in beside the deployed ones and are read
+    // on the same terms: an appliance at a customer's site is exactly what
+    // nobody can otherwise find out the version of.
+    const candidates = withDeclared(
+      latestPerEnvironment(deployments),
+      await this.envUrls.declaredFor(sourceId),
+    );
     const selection = selectProbes(
       candidates,
       readings,
@@ -137,7 +147,21 @@ export class VersionReadingsService {
     for (let i = 0; i < selection.targets.length; i += PROBE_CONCURRENCY) {
       const batch = selection.targets.slice(i, i + PROBE_CONCURRENCY);
       const results = await Promise.all(
-        batch.map((target) => this.readOne(sourceId, target, rules, signal)),
+        batch.map((target) =>
+          this.readOne(
+            sourceId,
+            target,
+            rules,
+            // Starting where an environment last answered saves the addresses
+            // that do not exist, which is worth having on a cron and wrong
+            // under a person's finger: somebody who has just written a rule and
+            // asked for a reading is asking what their rules do *now*, and a
+            // remembered one answering first is how a new rule gets written,
+            // attached, and never tried. The declared order is what they wrote.
+            options.force ? null : readings.get(pairKey(target.repo, target.environment))?.ruleId,
+            signal,
+          ),
+        ),
       );
       for (const result of results) {
         if (result === null) outcome.skipped += 1;
@@ -185,23 +209,51 @@ export class VersionReadingsService {
     // rolled past. Either way there is nothing to read against.
     if (!target) return { read: false, changed: false };
 
-    const result = await this.readOne(sourceId, target, rules, signal);
+    // The address that answered last time, so a deployment event starts where
+    // the collection left off rather than walking the rules from the top.
+    const readings = await this.store.lastReadings(sourceId);
+    const result = await this.readOne(
+      sourceId,
+      target,
+      rules,
+      readings.get(pairKey(repo, environment))?.ruleId,
+      signal,
+    );
     return { read: result !== null, changed: result?.changed ?? false };
   }
 
   /**
-   * Reads one environment. Null means no request was made — no rule claimed it,
-   * or the one that did could not be addressed.
+   * Reads one environment, trying each address that claims it until one
+   * answers. Null means no request was made at all — no rule claimed the
+   * environment, or none of those that did could be addressed.
    *
-   * A rule that matched but could not produce a URL still files a reading. It
-   * looks like noise until one considers what it says: this environment has a
-   * rule, and the rule cannot reach it — which is exactly the thing an author
-   * has no other way of finding out, since nothing else about it ever changes.
+   * One application may state its version at more than one address, and which
+   * one it uses is a property of that environment: the actuator on the installs
+   * upgraded this year, a static file on the ones that are not. So the rules
+   * claiming an environment are candidates in turn rather than one selection —
+   * `lastAnswered` first, then by priority, and the walk stops at the first that
+   * **reached the application**, which is not the same as the first that
+   * answered at all:
+   *
+   * - a request that fails, or a body that is not the format the rule declared,
+   *   is another address to try — see `blamesTheAddress`;
+   * - a body that parses as declared has found the application, and the walk
+   *   ends there whether or not the template read a version out of it. A `200`
+   *   alone would not do: a proxy answers `200` on every path, and a rule
+   *   stopping there would file nothing for ever while looking reachable.
+   *
+   * Every address refusing files the attempt that got furthest, so what is
+   * shown is the closest thing to a working address rather than whichever
+   * happened to be tried last. A rule that matched but could not produce a URL
+   * still counts as an attempt: it says this environment has a rule and the
+   * rule cannot reach it, which is exactly what an author has no other way of
+   * finding out.
    */
   private async readOne(
     sourceId: string,
     target: ProbeCandidate,
     rules: ResolvedVersionRule[],
+    lastAnswered?: string | null,
     signal?: AbortSignal,
   ): Promise<{ ok: boolean; changed: boolean } | null> {
     const subject = {
@@ -211,38 +263,58 @@ export class VersionReadingsService {
       environmentUrl: target.environmentUrl,
       attributes: target.attributes,
     };
-    const rule = ruleFor(subject, rules);
-    if (!rule) return null;
+    const candidates = preferring(rulesFor(subject, rules), lastAnswered);
+    if (candidates.length === 0) return null;
 
-    const filed = async (
-      reading: Omit<NewReading, 'repo' | 'environment' | 'observedAt' | 'deployedAt'>,
-    ) => {
-      const changed = await this.store.record(sourceId, {
-        repo: target.repo,
-        environment: target.environment,
-        observedAt: new Date(),
-        // Every candidate is the latest **successful** deployment of its
-        // environment — see `latestPerEnvironment` — so a reading filed here is
-        // always attributable to one, and the store freezes it against that
-        // deployment as well as overwriting the current state.
-        deployedAt: new Date(target.deployedAt),
-        ...reading,
-      });
-      return { ok: reading.status === 'ok', changed };
-    };
+    let settled: Attempt | null = null;
+    let furthest: Attempt | null = null;
+    for (const rule of candidates) {
+      const attempt = await this.attempt(rule, subject, signal);
+      if (!attempt.tryAnother) {
+        settled = attempt;
+        break;
+      }
+      if (!furthest || reach(attempt) > reach(furthest)) furthest = attempt;
+    }
 
+    // Non-null by construction: the loop either settles or keeps every attempt
+    // it refused, and `candidates` is not empty.
+    const outcome = (settled ?? furthest)!;
+    const changed = await this.store.record(sourceId, {
+      repo: target.repo,
+      environment: target.environment,
+      observedAt: new Date(),
+      // A deployed candidate is the latest **successful** deployment of its
+      // environment — see `latestPerEnvironment` — so the store freezes the
+      // reading against that deployment as well as overwriting the current
+      // state. A declared environment has no deployment to freeze against: the
+      // reading is true and current, and belongs to nothing.
+      deployedAt: target.deployedAt ? new Date(target.deployedAt) : null,
+      deploymentId: target.deploymentId,
+      ref: target.ref,
+      version: outcome.version,
+      ruleId: outcome.ruleId,
+      url: outcome.url,
+      status: outcome.status,
+      error: outcome.error,
+    });
+
+    // `skipped` is the one outcome that reached no network, and the caller
+    // counts it apart for that reason.
+    return outcome.status === 'skipped' ? null : { ok: outcome.status === 'ok', changed };
+  }
+
+  /** One rule tried against one environment, filing nothing. */
+  private async attempt(
+    rule: ResolvedVersionRule,
+    subject: ProbeSubject,
+    signal?: AbortSignal,
+  ): Promise<Attempt> {
     const address = probeUrl(rule, subject);
     if (!address.ok) {
-      await filed({
-        version: null,
-        deploymentId: target.deploymentId,
-        ref: target.ref,
-        ruleId: rule.id,
-        url: null,
-        status: 'skipped',
-        error: address.reason,
-      });
-      return null;
+      // Nothing was asked, so nothing was learnt about the address: another
+      // rule addressing the same environment differently may well resolve.
+      return { ruleId: rule.id, version: null, url: null, status: 'skipped', error: address.reason, tryAnother: true };
     }
 
     const response = await probe({
@@ -252,15 +324,14 @@ export class VersionReadingsService {
       signal,
     });
     if (!response.ok) {
-      return filed({
-        version: null,
-        deploymentId: target.deploymentId,
-        ref: target.ref,
+      return {
         ruleId: rule.id,
+        version: null,
         url: address.url,
         status: 'unreachable',
         error: response.reason,
-      });
+        tryAnother: true,
+      };
     }
 
     const extracted = extractVersion(response.body, {
@@ -268,14 +339,47 @@ export class VersionReadingsService {
       template: rule.template,
       pattern: rule.pattern,
     });
-    return filed({
-      version: extracted.ok ? extracted.version : null,
-      deploymentId: target.deploymentId,
-      ref: target.ref,
+    if (extracted.ok) {
+      return {
+        ruleId: rule.id,
+        version: extracted.version,
+        url: address.url,
+        status: 'ok',
+        error: null,
+        tryAnother: false,
+      };
+    }
+    return {
       ruleId: rule.id,
+      version: null,
       url: address.url,
-      status: extracted.ok ? 'ok' : 'noMatch',
-      error: extracted.ok ? null : extracted.reason,
-    });
+      status: 'noMatch',
+      error: extracted.reason,
+      tryAnother: blamesTheAddress(extracted.reason),
+    };
   }
+}
+
+/** What one rule made of one environment, before anything is filed. */
+interface Attempt {
+  ruleId: string;
+  version: string | null;
+  url: string | null;
+  status: NewReading['status'];
+  error: NewReading['error'];
+  /** Whether the failure blames the address, leaving another worth trying. */
+  tryAnother: boolean;
+}
+
+/**
+ * How far a refused attempt got, so the one filed is the most informative.
+ *
+ * An address that answered with the wrong thing is a closer near-miss than one
+ * that never answered, which is closer than a template that never produced an
+ * address at all. Filing the last attempt instead would report whichever rule
+ * happened to sort last, which tells the reader nothing about the others.
+ */
+function reach(attempt: Attempt): number {
+  if (attempt.status === 'noMatch') return 2;
+  return attempt.status === 'unreachable' ? 1 : 0;
 }

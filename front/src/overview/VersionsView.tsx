@@ -5,7 +5,7 @@ import { useAuth } from '../auth';
 import { FilterField } from '../Filters';
 import { agreesWithRef, readingAge } from '../versions';
 import { ENVIRONMENT_AXIS, REPO_AXIS, versionAxisKeys, type Axes } from './axes';
-import { SectionHead } from './parts';
+import { matrixScrollClass, SectionHead } from './parts';
 import { judgeReadings, pivotVersions, type JudgedReading, type VersionCell } from './releases';
 
 /** What `t` is, for the helpers below that only format a label. */
@@ -171,7 +171,7 @@ function Grid({
   const byRow = new Map(rows.map((row) => [row, cells.filter((cell) => cell.row === row)]));
 
   return (
-    <div className="matrix-scroll">
+    <div className={matrixScrollClass(columns.length)}>
       <div
         className="matrix versions-matrix"
         style={{

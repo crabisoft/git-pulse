@@ -121,3 +121,57 @@ describe('foldEnvironments', () => {
     expect(foldEnvironments([])).toEqual([]);
   });
 });
+
+describe('declared environments', () => {
+  const declared = { repo: '', environment: 'contoso-onsite', attributes: { client: 'contoso' } };
+
+  it('gives an environment nothing deployed to a row of its own', () => {
+    const rows = foldEnvironments([deployment()], [declared]);
+
+    // It runs something and can be reached; what it has never had is a
+    // deployment this install saw, and the row says so rather than inventing
+    // one.
+    expect(rows.map((r) => r.name)).toEqual(['Prod', 'contoso-onsite']);
+    expect(rows[1]).toMatchObject({
+      declared: true,
+      deployments: 0,
+      lastDeployAt: null,
+      lastStatus: null,
+      ref: null,
+      repos: [],
+      attributes: { client: 'contoso' },
+    });
+  });
+
+  it('sorts every declared row after the deployed ones', () => {
+    const rows = foldEnvironments(
+      [deployment({ environment: 'Prod', createdAt: '2020-01-01T00:00:00.000Z' })],
+      [declared],
+    );
+    expect(rows.map((r) => r.name)).toEqual(['Prod', 'contoso-onsite']);
+  });
+
+  it('leaves the deployed row alone when the same name is also declared', () => {
+    // The row built from deployments says more — its repos, its count, its
+    // heartbeat — and a second row of the same name would read as two
+    // environments.
+    const rows = foldEnvironments(
+      [deployment({ environment: 'Prod' })],
+      [{ repo: 'acme/api', environment: 'Prod', attributes: {} }],
+    );
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ name: 'Prod', declared: false, deployments: 1 });
+  });
+
+  it('folds a name declared under two repos into one row', () => {
+    const rows = foldEnvironments(
+      [],
+      [
+        { repo: 'acme/api', environment: 'onsite', attributes: {} },
+        { repo: 'acme/web', environment: 'onsite', attributes: {} },
+      ],
+    );
+    expect(rows).toHaveLength(1);
+  });
+});

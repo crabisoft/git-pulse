@@ -31,6 +31,7 @@ function source(over: Partial<SourcePublic> = {}): SourcePublic {
     historyDays: null,
     isDefault: true,
     envRuleIds: [],
+    envUrlRuleIds: [],
     versionRuleIds: [],
     trackerIds: [],
     incidentTrackerId: null,

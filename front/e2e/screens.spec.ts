@@ -220,4 +220,34 @@ test.describe('a wide grid reads through the window', () => {
     // than the column, so the escape has nothing to do and does nothing.
     expect(grid.width).toBeLessThanOrEqual(column.width);
   });
+
+  /**
+   * Width was the whole of what this suite used to check, and it was half the
+   * question. An escape pulling both edges out moved every grid, wide or not:
+   * three columns started in the page gutter, a hundred pixels left of the
+   * heading above them, and the assertion on width had nothing to say about it.
+   */
+  test('starts where the heading above it starts, while it fits', async ({ page }) => {
+    await stubApi(page);
+    await page.goto('/dashboard/acme-platform');
+    await page.locator('.direction-switch select').selectOption('instrument');
+    await page.locator('.matrix').waitFor({ timeout: 10_000 });
+
+    const grid = (await page.locator('.matrix-scroll').boundingBox())!;
+    const head = (await page.locator('.matrix-head').boundingBox())!;
+
+    expect(Math.round(grid.x)).toBe(Math.round(head.x));
+  });
+
+  test('leaves that line only once it takes the page', async ({ page }) => {
+    await openVersions(page);
+
+    const grid = (await page.locator('.matrix-scroll').boundingBox())!;
+    const head = (await page.locator('.matrix-head').boundingBox())!;
+
+    // Fifteen environments: past the threshold, so the grid is out in the
+    // gutters on purpose — and symmetrically, which is what "full width" means.
+    expect(grid.x).toBeLessThan(head.x);
+    expect(Math.round(grid.x)).toBe(1440 - Math.round(grid.x + grid.width));
+  });
 });

@@ -43,7 +43,7 @@ export function EnvironmentRow({ env, keys }: { env: DashboardEnvironment; keys:
       <span className="env-name">{env.name}</span>
       <Heartbeat statuses={env.recent} />
       <StatusMark status={env.lastStatus} />
-      <span className="mono env-ref">{env.ref}</span>
+      <span className="mono env-ref">{env.ref ?? '—'}</span>
       <span className="pills env-dims">
         {keys.map((key) =>
           env.attributes[key] ? (
@@ -57,7 +57,13 @@ export function EnvironmentRow({ env, keys }: { env: DashboardEnvironment; keys:
           ),
         )}
       </span>
-      <span className="env-age">{t('overview.since', { at: sinceLabel(env.lastDeployAt) })}</span>
+      <span className="env-age">
+        {/* A declared environment has no deployment to date from, and "since
+            never" is worse than saying where the row came from. */}
+        {env.lastDeployAt === null
+          ? t('overview.declaredEnv')
+          : t('overview.since', { at: sinceLabel(env.lastDeployAt) })}
+      </span>
     </div>
   );
 }
@@ -85,16 +91,25 @@ export function Heartbeat({ statuses }: { statuses: PipelineStatus[] }) {
   );
 }
 
-export function StatusMark({ status }: { status: PipelineStatus }) {
+export function StatusMark({ status }: { status: PipelineStatus | null }) {
   const { t } = useTranslation();
-  return <span className={`state ${toneOf(status)}`}>{t(`status.${status}`)}</span>;
+  return <span className={`state ${toneOf(status)}`}>{t(statusKey(status))}</span>;
 }
 
 /** Four states rather than every pipeline status: this is a traffic light. */
-export function toneOf(status: PipelineStatus): 'ok' | 'ko' | 'run' | 'idle' {
+export function toneOf(status: PipelineStatus | null): 'ok' | 'ko' | 'run' | 'idle' {
   if (status === 'failed') return 'ko';
   if (status === 'running') return 'run';
   return status === 'success' ? 'ok' : 'idle';
+}
+
+/**
+ * What to call the state of an environment, including the one no deployment
+ * ever put in a state: a declared environment has never succeeded or failed,
+ * and calling that `unknown` would read as a status we could not fetch.
+ */
+export function statusKey(status: PipelineStatus | null): string {
+  return status ? `status.${status}` : 'overview.neverDeployed';
 }
 
 /** A metric, where it is going, and whether that is good news. */
@@ -266,4 +281,21 @@ export function SectionHead({ title, count }: { title: string; count?: string })
 /** Rough age of a date, in the units the rest of the page counts in. */
 export function sinceLabel(iso: string): string {
   return humanizeDuration(Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000));
+}
+
+/**
+ * How many columns a grid may hold and still read inside the text column.
+ *
+ * Beyond this it takes the width of the page; at or below it, it stays where
+ * every heading and card on the page starts. The threshold is on the **count**
+ * rather than on a measured width because that is the thing anybody can predict
+ * — a crossing of two dimensions produces the columns it produces, and a rule
+ * that moved the grid only once it happened to outgrow the column would move it
+ * for reasons a reader cannot see.
+ */
+export const MATRIX_INLINE_COLUMNS = 4;
+
+/** The scroller's classes for a grid of this many columns. */
+export function matrixScrollClass(columns: number): string {
+  return columns > MATRIX_INLINE_COLUMNS ? 'matrix-scroll wide' : 'matrix-scroll';
 }

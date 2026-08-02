@@ -8,6 +8,7 @@ import { VersionReadingStoreModule } from './version-reading-store.module';
 import { PROBE_QUEUE } from './probe-job';
 import { CryptoModule } from '../crypto/crypto.module';
 import { DeploymentsModule } from '../deployments/deployments.module';
+import { EnvUrlsModule } from '../env-urls/env-urls.module';
 
 /**
  * The queue is registered here, where it is consumed. The ingestion registers
@@ -19,6 +20,7 @@ import { DeploymentsModule } from '../deployments/deployments.module';
   imports: [
     CryptoModule,
     DeploymentsModule,
+    EnvUrlsModule,
     VersionReadingStoreModule,
     BullModule.registerQueue({ name: PROBE_QUEUE }),
   ],

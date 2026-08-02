@@ -4,6 +4,7 @@ import { DeploymentsService } from './deployments.service';
 import { SourcesModule } from '../sources/sources.module';
 import { IngestModule } from '../ingest/ingest.module';
 import { EnvRulesModule } from '../env-rules/env-rules.module';
+import { EnvUrlsModule } from '../env-urls/env-urls.module';
 import { ReleaseNotesModule } from '../release-notes/release-notes.module';
 import { ChangelogStoreModule } from '../changelogs/changelog-store.module';
 import { VersionReadingStoreModule } from '../version-rules/version-reading-store.module';
@@ -24,6 +25,7 @@ import { VersionReadingStoreModule } from '../version-rules/version-reading-stor
     SourcesModule,
     IngestModule,
     EnvRulesModule,
+    EnvUrlsModule,
     ReleaseNotesModule,
     ChangelogStoreModule,
     VersionReadingStoreModule,

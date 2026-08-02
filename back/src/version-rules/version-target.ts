@@ -36,24 +36,69 @@ export interface ProbeSubject {
 export type ProbeTarget = { ok: true; url: string } | { ok: false; reason: CodedMessage };
 
 /**
- * The rule that answers for an environment, or null when none does.
+ * Every rule that answers for an environment, the one to try first at the head.
  *
  * Lowest priority number first, declaration order breaking a tie — the same
  * ordering the classification and ticket rules use, so an install that has
- * learnt one has learnt all three. Unlike those two this one *selects*: a
- * version is a single reading, so several rules matching cannot each contribute
- * a piece of it, and the most specific rule has to be able to win outright.
+ * learnt one has learnt all three. Unlike those two this one *ranks* rather than
+ * accumulates: a version is a single reading, so several rules cannot each
+ * contribute a piece of it. They are candidates in turn, not contributors.
+ *
+ * The whole list rather than its head because one application may state its
+ * version at more than one address — an actuator on the ones deployed this
+ * year, a static `version.json` on the ones that are not — and which of them
+ * answers is a property of the environment nobody can be asked to enumerate in
+ * a pattern. `readOne` walks it until one address answers; see there for what
+ * counts as an answer.
  *
  * An unreadable pattern keeps its rule silent rather than letting it apply
  * everywhere, exactly as in `classifyEnvironment`: a rule nobody can read is a
  * rule nobody meant to point at every environment.
  */
-export function ruleFor<T extends VersionRuleLike>(subject: ProbeSubject, rules: T[]): T | null {
-  const applicable = rules.filter(
-    (rule) => matches(rule.environment, subject.environment) && matches(rule.repo, subject.repo),
-  );
-  if (applicable.length === 0) return null;
-  return applicable.reduce((best, rule) => (rule.priority < best.priority ? rule : best));
+export function rulesFor<T extends VersionRuleLike>(subject: ProbeSubject, rules: T[]): T[] {
+  return rules
+    .filter(
+      (rule) => matches(rule.environment, subject.environment) && appliesToRepo(rule, subject.repo),
+    )
+    .sort((a, b) => a.priority - b.priority);
+}
+
+/**
+ * The same rules, with the one that last answered moved to the front.
+ *
+ * The order above is what an author *declared*; this is what an environment has
+ * actually been observed to do, and it outranks the declaration because it is
+ * evidence. Without it an environment whose third rule answers pays the first
+ * two — two addresses that do not exist, each held to its timeout — on every
+ * cycle, for ever. With it, that is paid once and then only when the address
+ * that was working stops.
+ *
+ * A rule since deleted, or one no longer applying to this environment, is not
+ * found and changes nothing: the declared order stands, which is the same thing
+ * that happens the first time an environment is read.
+ */
+export function preferring<T extends { id: string }>(
+  rules: T[],
+  lastAnswered: string | null | undefined,
+): T[] {
+  if (!lastAnswered) return rules;
+  const held = rules.find((rule) => rule.id === lastAnswered);
+  if (!held) return rules;
+  return [held, ...rules.filter((rule) => rule !== held)];
+}
+
+/**
+ * A rule bound to no repo applies everywhere. One that names a repo needs a repo
+ * to look at, and an environment belonging to none — a declared one, an
+ * appliance nothing deploys to through the platform — is not a wildcard: a rule
+ * confined to `portal-api` has nothing to say about it, and testing its pattern
+ * against the empty string would have `.*` claim exactly what it was confined
+ * away from.
+ */
+function appliesToRepo(rule: VersionRuleLike, repo: string): boolean {
+  if (!rule.repo) return true;
+  if (repo === '') return false;
+  return matches(rule.repo, repo);
 }
 
 function matches(pattern: string | null | undefined, value: string): boolean {

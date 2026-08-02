@@ -84,16 +84,27 @@ export class VersionReadingStore {
     });
   }
 
-  /** When each environment was last read, and against which deployment. */
+  /**
+   * When each environment was last read, against which deployment, and by which
+   * rule — the three things deciding what the next run does about it: whether it
+   * is due, whether something has been deployed since, and which address to try
+   * before the others.
+   */
   async lastReadings(sourceId: string): Promise<Map<string, LastReading>> {
     const rows = await this.prisma.environmentVersion.findMany({
       where: { sourceId },
-      select: { repo: true, environment: true, observedAt: true, deploymentId: true },
+      select: {
+        repo: true,
+        environment: true,
+        observedAt: true,
+        deploymentId: true,
+        ruleId: true,
+      },
     });
     return new Map(
       rows.map((row) => [
         pairKey(row.repo, row.environment),
-        { observedAt: row.observedAt, deploymentId: row.deploymentId },
+        { observedAt: row.observedAt, deploymentId: row.deploymentId, ruleId: row.ruleId },
       ]),
     );
   }

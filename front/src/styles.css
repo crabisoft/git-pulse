@@ -1121,46 +1121,54 @@ tr.is-active > td, .card.is-active { background: color-mix(in srgb, var(--accent
 .matrix-axes { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .matrix-axes select { height: 30px; padding: 0 26px 0 9px; font-size: .8rem; }
 /*
- * A wide table reads through the whole window, not through the text column.
+ * A grid reads inside the text column until it has too many columns for it.
  *
- * `.content` caps itself at a measure that is right for prose and wrong for a
- * grid of twenty environments: left inside it, the grid scrolls sideways in a
- * 1180px porthole while the screen has half as much again to spare. So the
- * scroller takes the width it needs — `fit-content` — and is allowed to reach
- * out of the column, up to the page's own gutters.
+ * Up to `MATRIX_INLINE_COLUMNS` it stays exactly where every heading and card
+ * on the page starts: a crossing of three columns adrift in the gutter is a
+ * grid that looks lost, and it gains nothing from room it does not need.
+ *
+ * Past it, `.content` caps itself at a measure that is right for prose and
+ * wrong for a grid of twenty environments — left inside it, the grid scrolls
+ * sideways in a 1180px porthole while the screen has half as much again to
+ * spare. So `.wide` takes the width of the page, out to its own gutters.
+ *
+ * The switch is a class rather than an expression because CSS has none that
+ * would serve: `100%` here is always the containing block, never this box's own
+ * width, so nothing can ask "am I wider than the column?". An earlier attempt
+ * to do it in one calc pulled *every* grid out by the same hundred pixels,
+ * which is the defect this shape replaces.
  *
  * The reach is measured **from the shell, not from the window**: `100cqw` is
  * the width of `.app`, which excludes the scrollbar, where `100vw` does not —
  * and a page that scrolls vertically would gain a dozen pixels of horizontal
- * overflow, which is precisely the defect this rule exists to remove.
- *
- * Two behaviours fall out of one expression rather than out of a breakpoint
- * somebody chose:
- * - few columns: `fit-content` is narrower than the column, `--escape` changes
- *   nothing, and the grid sits exactly where it always did;
- * - many: the grid spreads to the window's gutters and scrolls only if even
- *   that is not enough.
+ * overflow, which is precisely the defect the reach exists to avoid.
  *
  * In wall mode `.content` drops its cap and its padding, so the free space it
- * measures is negative and the escape floors itself at zero — the wrapper
+ * measures is negative and the escape floors itself at zero — `.wide`
  * neutralises itself there instead of adding a second offset to a page that is
  * already full width. Below 900px there is no free space either, so the narrow
  * rules keep the layout they describe.
  */
 .matrix-scroll {
-  /* Half the room `.content` leaves either side of itself: the shell's width,
-     less this box's own, less the page padding the grid should stop at. */
-  --escape: max(0px, (100cqw - 100% - 48px) / 2);
   overflow-x: auto;
   margin-top: 8px;
   width: fit-content;
-  max-width: calc(100% + 2 * var(--escape));
-  margin-inline: calc(-1 * var(--escape));
+  max-width: 100%;
   /* The frame moves to the scroller, so it stays put while the grid slides
      under it — and so the grid stops being its own scroll container, which is
      what a sticky column inside it needs. */
   border: 1px solid var(--line);
   border-radius: var(--radius);
+}
+.matrix-scroll.wide {
+  /* Half the room `.content` leaves either side of itself: the shell's width,
+     less this box's containing block, less the page padding to stop at. */
+  --escape: max(0px, (100cqw - 100% - 48px) / 2);
+  /* Taken rather than offered: the columns share the page, and a grid needing
+     more than it scrolls inside the frame. */
+  width: calc(100% + 2 * var(--escape));
+  max-width: none;
+  margin-inline: calc(-1 * var(--escape));
 }
 .matrix {
   display: grid; gap: 1px; min-width: 480px;

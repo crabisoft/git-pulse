@@ -74,7 +74,8 @@
       "trackers": "Trackers",
       "users": "Accounts",
       "ai": "AI providers",
-      "jobs": "Background jobs"
+      "jobs": "Background jobs",
+      "envUrls": "Addresses"
     },
     "desc": {
       "general": "Collection and thresholds",
@@ -85,7 +86,8 @@
       "trackers": "Jira, Linear, issues",
       "users": "Who may sign in",
       "ai": "Models the install may call",
-      "jobs": "Queues, schedules and failures"
+      "jobs": "Queues, schedules and failures",
+      "envUrls": "Where environments answer"
     },
     "general": {
       "uiTitle": "Interface",
@@ -239,6 +241,91 @@
       "againstSourceHint": "This source's own rules — the ones it subscribed to, matched against its own repo names. This is the answer production gives."
     },
     "catalogueHint": "Defined once for the whole install, then enabled source by source from the source form. A pattern describes a naming convention, which rarely stops at one repository host."
+  },
+  "envUrls": {
+    "rules": {
+      "listTitle": "Address rules",
+      "listEmpty": "No rule yet.",
+      "catalogueHint": "A global catalogue, like the classification rules: each source picks the ones that apply to it. A rule derives an environment's address from its name, which is what makes an environment reachable when the platform published nothing.",
+      "addTitle": "Add a rule",
+      "editTitle": "Edit “{{name}}”",
+      "added": "Rule added.",
+      "updated": "Rule updated.",
+      "deleted": "Rule deleted.",
+      "deleteTitle": "Delete the rule",
+      "confirmDelete": "Delete the rule “{{name}}”? The environments it addresses go back to whatever their platform published, which is usually nothing.",
+      "testAll": "Try the rule set",
+      "testRule": "Try this rule",
+      "testTitle": "Try the rules on an environment",
+      "test": {
+        "environment": "Environment name",
+        "repo": "Repo",
+        "repoHint": "what the rules confined to one are matched against",
+        "published": "Address the platform publishes",
+        "publishedHint": "leave empty for the usual case, where it publishes none",
+        "none": "No rule addresses this environment.",
+        "unchanged": "unchanged — the published address stands",
+        "run": "Resolve",
+        "noRepoHint": "No repo named: the rules confined to one are left out entirely, exactly as they are on an environment belonging to no repo. Name one to see them answer.",
+        "sourceHint": "whose repo names are offered below",
+        "unresolved": "The rule “{{rule}}” claims this environment, but {{placeholder}} resolves to nothing — so it stays silent rather than producing an address with a hole in it. Check it against the pattern’s named groups, which are matched exactly as spelled.",
+        "via": "via {{name}}"
+      },
+      "testing": "Trying…",
+      "form": {
+        "name": "Name",
+        "pattern": "Environment pattern",
+        "patternHint": "regular expression; its named groups are what the address is built from",
+        "urlTemplate": "Address",
+        "urlTemplateHint": "the pattern's named groups, plus {environment}, {repo}, {ref} and {attr.…} from the classification",
+        "urlTemplatePlaceholder": "https://{client}.example.com",
+        "mode": "When the platform published an address",
+        "priority": "Priority",
+        "priorityHint": "lower wins when two rules claim the same environment",
+        "repo": "Repo",
+        "repoHint": "regular expression; empty means every repo",
+        "submit": "Add",
+        "submitting": "Saving…"
+      }
+    },
+    "declared": {
+      "listTitle": "Declared environments",
+      "listEmpty": "This source declares no environment.",
+      "hint": "Environments no deployment introduces — an appliance at a customer's site, an install done by hand. Declared here, they appear on the boards and their version is read like any other's.",
+      "source": "Source",
+      "noSources": "Declare a source first: an environment belongs to one.",
+      "addTitle": "Declare an environment",
+      "editTitle": "Edit “{{name}}”",
+      "added": "Environment declared.",
+      "updated": "Environment updated.",
+      "deleted": "Environment removed.",
+      "deleteTitle": "Remove the environment",
+      "confirmDelete": "Remove “{{name}}”? Its readings stay, and nothing will refresh them.",
+      "noUrl": "no address",
+      "noRepo": "no repo",
+      "form": {
+        "environment": "Name",
+        "repo": "Repo",
+        "repoHint": "empty when it belongs to none, which a customer instance usually does",
+        "url": "Address",
+        "urlHint": "where it answers; empty declares the environment without claiming one",
+        "attributes": "Attributes",
+        "attributesHint": "forced, since no name was matched and nothing classified it",
+        "attrKey": "key",
+        "attrValue": "value",
+        "addAttribute": "Add an attribute",
+        "submit": "Declare",
+        "submitting": "Saving…"
+      }
+    },
+    "mode": {
+      "fill": "fill",
+      "overwrite": "overwrite"
+    },
+    "modeHint": {
+      "fill": "Leave it alone. The rule only speaks for the environments whose platform published nothing — which is most of them.",
+      "overwrite": "Replace it. For the addresses that are published and wrong: an internal hostname, a load balancer nobody outside the cluster can reach."
+    }
   },
   "language": {
     "label": "Language"
@@ -401,6 +488,16 @@
     "compare": {
       "unresolvable": "The platform no longer resolves this comparison in {{repo}} ({{from}}…{{to}}): a deleted branch, a moved tag or a pruned commit. Nothing can read this history again — which is what the archived changelogs are kept for.",
       "unknownRef": "The platform does not resolve {{ref}} in {{repo}} any more: a deleted branch, a moved tag or a pruned commit."
+    },
+    "envUrlRule": {
+      "notFound": "Rule not found.",
+      "invalidPattern": "Invalid regular expression: {{pattern}}",
+      "urlNotAddressable": "The address must start with http:// or https://."
+    },
+    "manualEnvironment": {
+      "notFound": "Environment not found.",
+      "duplicate": "“{{environment}}” is already declared for this source; edit that one rather than adding a second.",
+      "urlNotAddressable": "The address must start with http:// or https://."
     }
   },
   "empty": {
@@ -629,7 +726,10 @@
       "historyDaysHint": "how far back the ingestion reads, on the first run and on every reconciliation",
       "historyFollowsWindow": "Follow the reporting window",
       "historyOption": "{{count}} days",
-      "historyCostHint": "deeper means more API calls on the first collection, and more rows kept afterwards"
+      "historyCostHint": "deeper means more API calls on the first collection, and more rows kept afterwards",
+      "envUrlRules": "Address rules",
+      "envUrlRulesHint": "derive where this source’s environments answer, from the Addresses section",
+      "noEnvUrlRules": "No address rule defined yet."
     },
     "repoVisibility": {
       "public": "public",
@@ -1205,7 +1305,9 @@
     "wall": {
       "exit": "Leave wall mode",
       "enter": "Wall mode"
-    }
+    },
+    "neverDeployed": "never deployed",
+    "declaredEnv": "declared"
   },
   "display": {
     "direction": {

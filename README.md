@@ -170,6 +170,9 @@ Shipped:
   before the ceiling.
 - Release notes tag→tag, as Markdown, and their AI rewriting through a declared
   model provider (Anthropic, OpenAI, Google, Mistral).
+- Installed versions read back from the environments themselves, and the
+  addresses that make them readable: derived from a naming convention or stated
+  by hand, including for the environments nothing deploys to.
 
 Planned:
 

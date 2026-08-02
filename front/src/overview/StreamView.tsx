@@ -5,7 +5,7 @@ import { api, type OverviewQuery } from '../api';
 import { useCancellableLoad } from '../hooks';
 import { Sparkline } from '../Sparkline';
 import { formatValue } from '../doraFormat';
-import { SectionHead, sparkTone, toneOf } from './parts';
+import { SectionHead, sparkTone, statusKey, toneOf } from './parts';
 import { dayOf, toStream, within, type StreamEntry } from './stream';
 
 /** How many environments the side rail lists before it stops naming them. */
@@ -126,9 +126,9 @@ export function StreamView({
           {environments.slice(0, RAIL_MAX).map((env) => (
             <div className="rail-row" key={env.name}>
               <span className="env-name">{env.name}</span>
-              <span className="mono env-ref">{env.ref}</span>
+              <span className="mono env-ref">{env.ref ?? '—'}</span>
               <span className={`state ${toneOf(env.lastStatus)}`}>
-                {t(`status.${env.lastStatus}`)}
+                {t(statusKey(env.lastStatus))}
               </span>
             </div>
           ))}

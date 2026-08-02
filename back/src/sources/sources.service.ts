@@ -63,6 +63,7 @@ export class SourcesService {
           id,
           trackers: { create: toBindings(dto.trackerIds, dto.incidentTrackerId) },
           envRules: { create: (dto.envRuleIds ?? []).map((ruleId) => ({ ruleId })) },
+          envUrlRules: { create: (dto.envUrlRuleIds ?? []).map((ruleId) => ({ ruleId })) },
           versionRules: { create: (dto.versionRuleIds ?? []).map((ruleId) => ({ ruleId })) },
           name: dto.name,
           slug: await this.uniqueSlug(dto.name),
@@ -278,6 +279,14 @@ export class SourcesService {
               },
             }
           : {}),
+        ...(dto.envUrlRuleIds
+          ? {
+              envUrlRules: {
+                deleteMany: {},
+                create: dto.envUrlRuleIds.map((ruleId) => ({ ruleId })),
+              },
+            }
+          : {}),
         ...(dto.versionRuleIds
           ? {
               versionRules: {
@@ -436,6 +445,7 @@ export class SourcesService {
 const WITH_TRACKERS = {
   trackers: { select: { trackerId: true, incidents: true } },
   envRules: { select: { ruleId: true } },
+  envUrlRules: { select: { ruleId: true } },
   versionRules: { select: { ruleId: true } },
 } as const;
 
@@ -511,6 +521,7 @@ function toPublic(s: {
   updatedAt: Date;
   trackers: Array<{ trackerId: string; incidents: boolean }>;
   envRules: Array<{ ruleId: string }>;
+  envUrlRules: Array<{ ruleId: string }>;
   versionRules: Array<{ ruleId: string }>;
 }): SourcePublic {
   return {
@@ -526,6 +537,7 @@ function toPublic(s: {
     historyDays: s.historyDays,
     isDefault: s.isDefault,
     envRuleIds: s.envRules.map((b) => b.ruleId),
+    envUrlRuleIds: s.envUrlRules.map((b) => b.ruleId),
     versionRuleIds: s.versionRules.map((b) => b.ruleId),
     trackerIds: s.trackers.map((b) => b.trackerId),
     incidentTrackerId: s.trackers.find((b) => b.incidents)?.trackerId ?? null,

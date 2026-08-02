@@ -161,6 +161,8 @@ export interface SourcePublic {
   envRuleIds: string[];
   /** Version rules this source's environments are read with, from the global set. */
   versionRuleIds: string[];
+  /** Address rules deriving where this source's environments answer. */
+  envUrlRuleIds: string[];
   /** Trackers this source's pull requests may reference. */
   trackerIds: string[];
   /**
@@ -1168,6 +1170,61 @@ export interface EnvRulePublic {
   updatedAt: string;
 }
 
+// ─── Environment addresses ───────────────────────────────────────────
+
+/**
+ * Whether a derived address may replace the one the platform published.
+ *
+ * `fill` is the default and covers the case the feature exists for: neither
+ * host states an environment's address unless somebody configured one, so most
+ * deployments arrive with nothing to link to. `overwrite` is for the addresses
+ * that are published and wrong — an internal hostname, a load balancer nobody
+ * outside the cluster can reach.
+ */
+export type EnvUrlMode = 'fill' | 'overwrite';
+
+/**
+ * A rule deriving an environment's address from its name. Defined once for the
+ * whole install, like the classification rules, and opted into per source.
+ */
+export interface EnvUrlRulePublic {
+  id: string;
+  name: string;
+  /** Pattern the environment name must match; its named groups feed the template. */
+  pattern: string;
+  /** Pattern the repo must match. Null, the common case, means every repo. */
+  repo: string | null;
+  /**
+   * Literal text and placeholders: the pattern's own named groups, plus
+   * `{environment}`, `{repo}`, `{ref}` and `{attr.*}` from the classification.
+   */
+  urlTemplate: string;
+  mode: EnvUrlMode;
+  /** Lower wins when two rules claim the same environment. */
+  priority: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * An environment written down by hand, for the ones no source reports —
+ * shipped appliances, installs done by hand — and, when the name matches a
+ * reported one, the last word on where it answers.
+ */
+export interface ManualEnvironmentPublic {
+  id: string;
+  sourceId: string;
+  /** Empty when the environment belongs to no repo. */
+  repo: string;
+  environment: string;
+  url: string | null;
+  /** Forced attributes: nothing classified it, since no name was matched. */
+  attributes: Record<string, string>;
+  mode: EnvUrlMode;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ─── Incidents ───────────────────────────────────────────────────────
 
 /**
@@ -1671,11 +1728,18 @@ export interface DashboardEnvironment {
   attributes: Record<string, string>;
   /** Every membership the row's deployments carry — a set contradicts nothing. */
   metaEnvironments: string[];
-  /** Repos having deployed to this environment over the window. */
+  /** Repos having deployed to this environment over the window. Empty on a
+   * declared environment, which may belong to no repo and has deployed nothing
+   * either way. */
   repos: string[];
   deployments: number;
-  lastDeployAt: string;
-  lastStatus: PipelineStatus;
+  /**
+   * Null on an environment nothing deployed to over the window — which only a
+   * declared one can be. A row exists for it because somebody wrote it down,
+   * and the three fields below describe deployments it never had.
+   */
+  lastDeployAt: string | null;
+  lastStatus: PipelineStatus | null;
   /**
    * The ref the **last deployment of the set** carried. Folded over the present
    * that is what is running there right now — "which version is live for that
@@ -1683,7 +1747,13 @@ export interface DashboardEnvironment {
    * never answered it. Folded over a period that ended, it is what was running
    * at the end of it, which is a different sentence and the honest one there.
    */
-  ref: string;
+  ref: string | null;
+  /**
+   * Whether the row exists because somebody declared the environment rather
+   * than because something deployed to it. Both are real environments; only one
+   * of them can be expected to have a deployment history.
+   */
+  declared: boolean;
   /**
    * Statuses of the most recent deployments, oldest first and capped at
    * ENVIRONMENT_RECENT_MAX. Read as a whole rather than one by one: a run of

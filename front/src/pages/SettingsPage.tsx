@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import type { AppSettings, SourcePublic } from '@repo/shared';
 import {
   ActivityIcon,
+  GlobeIcon,
   KeyIcon,
   LayersIcon,
   LinkIcon,
@@ -18,6 +19,7 @@ import { JobsSettings } from './settings/JobsSettings';
 import { UsersSettings } from './settings/UsersSettings';
 import { SourcesPage } from './SourcesPage';
 import { EnvRulesPage } from './EnvRulesPage';
+import { EnvUrlsPage } from './EnvUrlsPage';
 import { TicketRulesPage } from './TicketRulesPage';
 import { VersionRulesPage } from './VersionRulesPage';
 import { TrackersPage } from './TrackersPage';
@@ -29,6 +31,7 @@ export type SettingsSection =
   | 'sources'
   | 'trackers'
   | 'env'
+  | 'envUrls'
   | 'tickets'
   | 'versions'
   | 'ai'
@@ -40,6 +43,9 @@ const SECTIONS: { key: SettingsSection; icon: ReactNode }[] = [
   { key: 'sources', icon: <ServerIcon /> },
   { key: 'trackers', icon: <LinkIcon /> },
   { key: 'env', icon: <LayersIcon /> },
+  // Straight after the classification: the same names, answering the other
+  // question one asks about an environment — where it can be reached.
+  { key: 'envUrls', icon: <GlobeIcon /> },
   { key: 'tickets', icon: <TicketIcon /> },
   // Beside the other rule catalogues: it is one, and it reads what a
   // classification rule names.
@@ -65,6 +71,7 @@ export const SECTION_PATHS: Record<SettingsSection, string> = {
   sources: '/settings/sources',
   trackers: '/settings/trackers',
   env: '/settings/environments',
+  envUrls: '/settings/environment-urls',
   tickets: '/settings/tickets',
   versions: '/settings/versions',
   ai: '/settings/ai',
@@ -126,6 +133,7 @@ export function SettingsPage({
         {section === 'sources' && <SourcesPage onChange={onSourcesChange} />}
         {section === 'trackers' && <TrackersPage sources={sources} />}
         {section === 'env' && <EnvRulesPage />}
+        {section === 'envUrls' && <EnvUrlsPage sources={sources} />}
         {section === 'tickets' && <TicketRulesPage />}
         {section === 'versions' && <VersionRulesPage />}
         {section === 'ai' && <LlmProvidersPage />}

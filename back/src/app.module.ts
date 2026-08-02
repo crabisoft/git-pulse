@@ -10,6 +10,7 @@ import { SourcesModule } from './sources/sources.module';
 import { IngestModule } from './ingest/ingest.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { EnvRulesModule } from './env-rules/env-rules.module';
+import { EnvUrlsModule } from './env-urls/env-urls.module';
 import { VersionRulesModule } from './version-rules/version-rules.module';
 import { TrackersModule } from './trackers/trackers.module';
 import { TicketRulesModule } from './ticket-rules/ticket-rules.module';
@@ -38,6 +39,7 @@ import { OverviewModule } from './overview/overview.module';
     IngestModule,
     DashboardModule,
     EnvRulesModule,
+    EnvUrlsModule,
     VersionRulesModule,
     TrackersModule,
     TicketRulesModule,

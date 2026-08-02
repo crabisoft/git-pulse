@@ -11,6 +11,7 @@ import {
   type ApiBudgetPublic,
   type ApiQuotaPublic,
   type EnvRulePublic,
+  type EnvUrlRulePublic,
   type JobHandle,
   type JobStatus,
   type RepoVisibility,
@@ -80,6 +81,8 @@ interface FormState {
   installationId: string;
   /** Classification rules applied here, from the global catalogue. */
   envRuleIds: string[];
+  /** Address rules deriving where its environments answer. */
+  envUrlRuleIds: string[];
   /** Version rules this source's environments are read with. */
   versionRuleIds: string[];
   /** Trackers this source's pull requests may reference. */
@@ -107,6 +110,7 @@ const EMPTY: FormState = {
   privateKey: '',
   installationId: '',
   envRuleIds: [],
+  envUrlRuleIds: [],
   versionRuleIds: [],
   trackerIds: [],
   incidentTrackerId: '',
@@ -130,6 +134,7 @@ function toInput(form: FormState): CreateSourceInput {
       trackNewRepos: form.trackNewRepos,
     },
     envRuleIds: form.envRuleIds,
+    envUrlRuleIds: form.envUrlRuleIds,
     versionRuleIds: form.versionRuleIds,
     trackerIds: form.trackerIds,
     // Empty means none; the API spells that null.
@@ -173,6 +178,7 @@ function toForm(source: SourcePublic): FormState {
     // covered everything unless it named inclusions.
     trackNewRepos: source.scope.trackNewRepos ?? (source.scope.include ?? []).length === 0,
     envRuleIds: source.envRuleIds,
+    envUrlRuleIds: source.envUrlRuleIds ?? [],
     versionRuleIds: source.versionRuleIds,
     trackerIds: source.trackerIds,
     incidentTrackerId: source.incidentTrackerId ?? '',
@@ -977,6 +983,7 @@ function SourceDialog({
   const [error, setError] = useState<string | null>(null);
   const [trackers, setTrackers] = useState<TrackerPublic[]>([]);
   const [envRules, setEnvRules] = useState<EnvRulePublic[]>([]);
+  const [envUrlRules, setEnvUrlRules] = useState<EnvUrlRulePublic[]>([]);
   const [versionRules, setVersionRules] = useState<VersionRulePublic[]>([]);
   /**
    * The repos to pick from, and the picking. Null until asked for: reading them
@@ -996,13 +1003,15 @@ function SourceDialog({
       api.listTrackers({ limit: PAGE_LIMIT_MAX }).then(({ items }) => items),
       // One request per target: the catalogue is listed one target at a time.
       api.listVersionRules({ limit: PAGE_LIMIT_MAX }).then(({ items }) => items),
+      api.listEnvUrlRules({ limit: PAGE_LIMIT_MAX }).then(({ items }) => items),
       ...(['environment', 'repository', 'incident'] as RuleTarget[]).map((target) =>
         api.listEnvRules(target, { limit: PAGE_LIMIT_MAX }).then(({ items }) => items),
       ),
     ]).then(
-      ([loadedTrackers, loadedVersionRules, ...perTarget]) => {
+      ([loadedTrackers, loadedVersionRules, loadedEnvUrlRules, ...perTarget]) => {
         setTrackers(loadedTrackers as TrackerPublic[]);
         setVersionRules(loadedVersionRules as VersionRulePublic[]);
+        setEnvUrlRules(loadedEnvUrlRules as EnvUrlRulePublic[]);
         setEnvRules((perTarget as EnvRulePublic[][]).flat());
       },
       (err) => {
@@ -1080,6 +1089,7 @@ function SourceDialog({
   }, [repos]);
 
   const selectedEnvRules = useMemo(() => new Set(form.envRuleIds), [form.envRuleIds]);
+  const selectedEnvUrlRules = useMemo(() => new Set(form.envUrlRuleIds), [form.envUrlRuleIds]);
   const selectedVersionRules = useMemo(() => new Set(form.versionRuleIds), [form.versionRuleIds]);
   const selectedTrackers = useMemo(() => new Set(form.trackerIds), [form.trackerIds]);
 
@@ -1401,6 +1411,27 @@ function SourceDialog({
             onChange={(next) => set('envRuleIds', [...next])}
             emptyLabel={
               envRules.length === 0 ? t('sources.form.noEnvRules') : t('sources.form.noneSelected')
+            }
+          />
+        </label>
+
+        <label>
+          {t('sources.form.envUrlRules')}{' '}
+          <span className="hint">{t('sources.form.envUrlRulesHint')}</span>
+          <MultiSelect
+            block
+            options={envUrlRules.map((rule) => ({
+              value: rule.id,
+              label: rule.name,
+              // What it does, in the two words that decide whether to attach it.
+              hint: `${t(`envUrls.mode.${rule.mode}`)} · ${rule.pattern}`,
+            }))}
+            selected={selectedEnvUrlRules}
+            onChange={(next) => set('envUrlRuleIds', [...next])}
+            emptyLabel={
+              envUrlRules.length === 0
+                ? t('sources.form.noEnvUrlRules')
+                : t('sources.form.noneSelected')
             }
           />
         </label>

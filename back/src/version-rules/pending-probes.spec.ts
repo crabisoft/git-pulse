@@ -3,6 +3,7 @@ import {
   latestPerEnvironment,
   pairKey,
   selectProbes,
+  withDeclared,
   type LastReading,
   type ProbeCandidate,
 } from './pending-probes';
@@ -21,8 +22,9 @@ const candidate = (over: Partial<ProbeCandidate> = {}): ProbeCandidate => ({
 const now = new Date('2026-08-01T12:00:00.000Z');
 const minutesAgo = (minutes: number) => new Date(now.getTime() - minutes * 60_000);
 
-const readings = (entries: Array<[ProbeCandidate, LastReading]>) =>
-  new Map(entries.map(([c, last]) => [pairKey(c.repo, c.environment), last]));
+/** The rule that answered defaults to none: nothing here reads it. */
+const readings = (entries: Array<[ProbeCandidate, Omit<LastReading, 'ruleId'>]>) =>
+  new Map(entries.map(([c, last]) => [pairKey(c.repo, c.environment), { ruleId: null, ...last }]));
 
 describe('selectProbes', () => {
   it('reads an environment nobody has ever read', () => {
@@ -169,5 +171,49 @@ describe('latestPerEnvironment', () => {
       environmentUrl: 'https://billing.example.com',
       attributes: { client: 'acme' },
     });
+  });
+});
+
+describe('withDeclared', () => {
+  const declared = {
+    repo: '',
+    environment: 'contoso-onsite',
+    url: 'https://contoso.example.test',
+    attributes: { client: 'contoso' },
+  };
+
+  it('makes a candidate of an environment nothing deploys to', () => {
+    const [, added] = withDeclared([candidate()], [declared]);
+
+    // No deployment, therefore no ref, no id, and nothing to freeze a reading
+    // against — the reading is still the only way anyone learns what it runs.
+    expect(added).toMatchObject({
+      environment: 'contoso-onsite',
+      repo: '',
+      deploymentId: null,
+      ref: null,
+      deployedAt: null,
+      environmentUrl: 'https://contoso.example.test',
+      attributes: { client: 'contoso' },
+    });
+  });
+
+  it('adds nothing where a deployment already speaks for the pair', () => {
+    const deployed = candidate();
+    const candidates = withDeclared(
+      [deployed],
+      [{ ...declared, repo: deployed.repo, environment: deployed.environment }],
+    );
+
+    // The deployed candidate knows the ref and the deployment id this one never
+    // will; the declaration had its say when the address was decided.
+    expect(candidates).toEqual([deployed]);
+  });
+
+  it('keeps a declaration that states no address', () => {
+    // A rule can still address it by name, and the reading filed against it is
+    // what tells its author that none could.
+    const [added] = withDeclared([], [{ ...declared, url: null }]);
+    expect(added.environmentUrl).toBeNull();
   });
 });

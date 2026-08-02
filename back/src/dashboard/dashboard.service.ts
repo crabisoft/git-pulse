@@ -10,7 +10,13 @@ import {
 } from '@repo/shared';
 import { ReaderFactory } from '../ingest/reader.factory';
 import { EnvRulesService, subjectKey } from '../env-rules/env-rules.service';
-import { foldEnvironments, type DimensionedDeployment } from './environments';
+import { EnvUrlsService } from '../env-urls/env-urls.service';
+import { environmentUrlFor } from '../env-urls/env-url';
+import {
+  foldEnvironments,
+  type DeclaredEnvironment,
+  type DimensionedDeployment,
+} from './environments';
 import { TicketRulesService } from '../ticket-rules/ticket-rules.service';
 import { SettingsService } from '../settings/settings.service';
 import { paginate, toWindow } from '../common/pagination';
@@ -42,6 +48,11 @@ export interface CollectedSource {
    * is running, which is exactly what a matrix of live versions is read for.
    */
   latest: DimensionedDeployment[];
+  /**
+   * The environments this source declares by hand — the ones no deployment can
+   * introduce, since nothing deploys to them through the platform.
+   */
+  declared: DeclaredEnvironment[];
   environments: DashboardEnvironment[];
   mode: SourceMode;
   syncedAt: string | null;
@@ -55,6 +66,7 @@ export class DashboardService {
   constructor(
     private readonly readers: ReaderFactory,
     private readonly envRules: EnvRulesService,
+    private readonly envUrls: EnvUrlsService,
     private readonly ticketRules: TicketRulesService,
     private readonly settings: SettingsService,
   ) {}
@@ -168,6 +180,10 @@ export class DashboardService {
     // thing by construction.
     const dimensioned = await this.dimension(sourceId, deployments);
     const latest = since ? await this.dimension(sourceId, running) : dimensioned;
+    // The environments nothing deploys to. Read here rather than folded in
+    // later so the overview gets the same list from the same collection — it
+    // asks the present the same question this board does.
+    const declared = await this.envUrls.declaredFor(sourceId);
 
     return {
       repos: allRepos,
@@ -175,7 +191,8 @@ export class DashboardService {
       pipelines,
       deployments: dimensioned,
       latest,
-      environments: foldEnvironments(dimensioned),
+      declared,
+      environments: foldEnvironments(dimensioned, declared),
       mode: reader.mode,
       syncedAt: syncedAt?.toISOString() ?? null,
       warnings,
@@ -208,18 +225,37 @@ export class DashboardService {
     sourceId: string,
     deployments: Deployment[],
   ): Promise<DimensionedDeployment[]> {
-    const classified = await this.envRules.classifyByPair(
-      sourceId,
-      deployments.map((d) => ({ name: d.environment, repo: d.repo })),
-    );
+    const [classified, addresses] = await Promise.all([
+      this.envRules.classifyByPair(
+        sourceId,
+        deployments.map((d) => ({ name: d.environment, repo: d.repo })),
+      ),
+      this.envUrls.addressBook(sourceId),
+    ]);
     return deployments.map((deployment) => {
       const env = classified.get(
         subjectKey({ name: deployment.environment, repo: deployment.repo }),
       );
+      const attributes = env?.attributes ?? {};
       return {
         ...deployment,
-        attributes: env?.attributes ?? {},
+        attributes,
         metaEnvironments: env?.metaEnvironments ?? [],
+        // Settled here as well as in the deployments service, and from the same
+        // book: this view reads its own deployments rather than going through
+        // that one, and two views disagreeing about where an environment
+        // answers would be the reader's problem, not ours.
+        environmentUrl: environmentUrlFor(
+          {
+            repo: deployment.repo,
+            environment: deployment.environment,
+            ref: deployment.ref,
+            environmentUrl: deployment.environmentUrl,
+            attributes,
+          },
+          addresses.rules,
+          addresses.declared,
+        ),
       };
     });
   }

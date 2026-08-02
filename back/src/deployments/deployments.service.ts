@@ -23,6 +23,8 @@ import type {
 } from '../sources/connectors/source-connector.interface';
 import { ReaderFactory } from '../ingest/reader.factory';
 import { EnvRulesService, subjectKey } from '../env-rules/env-rules.service';
+import { EnvUrlsService } from '../env-urls/env-urls.service';
+import { environmentUrlFor } from '../env-urls/env-url';
 import { refUrl } from '../sources/connectors/ref-url';
 import { ReleaseNotesService } from '../release-notes/release-notes.service';
 import { isValidGitRef } from './git-ref';
@@ -48,6 +50,7 @@ export class DeploymentsService {
     private readonly sources: SourcesService,
     private readonly connectors: ConnectorFactory,
     private readonly envRules: EnvRulesService,
+    private readonly envUrls: EnvUrlsService,
     private readonly releaseNotes: ReleaseNotesService,
     private readonly settings: SettingsService,
     private readonly changelogs: ChangelogStore,
@@ -260,9 +263,11 @@ export class DeploymentsService {
         when: log.archivedAt,
       });
     }
-    const [env] = await this.envRules.classifyMany(sourceId, [
-      { name: log.environment, repo: log.repo },
+    const [[env], addresses] = await Promise.all([
+      this.envRules.classifyMany(sourceId, [{ name: log.environment, repo: log.repo }]),
+      this.envUrls.addressBook(sourceId),
     ]);
+    const attributes = env?.attributes ?? {};
     return {
       deployment: {
         id: log.deploymentId,
@@ -271,9 +276,24 @@ export class DeploymentsService {
         ref: log.ref,
         status: log.status,
         createdAt: log.deployedAt,
-        environmentUrl: log.environmentUrl,
+        // Through today's address book, like the classification just above and
+        // unlike the platform links below: where an environment answers is
+        // configuration, and configuration corrected since must apply to what
+        // it describes. The links are data — they were built when the source
+        // still pointed where it does not any more.
+        environmentUrl: environmentUrlFor(
+          {
+            repo: log.repo,
+            environment: log.environment,
+            ref: log.ref,
+            environmentUrl: log.environmentUrl,
+            attributes,
+          },
+          addresses.rules,
+          addresses.declared,
+        ),
         url: log.deploymentUrl,
-        attributes: env?.attributes ?? {},
+        attributes,
         metaEnvironments: env?.metaEnvironments ?? [],
         refUrl: log.refUrl,
       },
@@ -369,12 +389,18 @@ export class DeploymentsService {
 
   /**
    * Resolves every environment name against the source's rules, in one read,
-   * and attaches the page each deployed ref can be opened at.
+   * attaches the page each deployed ref can be opened at, and settles where
+   * each environment answers.
    *
    * The ref link is built here rather than stored: it follows from the platform,
    * the base URL and the repo, and storing what we make of the data is what the
    * ingestion deliberately does not do. `readSpec` carries the three without
    * decrypting anything, so a stored source pays no more for it.
+   *
+   * The environment's address is settled here for the same reason, and because
+   * this is the one funnel every reader passes through: the listing, the
+   * dashboard, the version probes and the archiver all take their deployments
+   * from here, so an address decided once is an address they agree on.
    */
   private async classify(
     sourceId: string,
@@ -382,21 +408,37 @@ export class DeploymentsService {
   ): Promise<ClassifiedDeployment[]> {
     // Once per (repo, environment) rather than per name: a rule confined to a
     // repo makes the same name classify differently from one repo to the next.
-    const [classified, spec] = await Promise.all([
+    const [classified, spec, addresses] = await Promise.all([
       this.envRules.classifyByPair(
         sourceId,
         deployments.map((d) => ({ name: d.environment, repo: d.repo })),
       ),
       this.sources.readSpec(sourceId),
+      this.envUrls.addressBook(sourceId),
     ]);
     return deployments.map((deployment) => {
       const env = classified.get(
         subjectKey({ name: deployment.environment, repo: deployment.repo }),
       );
+      const attributes = env?.attributes ?? {};
       return {
         ...deployment,
-        attributes: env?.attributes ?? {},
+        attributes,
         metaEnvironments: env?.metaEnvironments ?? [],
+        // After the classification, never before: an address is spelled out of
+        // what the name was found to mean — `https://{attr.client}.example.com`
+        // — so the attributes have to exist by the time it is rendered.
+        environmentUrl: environmentUrlFor(
+          {
+            repo: deployment.repo,
+            environment: deployment.environment,
+            ref: deployment.ref,
+            environmentUrl: deployment.environmentUrl,
+            attributes,
+          },
+          addresses.rules,
+          addresses.declared,
+        ),
         refUrl: refUrl(
           {
             kind: spec.kind,

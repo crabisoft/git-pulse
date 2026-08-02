@@ -21,10 +21,27 @@ export function PlatformLink({
   title: string;
   children: ReactNode;
 }) {
-  if (!url) return <>{children}</>;
+  if (!url || !opensInABrowser(url)) return <>{children}</>;
   return (
     <a href={url} target="_blank" rel="noreferrer" title={title}>
       {children} ↗
     </a>
   );
+}
+
+/**
+ * Absolute http(s) only, checked again here.
+ *
+ * Everything reaching this component should already be one — a platform's own
+ * page, or an environment address the backend refuses to store otherwise — so
+ * this catches what got past a check rather than what is expected. It is worth
+ * the line because of where the value lands: an `href` runs a `javascript:` URL
+ * as the reader who clicked it, and an environment's address is configuration
+ * somebody typed, not something a platform reported.
+ *
+ * A rejected address renders as text, exactly like an absent one: the fact
+ * survives, the link does not.
+ */
+function opensInABrowser(url: string): boolean {
+  return /^https?:\/\//i.test(url);
 }

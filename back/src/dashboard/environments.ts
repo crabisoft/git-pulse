@@ -14,6 +14,21 @@ export interface DimensionedDeployment extends Deployment {
 }
 
 /**
+ * An environment somebody wrote down, which no deployment need ever mention.
+ *
+ * It earns a row of its own: an appliance at a customer's site is an
+ * environment in every sense the reader cares about — it runs a version, it can
+ * be reached — and the only thing it lacks is a deployment this install ever
+ * saw.
+ */
+export interface DeclaredEnvironment {
+  /** Empty when it belongs to no repo. */
+  repo: string;
+  environment: string;
+  attributes: Record<string, string>;
+}
+
+/**
  * One row per environment name, most recently deployed first.
  *
  * A row can span several repos, and they may not classify alike. The row
@@ -26,7 +41,10 @@ export interface DimensionedDeployment extends Deployment {
  * deployment together. Narrowing a row after the fact would leave it counting
  * deployments it no longer describes.
  */
-export function foldEnvironments(deployments: DimensionedDeployment[]): DashboardEnvironment[] {
+export function foldEnvironments(
+  deployments: DimensionedDeployment[],
+  declared: DeclaredEnvironment[] = [],
+): DashboardEnvironment[] {
   const byName = new Map<string, DimensionedDeployment[]>();
   for (const deployment of deployments) {
     const bucket = byName.get(deployment.environment);
@@ -34,8 +52,9 @@ export function foldEnvironments(deployments: DimensionedDeployment[]): Dashboar
     else byName.set(deployment.environment, [deployment]);
   }
 
-  return [...byName.entries()]
-    .map(([name, items]) => {
+  return [
+    ...declaredRows(declared, byName),
+    ...[...byName.entries()].map(([name, items]) => {
       // Sorted once, then read from both ends: the newest deployment states
       // what is running, and the tail of the same order is the heartbeat.
       const byDate = [...items].sort((a, b) => msOf(a.createdAt) - msOf(b.createdAt));
@@ -49,10 +68,52 @@ export function foldEnvironments(deployments: DimensionedDeployment[]): Dashboar
         lastDeployAt: latest.createdAt,
         lastStatus: latest.status,
         ref: latest.ref,
+        declared: false,
         recent: byDate.slice(-ENVIRONMENT_RECENT_MAX).map((d) => d.status),
       };
-    })
-    .sort((a, b) => msOf(b.lastDeployAt) - msOf(a.lastDeployAt));
+    }),
+  ].sort(byLastDeploy);
+}
+
+/**
+ * The declared environments that no deployment accounts for.
+ *
+ * A declaration whose name the window did deploy to is left out: that row
+ * already exists and says more — its repos, its history, its heartbeat. The
+ * declaration was not idle there either, it decided the address; it simply has
+ * nothing to add to a row built from what actually happened.
+ */
+function declaredRows(
+  declared: DeclaredEnvironment[],
+  deployed: Map<string, unknown>,
+): DashboardEnvironment[] {
+  const unseen = declared.filter((entry) => !deployed.has(entry.environment));
+  // One row per name: the same environment may be declared under two repos, and
+  // the dashboard folds environments by name whatever their repo.
+  return [...new Map(unseen.map((entry) => [entry.environment, entry])).values()].map((entry) => ({
+    name: entry.environment,
+    attributes: entry.attributes,
+    metaEnvironments: [],
+    repos: entry.repo ? [entry.repo] : [],
+    deployments: 0,
+    lastDeployAt: null,
+    lastStatus: null,
+    ref: null,
+    declared: true,
+    recent: [],
+  }));
+}
+
+/**
+ * Most recently deployed first, and the declared environments after all of
+ * them: a row with no deployment has no place on a timeline, and sorting it as
+ * though it were infinitely old is the only honest end to put it.
+ */
+function byLastDeploy(a: DashboardEnvironment, b: DashboardEnvironment): number {
+  if (a.lastDeployAt === null || b.lastDeployAt === null) {
+    return (a.lastDeployAt === null ? 1 : 0) - (b.lastDeployAt === null ? 1 : 0);
+  }
+  return msOf(b.lastDeployAt) - msOf(a.lastDeployAt);
 }
 
 /**

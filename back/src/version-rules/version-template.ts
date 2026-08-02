@@ -47,6 +47,30 @@ export function extractVersion(body: string, spec: ExtractionSpec): VersionExtra
 }
 
 /**
+ * Whether a failed extraction blames the **address** rather than the rule.
+ *
+ * This is what decides, when several rules claim one environment, whether the
+ * next address is worth trying — see `readOne`. Two failures say the response
+ * came from somewhere else entirely:
+ *
+ * - **`unparsable`** — the body is not the format the rule declared. A proxy's
+ *   HTML error page, a single-page app returning its shell on every path, or
+ *   another application sharing the host: whatever it is, it is not what this
+ *   rule was written against.
+ * - **`noMatch`** — the `text` equivalent. That format has no parse step, so the
+ *   pattern is the only thing that can tell a wrong address from a right one.
+ *
+ * Everything else means the rule reached what it was written for and could not
+ * read it: the body parsed as declared, and the path did not resolve. Trying a
+ * second address there would hide a template to fix behind an address that
+ * works — the reading would come back from somewhere nobody meant to ask, and
+ * the failure that explains it would never be filed.
+ */
+export function blamesTheAddress(reason: CodedMessage): boolean {
+  return reason.code === 'errors.version.unparsable' || reason.code === 'errors.version.noMatch';
+}
+
+/**
  * Parses a body into the tree paths are resolved against.
  *
  * XML is normalised into the same shape JSON already has, so one path language

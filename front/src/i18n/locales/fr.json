@@ -74,7 +74,8 @@
       "trackers": "Trackers",
       "users": "Comptes",
       "ai": "Fournisseurs IA",
-      "jobs": "Tâches de fond"
+      "jobs": "Tâches de fond",
+      "envUrls": "Adresses"
     },
     "desc": {
       "general": "Collecte et seuils",
@@ -85,7 +86,8 @@
       "trackers": "Jira, Linear, issues",
       "users": "Qui peut se connecter",
       "ai": "Modèles que l’installation peut appeler",
-      "jobs": "Files, planification et échecs"
+      "jobs": "Files, planification et échecs",
+      "envUrls": "Où répondent les environnements"
     },
     "general": {
       "uiTitle": "Interface",
@@ -239,6 +241,91 @@
       "againstSourceHint": "Les règles propres à cette source — celles auxquelles elle a souscrit, confrontées à ses vrais noms de repos. C'est la réponse que donne la production."
     },
     "catalogueHint": "Définies une fois pour toute l'installation, puis activées source par source depuis le formulaire de source. Un pattern décrit une convention de nommage, qui s'arrête rarement à un seul hébergeur."
+  },
+  "envUrls": {
+    "rules": {
+      "listTitle": "Règles d'adresse",
+      "listEmpty": "Aucune règle pour l'instant.",
+      "catalogueHint": "Un catalogue global, comme les règles de classification : chaque source retient celles qui la concernent. Une règle déduit l'adresse d'un environnement de son nom, ce qui rend joignable un environnement dont la plateforme n'a rien publié.",
+      "addTitle": "Ajouter une règle",
+      "editTitle": "Modifier « {{name}} »",
+      "added": "Règle ajoutée.",
+      "updated": "Règle mise à jour.",
+      "deleted": "Règle supprimée.",
+      "deleteTitle": "Supprimer la règle",
+      "confirmDelete": "Supprimer la règle « {{name}} » ? Les environnements qu'elle adressait retrouvent ce que leur plateforme a publié, c'est-à-dire le plus souvent rien.",
+      "testAll": "Essayer le jeu de règles",
+      "testRule": "Essayer cette règle",
+      "testTitle": "Essayer les règles sur un environnement",
+      "test": {
+        "environment": "Nom d'environnement",
+        "repo": "Dépôt",
+        "repoHint": "ce à quoi sont confrontées les règles limitées à un dépôt",
+        "published": "Adresse publiée par la plateforme",
+        "publishedHint": "à laisser vide dans le cas courant, où elle n'en publie aucune",
+        "none": "Aucune règle n'adresse cet environnement.",
+        "unchanged": "inchangée — l'adresse publiée l'emporte",
+        "run": "Résoudre",
+        "noRepoHint": "Aucun dépôt nommé : les règles limitées à un dépôt sont écartées purement et simplement, exactement comme sur un environnement qui n'appartient à aucun dépôt. Nommez-en un pour les voir répondre.",
+        "sourceHint": "dont les noms de dépôts sont proposés ci-dessous",
+        "unresolved": "La règle « {{rule}} » revendique cet environnement, mais {{placeholder}} ne se résout pas — elle reste donc muette plutôt que de produire une adresse trouée. Vérifiez-le face aux groupes nommés du motif, qui sont confrontés tels qu'ils sont écrits.",
+        "via": "via {{name}}"
+      },
+      "testing": "Essai…",
+      "form": {
+        "name": "Nom",
+        "pattern": "Motif d'environnement",
+        "patternHint": "expression régulière ; ses groupes nommés servent à construire l'adresse",
+        "urlTemplate": "Adresse",
+        "urlTemplateHint": "les groupes nommés du motif, plus {environment}, {repo}, {ref} et {attr.…} issus de la classification",
+        "urlTemplatePlaceholder": "https://{client}.example.com",
+        "mode": "Quand la plateforme a publié une adresse",
+        "priority": "Priorité",
+        "priorityHint": "la plus basse l'emporte quand deux règles revendiquent le même environnement",
+        "repo": "Dépôt",
+        "repoHint": "expression régulière ; vide signifie tous les dépôts",
+        "submit": "Ajouter",
+        "submitting": "Enregistrement…"
+      }
+    },
+    "declared": {
+      "listTitle": "Environnements déclarés",
+      "listEmpty": "Cette source ne déclare aucun environnement.",
+      "hint": "Les environnements qu'aucun déploiement n'amène — un boîtier chez un client, une installation faite à la main. Déclarés ici, ils apparaissent sur les tableaux et leur version est lue comme celle des autres.",
+      "source": "Source",
+      "noSources": "Déclarez d'abord une source : un environnement appartient à l'une d'elles.",
+      "addTitle": "Déclarer un environnement",
+      "editTitle": "Modifier « {{name}} »",
+      "added": "Environnement déclaré.",
+      "updated": "Environnement mis à jour.",
+      "deleted": "Environnement retiré.",
+      "deleteTitle": "Retirer l'environnement",
+      "confirmDelete": "Retirer « {{name}} » ? Ses relevés restent, et plus rien ne les rafraîchira.",
+      "noUrl": "aucune adresse",
+      "noRepo": "aucun dépôt",
+      "form": {
+        "environment": "Nom",
+        "repo": "Dépôt",
+        "repoHint": "vide s'il n'appartient à aucun, ce qui est le cas d'une instance client",
+        "url": "Adresse",
+        "urlHint": "là où il répond ; vide déclare l'environnement sans en revendiquer",
+        "attributes": "Attributs",
+        "attributesHint": "forcés, puisque aucun nom n'a été reconnu et que rien ne l'a classifié",
+        "attrKey": "clé",
+        "attrValue": "valeur",
+        "addAttribute": "Ajouter un attribut",
+        "submit": "Déclarer",
+        "submitting": "Enregistrement…"
+      }
+    },
+    "mode": {
+      "fill": "compléter",
+      "overwrite": "écraser"
+    },
+    "modeHint": {
+      "fill": "La laisser telle quelle. La règle ne parle que des environnements dont la plateforme n'a rien publié — c'est-à-dire la plupart.",
+      "overwrite": "La remplacer. Pour les adresses publiées mais fausses : un nom d'hôte interne, un répartiteur que personne ne joint depuis l'extérieur."
+    }
   },
   "language": {
     "label": "Langue"
@@ -401,6 +488,16 @@
     "compare": {
       "unresolvable": "La plateforme ne résout plus cette comparaison dans {{repo}} ({{from}}…{{to}}) : branche supprimée, tag déplacé ou commit purgé. Plus rien ne peut relire cet historique — c'est précisément ce que conservent les changelogs archivés.",
       "unknownRef": "La plateforme ne résout plus {{ref}} dans {{repo}} : branche supprimée, tag déplacé ou commit purgé."
+    },
+    "envUrlRule": {
+      "notFound": "Règle introuvable.",
+      "invalidPattern": "Expression régulière invalide : {{pattern}}",
+      "urlNotAddressable": "L'adresse doit commencer par http:// ou https://."
+    },
+    "manualEnvironment": {
+      "notFound": "Environnement introuvable.",
+      "duplicate": "« {{environment}} » est déjà déclaré pour cette source ; modifiez celui-là plutôt que d'en ajouter un second.",
+      "urlNotAddressable": "L'adresse doit commencer par http:// ou https://."
     }
   },
   "empty": {
@@ -629,7 +726,10 @@
       "historyDaysHint": "jusqu'où l'ingestion remonte, à la première passe comme à chaque réconciliation",
       "historyFollowsWindow": "Suivre la fenêtre de reporting",
       "historyOption": "{{count}} jours",
-      "historyCostHint": "plus profond = plus d'appels API à la première collecte, et plus de lignes conservées ensuite"
+      "historyCostHint": "plus profond = plus d'appels API à la première collecte, et plus de lignes conservées ensuite",
+      "envUrlRules": "Règles d'adresse",
+      "envUrlRulesHint": "déduisent où répondent les environnements de cette source, depuis la section Adresses",
+      "noEnvUrlRules": "Aucune règle d'adresse définie."
     },
     "repoVisibility": {
       "public": "public",
@@ -1205,7 +1305,9 @@
     "wall": {
       "exit": "Quitter le mode mur",
       "enter": "Mode mur"
-    }
+    },
+    "neverDeployed": "jamais déployé",
+    "declaredEnv": "déclaré"
   },
   "display": {
     "direction": {

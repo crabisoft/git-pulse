@@ -80,6 +80,12 @@ export class UpdateSourceDto {
   @IsString({ each: true })
   envRuleIds?: string[];
 
+  /** Address rules deriving where this source's environments answer. Replaces the set. */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  envUrlRuleIds?: string[];
+
   /** Version rules this source's environments are read with. Replaces the set. */
   @IsOptional()
   @IsArray()

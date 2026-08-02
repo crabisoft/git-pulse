@@ -20,6 +20,9 @@ import type {
   ConnectionTestResult,
   CodedMessage,
   EnvRulePublic,
+  EnvUrlMode,
+  EnvUrlRulePublic,
+  ManualEnvironmentPublic,
   ClassifiedEnvironment,
   Branch,
   ChangelogReport,
@@ -246,6 +249,8 @@ export interface CreateSourceInput {
   webhooksEnabled?: boolean;
   /** Classification rules that apply here — supplying it replaces the set. */
   envRuleIds?: string[];
+  /** Address rules deriving where its environments answer — supplying it replaces the set. */
+  envUrlRuleIds?: string[];
   /** Trackers this source's PRs may reference — supplying it replaces the set. */
   trackerIds?: string[];
   /** One of `trackerIds`, or null to collect no incident. */
@@ -270,6 +275,58 @@ export interface CreateEnvRuleInput {
 
 /** Every field is optional; omitted ones keep their stored value. */
 export type UpdateEnvRuleInput = Partial<CreateEnvRuleInput>;
+
+export interface CreateEnvUrlRuleInput {
+  name: string;
+  /** Matched against the environment name; its named groups feed the template. */
+  pattern: string;
+  /** Confines the rule to the repos this matches. Empty means all of them. */
+  repo?: string;
+  urlTemplate: string;
+  /** Omitted means `fill`: replacing a published address is the deliberate act. */
+  mode?: EnvUrlMode;
+  priority?: number;
+}
+
+export type UpdateEnvUrlRuleInput = Partial<CreateEnvUrlRuleInput>;
+
+export interface CreateManualEnvironmentInput {
+  environment: string;
+  /** Omitted or empty: the environment belongs to no repo. */
+  repo?: string;
+  url?: string;
+  attributes?: Record<string, string>;
+  mode?: EnvUrlMode;
+}
+
+export type UpdateManualEnvironmentInput = Partial<CreateManualEnvironmentInput>;
+
+/** What a candidate rule set would make of one environment, saving nothing. */
+export interface EnvUrlPreviewInput {
+  environment: string;
+  repo?: string;
+  ref?: string;
+  /** What the platform would have published — `fill` stands down in its presence. */
+  environmentUrl?: string;
+  attributes?: Record<string, string>;
+  rules: CreateEnvUrlRuleInput[];
+}
+
+export interface EnvUrlPreview {
+  /** Where the rules say it answers — null when none of them can say. */
+  url: string | null;
+  published: string | null;
+  /** The rule that answered, or that claimed the environment and could not. */
+  rule: string | null;
+  /** Whether a declaration by hand answered, which outranks every rule. */
+  declared: boolean;
+  /**
+   * The placeholder that kept the rule silent, when one did. What tells a
+   * template to fix from a pattern that never matched — the two produce the
+   * same absent address and nothing else distinguishes them.
+   */
+  unresolved: string | null;
+}
 
 export interface CreateTicketRuleInput {
   trackerId: string;
@@ -499,6 +556,46 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ name, rules, repo }),
     }),
+
+  /** The whole catalogue, like the classification rules: sources opt into it. */
+  listEnvUrlRules: (page?: PageQuery) =>
+    request<Page<EnvUrlRulePublic>>(`/env-url-rules${qs({ ...page })}`),
+  createEnvUrlRule: (input: CreateEnvUrlRuleInput) =>
+    request<EnvUrlRulePublic>('/env-url-rules', { method: 'POST', body: JSON.stringify(input) }),
+  updateEnvUrlRule: (id: string, input: UpdateEnvUrlRuleInput) =>
+    request<EnvUrlRulePublic>(`/env-url-rules/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  deleteEnvUrlRule: (id: string) => request<void>(`/env-url-rules/${id}`, { method: 'DELETE' }),
+  /**
+   * What a candidate rule set makes of one environment. Worth asking before
+   * saving: an address that comes out wrong is indistinguishable, on the page,
+   * from a platform that published none.
+   */
+  previewEnvUrl: (input: EnvUrlPreviewInput) =>
+    request<EnvUrlPreview>('/env-url-rules/preview', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  /** Declared environments belong to a source, unlike the rules. */
+  listManualEnvironments: (sourceId: string, page?: PageQuery) =>
+    request<Page<ManualEnvironmentPublic>>(
+      `/sources/${sourceId}/manual-environments${qs({ ...page })}`,
+    ),
+  createManualEnvironment: (sourceId: string, input: CreateManualEnvironmentInput) =>
+    request<ManualEnvironmentPublic>(`/sources/${sourceId}/manual-environments`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateManualEnvironment: (id: string, input: UpdateManualEnvironmentInput) =>
+    request<ManualEnvironmentPublic>(`/manual-environments/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
+  deleteManualEnvironment: (id: string) =>
+    request<void>(`/manual-environments/${id}`, { method: 'DELETE' }),
 
   /** The whole catalogue, like the classification rules: sources opt into it. */
   listVersionRules: (page?: PageQuery) =>

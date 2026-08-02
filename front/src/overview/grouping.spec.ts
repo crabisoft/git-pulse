@@ -16,6 +16,7 @@ function env(
     lastDeployAt: '2026-07-30T10:00:00.000Z',
     lastStatus,
     ref: 'v2.14.1',
+    declared: false,
     recent: ['success'],
   };
 }

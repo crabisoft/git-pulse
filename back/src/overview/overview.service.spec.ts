@@ -63,6 +63,7 @@ function build(overrides: Partial<CollectedSource> = {}, dora: DoraStub = {}) {
     pipelines: [],
     deployments: [],
     latest: [],
+    declared: [],
     environments: [],
     mode: 'stored',
     syncedAt: '2026-07-30T09:00:00.000Z',

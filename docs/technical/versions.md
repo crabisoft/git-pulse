@@ -24,10 +24,12 @@ Two RegEx narrow a rule, both optional:
 Omitting one means "every one of them". Patterns are tested **unanchored** —
 remember `^` and `$` if you want a match on the whole name.
 
-Unlike a classification rule, a version rule is **selected rather than
-accumulated**: a version is a single reading, so the lowest `priority` number
-among the matching rules wins outright and the others stay silent. An unreadable
-pattern keeps its rule quiet rather than letting it apply everywhere.
+Unlike a classification rule, a version rule does not **accumulate**: a version
+is a single reading, so several matching rules cannot each contribute a piece of
+it. They are candidates in turn, tried lowest `priority` number first until one
+answers — see [Several addresses for one environment](#several-addresses-for-one-environment)
+for what counts as an answer. An unreadable pattern keeps its rule quiet rather
+than letting it apply everywhere.
 
 ## Where the probe goes
 
@@ -35,7 +37,7 @@ pattern keeps its rule quiet rather than letting it apply everywhere.
 
 | Placeholder | Resolves to |
 |---|---|
-| `{environmentUrl}` | The address the platform published for the environment |
+| `{environmentUrl}` | The environment's address — published by the platform, or supplied by an [address rule](environment-addresses.md), which is what makes this placeholder usable on most installs |
 | `{repo}` `{environment}` `{ref}` | The deployment's own fields |
 | `{attr.<key>}` | An attribute from the classification rules |
 
@@ -92,6 +94,53 @@ string typed into a form into code this process executes.
 > and they would be filed and shown beside a deployed ref as if they had been
 > read. The same goes for a template holding no placeholder — a constant matches
 > every response for ever, and is refused when the rule is saved.
+
+## Several addresses for one environment
+
+One application may state its version at more than one address — an actuator on
+the installs upgraded this year, a static `version.json` on the ones that are
+not — and which of them answers is a property of the environment, not something
+anybody can enumerate in a pattern. So the rules claiming an environment are
+tried **in turn** rather than reduced to one.
+
+The order is the lowest `priority` number first, with one exception that
+outranks it: **the rule that answered last time goes first.** That is stored on
+the reading (`EnvironmentVersion.ruleId`) and is evidence, where the priority is
+only what an author declared. Without it, an environment whose third address
+answers would pay the first two — two addresses that do not exist, each held to
+its five-second timeout — on every cycle, for ever. With it, that is paid once,
+and again only when the address that was working stops.
+
+**A forced run ignores it** and walks the declared order. The saving is for the
+scheduled step; a person clicking *Read the installed versions* has usually just
+written a rule, and a remembered one answering first is how a new rule gets
+written, attached, and never tried. The deployment event keeps the preference,
+being automatic in the same way the collection is.
+
+The walk stops at the first rule that **reached the application**, which is not
+the first that answered at all:
+
+| Outcome | |
+|---|---|
+| No address could be built (`skipped`) | Try the next: nothing was asked, so nothing was learnt |
+| The request failed (`unreachable`) | Try the next |
+| The body is not the `format` the rule declared, or no `text` pattern matched | Try the next: this is somebody else's response |
+| The body parsed as declared | **Stop**, whether or not the template read a version out of it |
+
+A `200` alone is not an answer. A proxy answers `200` on every path, and a
+single-page app serves its shell on all of them; a walk stopping there would
+lock onto the wrong address and file nothing for ever while looking perfectly
+reachable.
+
+Stopping on a body that *parsed* but produced no version is the other half of
+the same care. The rule reached what it was written for and the template is what
+is wrong — walking on would file a version read somewhere nobody meant to ask,
+and bury the failure that explains it.
+
+When every address refuses, the reading filed is the attempt that **got
+furthest**: answered with the wrong thing, then never answered, then could not
+be addressed at all. One reading is filed per environment whatever the number of
+attempts — the store holds one row per pair.
 
 ## Authentication
 

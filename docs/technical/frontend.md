@@ -25,6 +25,7 @@ and by Vite in dev.
 | `/settings/users` | Accounts allowed to sign in |
 | `/settings/sources` | Connected Git platforms |
 | `/settings/environments` | Classification rules, global catalogue (`?target=repository` for the repos tab) |
+| `/settings/environment-urls` | Address rules and declared environments |
 | `/settings/trackers` | Ticket trackers (Jira, Linear, issues) |
 | `/settings/tickets` | Ticket rules (PR → ticket linking) |
 | `/settings/ai` | Model providers the install may call |
