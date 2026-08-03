@@ -55,6 +55,13 @@ $C run --rm -T back sh -c 'cat > /data/master.key && chmod 600 /data/master.key'
 $C up -d
 ```
 
+From a clone, the same block with a target: `make restore` (it reads the two
+file names `make backup` wrote, from `backup/` unless `in=/somewhere/else` says
+otherwise; add `mode=prod` for the production stack). It asks before replacing
+the database — `yes=1` skips the question for a script — waits for Postgres to
+accept connections before loading, and reports a missing `master.key` rather
+than refusing: that is the case below, not a failure.
+
 Then check that a credential is actually readable: open **Settings › Sources**
 and press **Test** on a source. That call decrypts the token and spends it —
 which is exactly what proves the key matches the data.
