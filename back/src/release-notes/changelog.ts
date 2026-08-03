@@ -4,7 +4,7 @@ import { sync as parseCommit } from 'conventional-commits-parser';
 import createPreset from 'conventional-changelog-conventionalcommits';
 import type { ReleaseNoteEntry } from '@repo/shared';
 import { repoUrl, type RepoLocation } from '../sources/connectors/ref-url';
-import { linkTickets } from './link-tickets';
+import { linkTickets, mentionsKey } from './link-tickets';
 
 /**
  * The other renderer: the range handed to the `conventional-changelog` packages
@@ -84,13 +84,71 @@ export async function renderChangelog(
   };
 
   const rendered = await collect(writer(context, preset.writerOpts), commits);
-  // The writer links `#42` to this repository's own issues and nothing else.
-  // Everything a ticket rule recognised — a Jira key, a Linear one — is linked
-  // here, from what the extraction already attached to each entry.
-  return linkTickets(
+  // The writer links `#42` to this repository's own issues and nothing else,
+  // which is a guess about where the team files its tickets. The ticket rules
+  // are the answer to that, so they decide: what they recognised is linked from
+  // what the extraction already attached to each entry, and what they did not
+  // loses the link the writer gave it.
+  //
+  // Except the requests of the range. `#42` in a squashed subject is the pull
+  // request the change landed in — the same object the entry carries a link to
+  // — and dropping it would be answering a question nobody asked.
+  const linked = linkTickets(
     rendered,
     entries.flatMap((entry) => entry.tickets),
+    {
+      prefix: `${root}/${paths.issue}/`,
+      keep: new Map(
+        entries.flatMap((entry) =>
+          entry.pullRequest
+            ? [[`#${entry.pullRequest.number}`, entry.pullRequest.url] as const]
+            : [],
+        ),
+      ),
+    },
   );
+  // Linking can only reach a key the text already holds, and this generator
+  // renders the commit message and nothing else — so a ticket the rules read
+  // off a branch name or a request's description appears nowhere in it, and
+  // would be lost by a page that found it.
+  return mentionTickets(linked, entries);
+}
+
+/**
+ * Names, on each rendered line, the tickets that line does not already name.
+ *
+ * The commit is what identifies the line: the writer hangs a link on every one
+ * of them, and the sha inside that link is the only thing in its output that
+ * ties a line back to the entry it was rendered from. Matching on the summary
+ * would break the moment two commits share one.
+ *
+ * A line the entry already mentions is left alone, so this adds and never
+ * repeats. Appended after the commit link rather than before the summary,
+ * which is where the convention puts its own references — the layout belongs
+ * to the package, and this is a guest in it.
+ *
+ * A commit the preset dropped has no line to be named on, and its tickets stay
+ * unmentioned. That is the trade-off this generator already is, not a second
+ * one: a commit following no convention is absent from these notes entirely.
+ */
+function mentionTickets(markdown: string, entries: ReleaseNoteEntry[]): string {
+  const byCommit = new Map(entries.map((entry) => [entry.sha, entry.tickets]));
+
+  return markdown
+    .split('\n')
+    .map((line) => {
+      // Both platforms' commit paths end the same way, which is what makes one
+      // expression enough: `…/commit/<sha>)` and `…/-/commit/<sha>)`.
+      const sha = /\/commit\/([0-9a-f]+)\)/.exec(line)?.[1];
+      const tickets = sha === undefined ? undefined : byCommit.get(sha);
+      const missing = (tickets ?? []).filter((ticket) => !mentionsKey(line, ticket.key));
+      if (missing.length === 0) return line;
+      // A ticket that resolved to no URL is still named: the key is what a
+      // reader searches their tracker for, and a link is the bonus.
+      const refs = missing.map((t) => (t.url ? `[${t.key}](${t.url})` : t.key));
+      return `${line}, ${refs.join(', ')}`;
+    })
+    .join('\n');
 }
 
 /** Drives the writer's stream to its end and returns what it wrote. */

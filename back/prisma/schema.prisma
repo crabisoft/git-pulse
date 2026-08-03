@@ -519,6 +519,10 @@ model TicketRule {
   trackerId String
   name      String
   pattern   String
+  /// TicketSource[] — which texts the pattern is run over. The default is what
+  /// the extraction read before the column existed; `body` is left out of it,
+  /// since reading a description costs a call the older behaviour never made.
+  sources   String[] @default(["branch", "title", "commit"])
   /// Client-defined priority (lower wins when two rules claim the same key).
   priority  Int      @default(100)
   createdAt DateTime @default(now())
@@ -772,6 +776,10 @@ model StoredPullRequest {
   externalId    String
   number        Int
   title         String
+  /// The description, for the ticket rules that declare they read it. Null on a
+  /// row only the merged feed ever wrote: that listing reports no description,
+  /// and blanking one the open feed established would be a loss.
+  body          String?
   /// PullRequestState — open, draft, merged or closed.
   state         String
   /// Absent on a row the merged feed created: it reports no author.

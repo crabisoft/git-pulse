@@ -1,8 +1,13 @@
 import { Injectable } from '@nestjs/common';
-import type { Deployment, MergedPullRequest, Pipeline, PullRequest, ScopeRules } from '@repo/shared';
+import type { Deployment, Pipeline, ScopeRules } from '@repo/shared';
 import { SourcesService } from '../sources/sources.service';
 import { ConnectorFactory } from '../sources/connectors/connector.factory';
-import type { ConnectorContext, SourceConnector } from '../sources/connectors/source-connector.interface';
+import type {
+  ConnectorContext,
+  SourceConnector,
+  SourceMergedPullRequest,
+  SourcePullRequest,
+} from '../sources/connectors/source-connector.interface';
 import { applyScope } from '../sources/connectors/scope.util';
 import type { SourceReader } from './source-reader.interface';
 import { StoreService } from './store.service';
@@ -24,7 +29,7 @@ class ConnectorReader implements SourceReader {
     return this.connector.listRepositories(this.ctx);
   }
 
-  listPullRequests(repos: string[]): Promise<PullRequest[]> {
+  listPullRequests(repos: string[]): Promise<SourcePullRequest[]> {
     return this.connector.listPullRequests(this.ctx, repos);
   }
 
@@ -36,7 +41,7 @@ class ConnectorReader implements SourceReader {
     return this.connector.listDeployments(this.ctx, repos, since);
   }
 
-  listMergedPullRequests(repos: string[], since: string): Promise<MergedPullRequest[]> {
+  listMergedPullRequests(repos: string[], since: string): Promise<SourceMergedPullRequest[]> {
     return this.connector.listMergedPullRequests(this.ctx, repos, since);
   }
 
@@ -65,7 +70,7 @@ class StoreReader implements SourceReader {
     return applyScope(await this.store.readRepos(this.sourceId), this.scope);
   }
 
-  listPullRequests(repos: string[]): Promise<PullRequest[]> {
+  listPullRequests(repos: string[]): Promise<SourcePullRequest[]> {
     return this.store.readPullRequests(this.sourceId, repos);
   }
 
@@ -77,7 +82,7 @@ class StoreReader implements SourceReader {
     return this.store.readDeployments(this.sourceId, repos, since);
   }
 
-  listMergedPullRequests(repos: string[], since: string): Promise<MergedPullRequest[]> {
+  listMergedPullRequests(repos: string[], since: string): Promise<SourceMergedPullRequest[]> {
     return this.store.readMergedPullRequests(this.sourceId, repos, since);
   }
 

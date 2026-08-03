@@ -13,6 +13,7 @@ const tracker = (over: Partial<TicketRuleTracker> = {}): TicketRuleTracker => ({
 const rule = (pattern: string, over: Partial<TicketRuleLike> = {}): TicketRuleLike => ({
   name: 'rule',
   pattern,
+  sources: ['branch', 'title', 'body', 'commit'],
   priority: 10,
   tracker: tracker(),
   ...over,
@@ -73,6 +74,46 @@ describe('extractTickets', () => {
 
   it('also eats what a loose pattern happens to match — hence the rule tester', () => {
     expect(found('', 'switch to UTF-8', [JIRA])).toEqual(['jira:UTF-8:title']);
+  });
+});
+
+describe('the texts a rule declares', () => {
+  const all = (texts: Parameters<typeof extractTickets>[0], rules: TicketRuleLike[]) =>
+    extractTickets(texts, rules).map((r) => `${r.key}:${r.foundIn}`);
+
+  it('reads only those, so a pattern is loose where it can afford to be', () => {
+    // `\d+` on a branch is a ticket number; in a description it is any figure
+    // somebody typed, which is exactly what confining the rule prevents.
+    const branchOnly = rule('(?<key>\\d{3,})', { sources: ['branch'] });
+    expect(all({ branch: 'f/1234-login', body: 'takes 250ms' }, [branchOnly])).toEqual([
+      '1234:branch',
+    ]);
+  });
+
+  it('reads a description, which no other text carries', () => {
+    const described = rule('(?<key>[A-Z]{2,5}-\\d+)', { sources: ['body'] });
+    expect(all({ title: 'fix login', body: 'Closes OPS-7' }, [described])).toEqual(['OPS-7:body']);
+  });
+
+  it('separates the commit message from the request title it was squashed from', () => {
+    const titles = rule('(?<key>[A-Z]{2,5}-\\d+)', { sources: ['title'] });
+    expect(all({ title: 'OPS-1 login', commit: 'feat: OPS-2 login' }, [titles])).toEqual([
+      'OPS-1:title',
+    ]);
+  });
+
+  it('attributes a key by reading order, not by the order the sources were saved in', () => {
+    const reordered = rule('(?<key>[A-Z]{2,5}-\\d+)', {
+      sources: ['commit', 'branch'],
+    });
+    expect(all({ branch: 'f/OPS-3', commit: 'feat: OPS-3' }, [reordered])).toEqual([
+      'OPS-3:branch',
+    ]);
+  });
+
+  it('finds nothing in a text nobody supplied', () => {
+    const described = rule('(?<key>[A-Z]{2,5}-\\d+)', { sources: ['body'] });
+    expect(all({ branch: 'f/OPS-1', title: 'OPS-1' }, [described])).toEqual([]);
   });
 });
 

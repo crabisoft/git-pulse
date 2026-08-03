@@ -85,7 +85,7 @@ export interface SourceConnector {
    */
   listAllRepositories(ctx: ConnectorContext): Promise<RepositoryRef[]>;
 
-  listPullRequests(ctx: ConnectorContext, repos: string[]): Promise<PullRequest[]>;
+  listPullRequests(ctx: ConnectorContext, repos: string[]): Promise<SourcePullRequest[]>;
 
   /**
    * Pipelines/runs of these repos, newest first.
@@ -106,7 +106,7 @@ export interface SourceConnector {
     ctx: ConnectorContext,
     repos: string[],
     since: string,
-  ): Promise<MergedPullRequest[]>;
+  ): Promise<SourceMergedPullRequest[]>;
 
   /** Tags of a repo, most recent first — what a release range is picked from. */
   listTags(ctx: ConnectorContext, repo: string): Promise<Tag[]>;
@@ -192,9 +192,37 @@ export interface SourceConnector {
 }
 
 /** A request as an association answers it: what to link, and what to extract from. */
+/**
+ * A pull request as a source answers it, description included.
+ *
+ * The description is carried on this type rather than on `PullRequest` because
+ * it is read, not displayed: the ticket rules that declare `body` match against
+ * it, and then it is dropped. Putting it on the shared type would have put
+ * every description of every open pull request on the wire, for a page that
+ * shows none of them.
+ */
+export interface SourcePullRequest extends PullRequest {
+  /** Empty when the platform reports none, which is a description of nothing. */
+  body: string;
+}
+
+/**
+ * A merged pull request as a source answers it, description included. Carried
+ * apart from the shared type for the same reason `SourcePullRequest` is: the
+ * description feeds the ticket rules and goes no further.
+ */
+export interface SourceMergedPullRequest extends MergedPullRequest {
+  /** Empty when the platform reports none, which is a description of nothing. */
+  body: string;
+}
+
 export interface CommitPullRequest {
   number: number;
   url: string;
   /** Source branch — where the ticket references usually are. */
   headRef: string;
+  /** The request's own title, which a squash copies and a merge does not. */
+  title: string;
+  /** Its description — the other place a team writes what it closes. */
+  body: string;
 }

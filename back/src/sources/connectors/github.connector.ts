@@ -3,10 +3,8 @@ import { Octokit } from '@octokit/rest';
 import { createAppAuth } from '@octokit/auth-app';
 import type {
   Commit,
-  PullRequest,
   Pipeline,
   Deployment,
-  MergedPullRequest,
   PipelineStatus,
   ConnectionTestResult,
   RepoVisibility,
@@ -19,6 +17,8 @@ import type {
   ConnectorContext,
   RefCommit,
   SourceConnector,
+  SourceMergedPullRequest,
+  SourcePullRequest,
 } from './source-connector.interface';
 import { githubQuota, type HeaderBag, type QuotaSink } from '../../api-quota/rate-limit-headers';
 import { applyScope, ageHours } from './scope.util';
@@ -114,9 +114,9 @@ export class GitHubConnector implements SourceConnector {
     }));
   }
 
-  async listPullRequests(ctx: ConnectorContext, repos: string[]): Promise<PullRequest[]> {
+  async listPullRequests(ctx: ConnectorContext, repos: string[]): Promise<SourcePullRequest[]> {
     const gh = this.client(ctx);
-    const out: PullRequest[] = [];
+    const out: SourcePullRequest[] = [];
     for (const repo of repos) {
       ctx.signal?.throwIfAborted();
       const prs = await gh.paginate(gh.rest.pulls.list, {
@@ -130,6 +130,8 @@ export class GitHubConnector implements SourceConnector {
           id: `gh:${repo}:${pr.number}`,
           number: pr.number,
           title: pr.title,
+          // In the listing's own payload: the rules that read it cost nothing.
+          body: pr.body ?? '',
           state: pr.draft ? 'draft' : 'open',
           author: pr.user?.login ?? 'unknown',
           repo,
@@ -254,10 +256,10 @@ export class GitHubConnector implements SourceConnector {
     ctx: ConnectorContext,
     repos: string[],
     since: string,
-  ): Promise<MergedPullRequest[]> {
+  ): Promise<SourceMergedPullRequest[]> {
     const gh = this.client(ctx);
     const sinceMs = new Date(since).getTime();
-    const out: MergedPullRequest[] = [];
+    const out: SourceMergedPullRequest[] = [];
     let skipped = 0;
     for (const repo of repos) {
       ctx.signal?.throwIfAborted();
@@ -303,6 +305,8 @@ export class GitHubConnector implements SourceConnector {
           repo,
           number: pr.number,
           title: pr.title,
+          // In the listing's payload, unlike the lead-time segments below.
+          body: pr.body ?? '',
           url: pr.html_url,
           headRef: pr.head.ref,
           openedAt: pr.created_at,
@@ -575,6 +579,10 @@ export class GitHubConnector implements SourceConnector {
             number: merged.number,
             url: merged.html_url,
             headRef: merged.head.ref,
+            // Both come back in the association's own payload: reading them
+            // here is free, and asking for the request again would not be.
+            title: merged.title,
+            body: merged.body ?? '',
           });
         }
       } catch {

@@ -1,13 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import type {
   Deployment,
-  MergedPullRequest,
   Pipeline,
   PipelineStatus,
-  PullRequest,
   PullRequestState,
 } from '@repo/shared';
 import { PrismaService } from '../prisma/prisma.service';
+import type {
+  SourceMergedPullRequest,
+  SourcePullRequest,
+} from '../sources/connectors/source-connector.interface';
 import { ageHours } from '../sources/connectors/scope.util';
 import {
   mergeDeployment,
@@ -71,7 +73,11 @@ export class StoreService {
     return repos.length;
   }
 
-  async upsertPullRequests(sourceId: string, prs: PullRequest[], seenAt: Date): Promise<number> {
+  async upsertPullRequests(
+    sourceId: string,
+    prs: SourcePullRequest[],
+    seenAt: Date,
+  ): Promise<number> {
     if (prs.length === 0) return 0;
     const held = await this.loadPullRequests(sourceId, prs.map((pr) => pr.id));
     const stale: string[] = [];
@@ -96,7 +102,7 @@ export class StoreService {
 
   async upsertMergedPullRequests(
     sourceId: string,
-    prs: MergedPullRequest[],
+    prs: SourceMergedPullRequest[],
     seenAt: Date,
   ): Promise<number> {
     if (prs.length === 0) return 0;
@@ -141,7 +147,7 @@ export class StoreService {
     return rows.map((r) => r.name);
   }
 
-  async readPullRequests(sourceId: string, repos: string[]): Promise<PullRequest[]> {
+  async readPullRequests(sourceId: string, repos: string[]): Promise<SourcePullRequest[]> {
     if (repos.length === 0) return [];
     const rows = await this.prisma.storedPullRequest.findMany({
       where: { sourceId, repo: { in: repos }, state: { in: ON_BOARD } },
@@ -217,7 +223,7 @@ export class StoreService {
     sourceId: string,
     repos: string[],
     since: string,
-  ): Promise<MergedPullRequest[]> {
+  ): Promise<SourceMergedPullRequest[]> {
     if (repos.length === 0) return [];
     const rows = await this.prisma.storedPullRequest.findMany({
       where: { sourceId, repo: { in: repos }, mergedAt: { gte: new Date(since) } },
@@ -389,6 +395,7 @@ interface PullRequestRecord {
   repo: string;
   number: number;
   title: string;
+  body: string | null;
   state: string;
   author: string | null;
   url: string;
@@ -433,6 +440,7 @@ function toPullRequestRow(row: PullRequestRecord): PullRequestRow {
     repo: row.repo,
     number: row.number,
     title: row.title,
+    body: row.body,
     state: row.state as PullRequestState,
     author: row.author,
     url: row.url,
@@ -456,11 +464,14 @@ function toDeploymentRow(row: DeploymentRecord): DeploymentRow {
   return { ...row, status: row.status as PipelineStatus };
 }
 
-function toPullRequest(row: PullRequestRecord): PullRequest {
+function toPullRequest(row: PullRequestRecord): SourcePullRequest {
   return {
     id: row.externalId,
     number: row.number,
     title: row.title,
+    // A row the merged feed alone ever wrote knows of no description, which
+    // reads the same as an empty one to a rule matching against it.
+    body: row.body ?? '',
     state: row.state as PullRequestState,
     author: row.author ?? 'unknown',
     repo: row.repo,
@@ -478,12 +489,15 @@ function toPullRequest(row: PullRequestRecord): PullRequest {
   };
 }
 
-function toMergedPullRequest(row: PullRequestRecord): MergedPullRequest {
+function toMergedPullRequest(row: PullRequestRecord): SourceMergedPullRequest {
   return {
     id: row.externalId,
     repo: row.repo,
     number: row.number,
     title: row.title,
+    // Null on a row written before the column existed, which reads the same as
+    // an empty description to a rule matching against it.
+    body: row.body ?? '',
     url: row.url,
     headRef: row.headRef,
     openedAt: row.openedAt.toISOString(),

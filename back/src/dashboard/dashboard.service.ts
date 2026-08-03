@@ -9,6 +9,7 @@ import {
   type SourceMode,
 } from '@repo/shared';
 import { ReaderFactory } from '../ingest/reader.factory';
+import type { SourcePullRequest } from '../sources/connectors/source-connector.interface';
 import { EnvRulesService, subjectKey } from '../env-rules/env-rules.service';
 import { EnvUrlsService } from '../env-urls/env-urls.service';
 import { environmentUrlFor } from '../env-urls/env-url';
@@ -199,18 +200,25 @@ export class DashboardService {
     };
   }
 
-  /** Resolves the ticket references of a batch of PRs — rules read once. */
+  /**
+   * Resolves the ticket references of a batch of PRs — rules read once.
+   *
+   * The description goes in and does not come out: a rule declaring `body`
+   * matches against it here, and the page that shows the result has no use for
+   * the text itself. Sending it would put every open pull request's description
+   * on the wire for nothing.
+   */
   private async withTickets(
     sourceId: string,
     owner: string,
-    prs: PullRequest[],
+    prs: SourcePullRequest[],
   ): Promise<PullRequest[]> {
     const refs = await this.ticketRules.extractMany(
       sourceId,
-      prs.map((pr) => ({ branch: pr.headRef, title: pr.title })),
+      prs.map((pr) => ({ branch: pr.headRef, title: pr.title, body: pr.body })),
       prs.map((pr) => ({ owner, repo: pr.repo })),
     );
-    return prs.map((pr, i) => ({ ...pr, tickets: refs[i] }));
+    return prs.map(({ body: _body, ...pr }, i) => ({ ...pr, tickets: refs[i] }));
   }
 
   /**

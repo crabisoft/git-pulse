@@ -9,12 +9,12 @@ import type {
   DoraSample,
   FailureSource,
   Incident,
-  MergedPullRequest,
   Page,
   PipelineStatus,
   RuleTarget,
 } from '@repo/shared';
 import { CodedException } from '../common/coded-exception';
+import type { SourceMergedPullRequest } from '../sources/connectors/source-connector.interface';
 
 import { resolvePeriod, within } from '../common/period';
 import { paginate, type PageWindow } from '../common/pagination';
@@ -281,7 +281,7 @@ export class DoraService {
       reader.listMergedPullRequests(repos, since).catch((e) => {
         throwIfAborted(signal);
         this.logger.warn(`listMergedPullRequests failed (${sourceId}): ${asMessage(e)}`);
-        return [] as MergedPullRequest[];
+        return [] as SourceMergedPullRequest[];
       }),
       // Not fetched at all while failures come from pipelines only: the issues
       // endpoint costs one call per label and per repo.
@@ -500,7 +500,7 @@ export class DoraService {
   private async toMergedPrEvents(
     sourceId: string,
     owner: string,
-    prs: MergedPullRequest[],
+    prs: SourceMergedPullRequest[],
   ): Promise<MergedPrEvent[]> {
     const inWindow = prs;
     const [dimensionsByRepo, tickets] = await Promise.all([
@@ -512,7 +512,7 @@ export class DoraService {
       ),
       this.ticketRules.extractMany(
         sourceId,
-        inWindow.map((p) => ({ branch: p.headRef, title: p.title })),
+        inWindow.map((p) => ({ branch: p.headRef, title: p.title, body: p.body })),
         inWindow.map((p) => ({ owner, repo: p.repo })),
       ),
     ]);

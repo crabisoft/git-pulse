@@ -1,11 +1,8 @@
+import type { Deployment, Pipeline, ScopeRules, SourceMode } from '@repo/shared';
 import type {
-  Deployment,
-  MergedPullRequest,
-  Pipeline,
-  PullRequest,
-  ScopeRules,
-  SourceMode,
-} from '@repo/shared';
+  SourceMergedPullRequest,
+  SourcePullRequest,
+} from '../sources/connectors/source-connector.interface';
 
 /**
  * Where a source's data comes from, on the read side.
@@ -21,7 +18,7 @@ import type {
  */
 export interface SourceReader {
   listRepositories(): Promise<string[]>;
-  listPullRequests(repos: string[]): Promise<PullRequest[]>;
+  listPullRequests(repos: string[]): Promise<SourcePullRequest[]>;
   listPipelines(repos: string[]): Promise<Pipeline[]>;
   /**
    * Deployments of these repos, newest first.
@@ -39,7 +36,7 @@ export interface SourceReader {
    */
   listDeployments(repos: string[], since?: string): Promise<Deployment[]>;
   /** Merges since the given ISO date — the basis of every lead time. */
-  listMergedPullRequests(repos: string[], since: string): Promise<MergedPullRequest[]>;
+  listMergedPullRequests(repos: string[], since: string): Promise<SourceMergedPullRequest[]>;
   /**
    * When this view was last brought up to date. Null reading live, where the
    * question does not arise, and null on a store nothing has filled yet.

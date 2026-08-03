@@ -2,9 +2,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   PAGE_LIMIT_MAX,
+  TICKET_SOURCES,
   type PageInfo,
   type TicketRef,
   type TicketRulePublic,
+  type TicketSource,
   type TrackerPublic,
 } from '@repo/shared';
 import { api, apiErrorInfo, type CreateTicketRuleInput, type PageQuery } from '../api';
@@ -14,7 +16,15 @@ import { DataList } from '../DataList';
 import { Modal, ConfirmDialog } from '../Modal';
 import { Pagination } from '../Pagination';
 
-const EMPTY: CreateTicketRuleInput = { trackerId: '', name: '', pattern: '', priority: 100 };
+const EMPTY: CreateTicketRuleInput = {
+  trackerId: '',
+  name: '',
+  pattern: '',
+  // The texts a reference is usually written in, and none that costs a call:
+  // reading a request's own texts is opted into rather than out of.
+  sources: ['branch', 'commit'],
+  priority: 100,
+};
 
 /** Module constant so resetting on source change never re-triggers a fetch. */
 const FIRST_PAGE: PageQuery = {};
@@ -131,6 +141,15 @@ export function TicketRulesPage() {
                 ),
               },
               {
+                key: 'sources',
+                header: t('ticketRules.form.sources'),
+                cell: (rule) => (
+                  <span className="muted">
+                    {rule.sources.map((source) => t(`ticketRules.source.${source}`)).join(', ')}
+                  </span>
+                ),
+              },
+              {
                 key: 'priority',
                 header: t('ticketRules.form.priority'),
                 className: 'num',
@@ -201,6 +220,7 @@ function TicketRuleDialog({
           trackerId: rule.trackerId,
           name: rule.name,
           pattern: rule.pattern,
+          sources: rule.sources,
           priority: rule.priority,
         }
       : { ...EMPTY, trackerId: trackers[0]?.id ?? '' },
@@ -211,8 +231,22 @@ function TicketRuleDialog({
   const set = <K extends keyof CreateTicketRuleInput>(k: K, v: CreateTicketRuleInput[K]) =>
     setForm((f) => ({ ...f, [k]: v }));
 
+  const sources = form.sources ?? [];
+  /** Kept in reading order, which is the order the extraction attributes in. */
+  const toggle = (source: TicketSource, on: boolean) =>
+    set(
+      'sources',
+      TICKET_SOURCES.filter((s) => (s === source ? on : sources.includes(s))),
+    );
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
+    // Refused here as well as on the server: a rule reading nothing matches
+    // nothing, and looks exactly like a pattern that is simply wrong.
+    if (sources.length === 0) {
+      setError(t('errors.ticketRule.noSource'));
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -275,6 +309,25 @@ function TicketRuleDialog({
             ))}
           </select>
         </label>
+        <div className="check-group">
+          <span className="group-name">
+            {t('ticketRules.form.sources')}{' '}
+            <span className="hint">{t('ticketRules.form.sourcesHint')}</span>
+          </span>
+          {TICKET_SOURCES.map((source) => (
+            <label className="checkbox" key={source}>
+              <input
+                type="checkbox"
+                checked={sources.includes(source)}
+                onChange={(e) => toggle(source, e.target.checked)}
+              />
+              <span>
+                {t(`ticketRules.source.${source}`)}{' '}
+                <span className="hint">{t(`ticketRules.sourceHint.${source}`)}</span>
+              </span>
+            </label>
+          ))}
+        </div>
         <label>
           {t('ticketRules.form.priority')}{' '}
           <span className="hint">{t('ticketRules.form.priorityHint')}</span>
@@ -300,6 +353,8 @@ function TicketRuleTestDialog({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
   const [branch, setBranch] = useState('');
   const [title, setTitle] = useState('');
+  const [body, setBody] = useState('');
+  const [message, setMessage] = useState('');
   const [owner, setOwner] = useState('');
   const [repo, setRepo] = useState('');
   const [result, setResult] = useState<TicketRef[] | null>(null);
@@ -313,6 +368,8 @@ function TicketRuleTestDialog({ onClose }: { onClose: () => void }) {
         await api.previewTicketRules({
           branch,
           title,
+          body,
+          commit: message,
           owner: owner || undefined,
           repo: repo || undefined,
         }),
@@ -361,6 +418,28 @@ function TicketRuleTestDialog({ onClose }: { onClose: () => void }) {
             onChange={(e) => setTitle(e.target.value)}
             placeholder="OPS-123 Fix login"
             spellCheck={false}
+          />
+        </label>
+        <label>
+          {t('ticketRules.preview.body')}
+          <textarea
+            className="mono-input"
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            placeholder="Closes OPS-123"
+            spellCheck={false}
+            rows={3}
+          />
+        </label>
+        <label>
+          {t('ticketRules.preview.commit')}
+          <textarea
+            className="mono-input"
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
+            placeholder="fix(auth): stop dropping the session (#42)"
+            spellCheck={false}
+            rows={3}
           />
         </label>
         <label>

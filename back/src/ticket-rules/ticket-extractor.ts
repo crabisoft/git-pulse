@@ -1,4 +1,5 @@
 import {
+  TICKET_SOURCES,
   TRACKER_URL_TEMPLATES,
   type TicketRef,
   type TicketRefTracker,
@@ -15,15 +16,19 @@ export interface TicketRuleTracker extends TicketRefTracker {
 export interface TicketRuleLike {
   name: string;
   pattern: string;
+  /** The texts this rule reads. A rule reading none of them is skipped. */
+  sources: TicketSource[];
   priority: number;
   tracker: TicketRuleTracker;
 }
 
-/** The texts a reference is looked for in, cheapest and most reliable first. */
-export interface TicketTexts {
-  branch: string;
-  title: string;
-}
+/**
+ * The texts a reference is looked for in. All optional: a caller supplies the
+ * ones it holds, and a rule reading a text nobody supplied simply finds
+ * nothing there — a pull request's description is not available everywhere a
+ * pull request is.
+ */
+export type TicketTexts = Partial<Record<TicketSource, string>>;
 
 /**
  * Where the pull request lives. Git-hosted trackers need it: `#42` only
@@ -43,6 +48,11 @@ export interface TicketOrigin {
  * key found twice — typically in the branch *and* the title — is kept once,
  * attributed to the text it was seen in first.
  *
+ * Each rule reads only the texts it declares. That is what keeps a pattern
+ * loose enough to be useful in one place from matching everything in another:
+ * `\d+` on a branch is a ticket number, and on a description it is any figure
+ * somebody typed.
+ *
  * On conflict, the lower priority number wins: it decides which tracker a key
  * belongs to when two rules claim it. Invalid patterns are skipped rather than
  * throwing, exactly like the classification engine.
@@ -53,16 +63,17 @@ export function extractTickets(
   origin?: TicketOrigin,
 ): TicketRef[] {
   const found = new Map<string, { ref: TicketRef; priority: number }>();
-  const sources: Array<[TicketSource, string]> = [
-    ['branch', texts.branch],
-    ['title', texts.title],
-  ];
 
   for (const rule of [...rules].sort((a, b) => a.priority - b.priority)) {
     const regex = safeRegExp(rule.pattern);
     if (!regex) continue;
 
-    for (const [foundIn, text] of sources) {
+    // The declared order, not the stored one: a rule saved as `title, branch`
+    // must attribute a key to the branch all the same, or the same rule set
+    // would report a different origin depending on how it was typed in.
+    for (const foundIn of TICKET_SOURCES) {
+      if (!rule.sources.includes(foundIn)) continue;
+      const text = texts[foundIn];
       if (!text) continue;
       for (const match of text.matchAll(regex)) {
         const key = match.groups?.key ?? match[0];

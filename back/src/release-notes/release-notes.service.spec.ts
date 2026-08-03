@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { Commit } from '@repo/shared';
+import type { Commit, TicketSource } from '@repo/shared';
 import type { TicketRulesService } from '../ticket-rules/ticket-rules.service';
 import type { RepoLocation } from '../sources/connectors/ref-url';
 import type {
@@ -29,15 +29,25 @@ function commit(sha: string, message: string, parents = 1): Commit {
 }
 
 function request(number: number, headRef: string): CommitPullRequest {
-  return { number, url: `https://github.com/acme/widget/pull/${number}`, headRef };
+  return {
+    number,
+    url: `https://github.com/acme/widget/pull/${number}`,
+    headRef,
+    title: `Request ${number}`,
+    body: `Closes OPS-${number}`,
+  };
 }
 
 /**
  * The service with only what `describeCommits` reaches: the rules, and the
  * connector it is handed. Everything else belongs to `generate`.
+ *
+ * `wanted` is what the rules of the source declare they read, since that is
+ * what decides which lookups are worth making. The default leaves out the
+ * request's own texts, which are the ones costing a call.
  */
 function service(
-  hasRules = true,
+  wanted: TicketSource[] = ['branch', 'commit'],
   resolved = new Map<string, CommitPullRequest>(),
   requestCommits = new Map<number, Commit[]>(),
 ) {
@@ -46,7 +56,7 @@ function service(
   const pullRequestCommits = vi.fn().mockResolvedValue(requestCommits);
   const rules = {
     extractMany,
-    anyFor: vi.fn().mockResolvedValue(hasRules),
+    sourcesFor: vi.fn().mockResolvedValue(new Set(wanted)),
   } as unknown as TicketRulesService;
   const connector = { commitPullRequests, pullRequestCommits } as unknown as SourceConnector;
   const notes = new ReleaseNotesService(
@@ -60,7 +70,7 @@ function service(
   return { notes, connector, extractMany, commitPullRequests, pullRequestCommits };
 }
 
-/** The (branch, title) pairs the extraction was actually run over. */
+/** The texts the extraction was actually run over, one set per commit. */
 function texts(extractMany: ReturnType<typeof vi.fn>) {
   return extractMany.mock.calls[0][1];
 }
@@ -78,7 +88,12 @@ describe('describeCommits', () => {
       url: 'https://github.com/acme/widget/pull/42',
     });
     expect(texts(extractMany)).toEqual([
-      { branch: 'ABC-1-login', title: 'Merge pull request #42 from acme/ABC-1-login' },
+      {
+        branch: 'ABC-1-login',
+        title: '',
+        body: '',
+        commit: 'Merge pull request #42 from acme/ABC-1-login',
+      },
     ]);
     expect(commitPullRequests).not.toHaveBeenCalled();
   });
@@ -105,7 +120,7 @@ describe('describeCommits', () => {
   it('resolves the request of the commits a merge brought in with it', async () => {
     // The children carry nothing of their own: only the association does.
     const { notes, connector, extractMany, commitPullRequests } = service(
-      true,
+      ['branch', 'commit'],
       new Map([['bbb', request(42, 'ABC-1-login')]]),
     );
 
@@ -117,14 +132,24 @@ describe('describeCommits', () => {
     expect(commitPullRequests).toHaveBeenCalledWith(CTX, 'widget', ['bbb']);
     expect(entries.map((e) => e.pullRequest?.number)).toEqual([42, 42]);
     expect(texts(extractMany)).toEqual([
-      { branch: 'ABC-1-login', title: 'Merge pull request #42 from acme/ABC-1-login' },
-      { branch: 'ABC-1-login', title: 'fix: stop dropping the cursor' },
+      {
+        branch: 'ABC-1-login',
+        title: '',
+        body: '',
+        commit: 'Merge pull request #42 from acme/ABC-1-login',
+      },
+      {
+        branch: 'ABC-1-login',
+        title: 'Request 42',
+        body: 'Closes OPS-42',
+        commit: 'fix: stop dropping the cursor',
+      },
     ]);
   });
 
   it('asks for the branch a squash dropped, keeping the number it kept', async () => {
     const { notes, connector, extractMany, commitPullRequests } = service(
-      true,
+      ['branch', 'commit'],
       new Map([['ccc', request(42, 'ABC-1-login')]]),
     );
 
@@ -134,7 +159,12 @@ describe('describeCommits', () => {
 
     expect(commitPullRequests).toHaveBeenCalledWith(CTX, 'widget', ['ccc']);
     expect(texts(extractMany)).toEqual([
-      { branch: 'ABC-1-login', title: 'feat(sources): collect on demand (#42)' },
+      {
+        branch: 'ABC-1-login',
+        title: 'Request 42',
+        body: 'Closes OPS-42',
+        commit: 'feat(sources): collect on demand (#42)',
+      },
     ]);
   });
 
@@ -142,7 +172,7 @@ describe('describeCommits', () => {
     // Squashing collapses a branch into one commit, so its work is nowhere in
     // the range: the request is the only place it survives.
     const { notes, connector, pullRequestCommits } = service(
-      true,
+      ['branch', 'commit'],
       new Map([['ccc', request(42, 'ABC-1-login')]]),
       new Map([[42, [commit('d1', 'feat: the form'), commit('d2', 'test: the form')]]]),
     );
@@ -160,7 +190,7 @@ describe('describeCommits', () => {
 
   it('leaves a merge commit alone — what it brought in is already in the range', async () => {
     const { notes, connector, pullRequestCommits } = service(
-      true,
+      ['branch', 'commit'],
       new Map([['bbb', request(42, 'ABC-1-login')]]),
     );
 
@@ -174,7 +204,10 @@ describe('describeCommits', () => {
   });
 
   it('keeps the squash when the request answers nothing — the reserve, or a deleted repo', async () => {
-    const { notes, connector } = service(true, new Map([['ccc', request(42, 'ABC-1-login')]]));
+    const { notes, connector } = service(
+      ['branch', 'commit'],
+      new Map([['ccc', request(42, 'ABC-1-login')]]),
+    );
 
     const entries = await notes.describeCommits('src-1', connector, CTX, GITHUB, [
       commit('ccc', 'feat(sources): collect on demand (#42)'),
@@ -185,7 +218,7 @@ describe('describeCommits', () => {
 
   it('never lists a commit twice when a request answers with one the range holds', async () => {
     const { notes, connector } = service(
-      true,
+      ['branch', 'commit'],
       new Map([['ccc', request(42, 'ABC-1-login')]]),
       new Map([[42, [commit('ccc', 'feat(sources): collect on demand (#42)')]]]),
     );
@@ -200,7 +233,7 @@ describe('describeCommits', () => {
   it('asks nothing of a squash when no rule reaches the source', async () => {
     // The number is the link, and the message already gave it; the branch would
     // then be extracted from for nobody.
-    const { notes, connector, commitPullRequests } = service(false);
+    const { notes, connector, commitPullRequests } = service([]);
 
     const [entry] = await notes.describeCommits('src-1', connector, CTX, GITHUB, [
       commit('ccc', 'feat(sources): collect on demand (#42)'),
@@ -210,11 +243,41 @@ describe('describeCommits', () => {
     expect(entry.pullRequest?.number).toBe(42);
   });
 
+  it('asks for the request a merge commit already named when a rule reads its texts', async () => {
+    // The title and the description are nowhere in the message, so wanting
+    // either is a call even for a commit that gave up its number for free.
+    const { notes, connector, extractMany, commitPullRequests } = service(
+      ['title', 'body'],
+      new Map([['aaa', request(42, 'ABC-1-login')]]),
+    );
+
+    await notes.describeCommits('src-1', connector, CTX, GITHUB, [
+      commit('aaa', 'Merge pull request #42 from acme/ABC-1-login', 2),
+    ]);
+
+    expect(commitPullRequests).toHaveBeenCalledWith(CTX, 'widget', ['aaa']);
+    expect(texts(extractMany)[0]).toMatchObject({
+      title: 'Request 42',
+      body: 'Closes OPS-42',
+    });
+  });
+
+  it('asks for nothing when the rules read the commit message alone', async () => {
+    // The cheapest rule set there is: everything it reads is already in hand.
+    const { notes, connector, commitPullRequests } = service(['commit']);
+
+    await notes.describeCommits('src-1', connector, CTX, GITHUB, [
+      commit('ccc', 'feat(sources): collect on demand (#42)'),
+    ]);
+
+    expect(commitPullRequests).not.toHaveBeenCalled();
+  });
+
   it('still resolves a commit the message says nothing about, rules or not', async () => {
     // The link is wanted for its own sake: an install with no tracker still
     // reads its release notes.
     const { notes, connector, commitPullRequests } = service(
-      false,
+      [],
       new Map([['ddd', request(7, 'ABC-2')]]),
     );
 
@@ -227,18 +290,23 @@ describe('describeCommits', () => {
   });
 
   it('leaves a commit no request claims without one', async () => {
-    const { notes, connector, extractMany } = service(true, new Map());
+    const { notes, connector, extractMany } = service(['branch', 'commit'], new Map());
 
     const [entry] = await notes.describeCommits('src-1', connector, CTX, GITHUB, [
       commit('eee', 'chore: bump the lockfile'),
     ]);
 
     expect(entry.pullRequest).toBeNull();
-    expect(texts(extractMany)).toEqual([{ branch: '', title: 'chore: bump the lockfile' }]);
+    expect(texts(extractMany)).toEqual([
+      { branch: '', title: '', body: '', commit: 'chore: bump the lockfile' },
+    ]);
   });
 
   it('keeps the entries positional with the commits it was given', async () => {
-    const { notes, connector } = service(true, new Map([['bbb', request(7, 'ABC-2')]]));
+    const { notes, connector } = service(
+      ['branch', 'commit'],
+      new Map([['bbb', request(7, 'ABC-2')]]),
+    );
 
     const entries = await notes.describeCommits('src-1', connector, CTX, GITHUB, [
       commit('aaa', 'feat: one'),

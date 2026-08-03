@@ -25,6 +25,7 @@ import type {
 import { parseConventionalCommit, sectionRank } from './conventional-commit';
 import { readMergeCommit } from './merge-commit';
 import { renderChangelog } from './changelog';
+import { linkTickets } from './link-tickets';
 import { resolveRange } from './range';
 import { refUrl, requestUrl, type RepoLocation } from '../sources/connectors/ref-url';
 import { REWRITE_SYSTEM, buildRewritePrompt, readRewritten } from './rewrite';
@@ -42,6 +43,9 @@ interface Landed {
   commit: Commit;
   ref: PullRequestRef | null;
   branch: string | null;
+  /** The request's title and description, when a rule asked for them. */
+  title: string | null;
+  body: string | null;
 }
 
 /** What to summarise: a repo, and the range within it. */
@@ -175,12 +179,18 @@ export class ReleaseNotesService {
     const markdown =
       generator === 'conventional-changelog'
         ? await renderChangelog(location, from, to, entries)
-        : render(
-            location.repo,
-            from,
-            to,
-            groupByType(entries),
-            entries.filter((entry) => entry.breaking),
+        : // Linked afterwards for the same reason the other generator is: the
+          // bullet lists the tickets an entry carries, and a key written in the
+          // summary itself is the same reference, owed the same link.
+          linkTickets(
+            render(
+              location.repo,
+              from,
+              to,
+              groupByType(entries),
+              entries.filter((entry) => entry.breaking),
+            ),
+            entries.flatMap((entry) => entry.tickets),
           );
     return { markdown, generator };
   }
@@ -226,9 +236,18 @@ export class ReleaseNotesService {
       location,
       commits.map((commit, i) => ({ commit, ...requests[i] })),
     );
+    // One text per source a rule may read. The commit message is its own text
+    // rather than the request's title: a squash copies the title into the
+    // message, but a commit pushed straight to a branch has no request at all,
+    // and a rule confined to titles must not match what it never read.
     const tickets = await this.ticketRules.extractMany(
       sourceId,
-      landed.map(({ commit, branch }) => ({ branch: branch ?? '', title: commit.message })),
+      landed.map(({ commit, branch, title, body }) => ({
+        branch: branch ?? '',
+        title: title ?? '',
+        body: body ?? '',
+        commit: commit.message,
+      })),
       landed.map(() => ({ owner: ctx.scope.owner, repo: location.repo })),
     );
 
@@ -305,7 +324,7 @@ export class ReleaseNotesService {
         seen.add(commit.sha);
         // The children inherit the request their squash named: they came in on
         // it, and resolving it again per commit would be a call each.
-        out.push({ commit, ref: entry.ref, branch: entry.branch });
+        out.push({ ...entry, commit });
       }
     }
     return out;
@@ -313,8 +332,8 @@ export class ReleaseNotesService {
 
   /**
    * The request each commit came in on, positional with `commits`: what to link
-   * it to, and the branch to extract tickets from. Either part may be missing,
-   * and both are for a commit pushed straight to a branch.
+   * it to, and the texts to extract tickets from. Any part may be missing, and
+   * all of them are for a commit pushed straight to a branch.
    *
    * Two sources, cheapest first. A merge commit names its request in its own
    * message, which costs nothing to read — number and branch on a generated
@@ -322,9 +341,15 @@ export class ReleaseNotesService {
    * else has to be asked for, one call per commit.
    *
    * What is still worth a call is therefore per commit, not per range: the
-   * number is always wanted, since it is the link; the branch only when a
-   * ticket rule reaches the source, or it would be extracted from for nobody. A
-   * squashed history with no tracker configured thus costs nothing at all.
+   * number is always wanted, since it is the link; the other texts only when a
+   * ticket rule reaching this source declares it reads them, or they would be
+   * extracted from for nobody. A squashed history with no tracker configured
+   * thus costs nothing at all, and rules confined to the commit message keep it
+   * that way — which is the point of letting a rule say what it reads.
+   *
+   * A title or a description is never in the commit message, so wanting either
+   * is a call for every commit. That is the price of the option, paid only by
+   * the installs that tick it.
    */
   private async requestsOf(
     sourceId: string,
@@ -332,11 +357,21 @@ export class ReleaseNotesService {
     ctx: ConnectorContext,
     location: RepoLocation,
     commits: Commit[],
-  ): Promise<Array<{ ref: PullRequestRef | null; branch: string | null }>> {
+  ): Promise<
+    Array<{
+      ref: PullRequestRef | null;
+      branch: string | null;
+      title: string | null;
+      body: string | null;
+    }>
+  > {
     const read = commits.map((commit) => readMergeCommit(commit.message, location.kind));
-    const wantsBranch = await this.ticketRules.anyFor(sourceId);
+    const wanted = await this.ticketRules.sourcesFor(sourceId);
+    const wantsBranch = wanted.has('branch');
+    const wantsRequestText = wanted.has('title') || wanted.has('body');
     const unresolved = commits.filter(
-      (_, i) => read[i].number === null || (wantsBranch && read[i].branch === null),
+      (_, i) =>
+        read[i].number === null || wantsRequestText || (wantsBranch && read[i].branch === null),
     );
 
     const resolved = unresolved.length
@@ -356,6 +391,8 @@ export class ReleaseNotesService {
       return {
         ref: number === null ? null : { number, url: requestUrl(location, number) },
         branch: read[i].branch ?? found?.headRef ?? null,
+        title: found?.title ?? null,
+        body: found?.body ?? null,
       };
     });
   }

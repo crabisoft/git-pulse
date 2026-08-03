@@ -55,6 +55,7 @@ import type {
   ScopeRules,
   TicketRef,
   TicketRulePublic,
+  TicketSource,
   TrackerKind,
   TrackerPublic,
   EnvironmentVersion,
@@ -332,6 +333,8 @@ export interface CreateTicketRuleInput {
   trackerId: string;
   name: string;
   pattern: string;
+  /** The texts the pattern is run over. Omitted keeps the server's default. */
+  sources?: TicketSource[];
   priority?: number;
 }
 
@@ -652,10 +655,12 @@ export const api = {
       body: JSON.stringify(input),
     }),
   deleteTicketRule: (id: string) => request<void>(`/ticket-rules/${id}`, { method: 'DELETE' }),
-  /** Runs every saved rule over a sample branch and title. */
+  /** Runs every saved rule over a sample of each text a rule may read. */
   previewTicketRules: (sample: {
     branch: string;
     title: string;
+    body: string;
+    commit: string;
     owner?: string;
     repo?: string;
   }) => request<TicketRef[]>('/ticket-rules/preview', { method: 'POST', body: JSON.stringify(sample) }),

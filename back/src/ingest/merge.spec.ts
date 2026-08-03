@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { Deployment, MergedPullRequest, Pipeline, PullRequest } from '@repo/shared';
+import type { Deployment, Pipeline } from '@repo/shared';
+import type {
+  SourceMergedPullRequest,
+  SourcePullRequest,
+} from '../sources/connectors/source-connector.interface';
 import {
   mergeDeployment,
   mergeMergedPullRequest,
@@ -10,11 +14,12 @@ import {
 
 const SEEN = new Date('2026-07-27T12:00:00Z');
 
-function open(over: Partial<PullRequest> = {}): PullRequest {
+function open(over: Partial<SourcePullRequest> = {}): SourcePullRequest {
   return {
     id: 'gh:api:42',
     number: 42,
     title: 'Ajoute la pagination',
+    body: 'Closes OPS-42',
     state: 'open',
     author: 'alice',
     repo: 'api',
@@ -31,12 +36,13 @@ function open(over: Partial<PullRequest> = {}): PullRequest {
   };
 }
 
-function merged(over: Partial<MergedPullRequest> = {}): MergedPullRequest {
+function merged(over: Partial<SourceMergedPullRequest> = {}): SourceMergedPullRequest {
   return {
     id: 'gh:api:42',
     repo: 'api',
     number: 42,
     title: 'Ajoute la pagination',
+    body: 'Closes OPS-42',
     url: 'https://github.com/acme/api/pull/42',
     headRef: 'feat/pagination',
     openedAt: '2026-07-20T08:00:00Z',
@@ -82,6 +88,7 @@ function stored(over: Partial<PullRequestRow> = {}): PullRequestRow {
     repo: 'api',
     number: 42,
     title: 'Ajoute la pagination',
+    body: 'Closes OPS-42',
     state: 'open',
     author: 'alice',
     url: 'https://github.com/acme/api/pull/42',
@@ -114,6 +121,11 @@ describe('mergeOpenPullRequest', () => {
     expect(row?.firstReviewAt).toEqual(held.firstReviewAt);
   });
 
+  it('writes the description, being the only feed that reports one', () => {
+    const row = mergeOpenPullRequest(stored(), open({ body: 'Closes OPS-9' }), SEEN);
+    expect(row?.body).toBe('Closes OPS-9');
+  });
+
   it('does not revoke a merge already recorded', () => {
     // The open listing only ever reports open pull requests, so a stale page of
     // it must not put a merged one back on the dashboard.
@@ -132,6 +144,13 @@ describe('mergeMergedPullRequest', () => {
       repoUrl: 'https://github.com/acme/api',
       state: 'merged',
     });
+  });
+
+  it('writes the description, which it reads off the same payload as the open feed', () => {
+    // Not among what it keeps: both feeds read it from their listing, so
+    // neither is better informed, and an edited description must land.
+    const row = mergeMergedPullRequest(stored(), merged({ body: 'Closes OPS-9' }), SEEN);
+    expect(row.body).toBe('Closes OPS-9');
   });
 
   it('never erases an enrichment a degraded run gave up on', () => {
