@@ -11,7 +11,8 @@
  * `gl:<path>:<iid>` here, spelled exactly as the connectors spell them.
  */
 
-import type { Deployment, Pipeline, PullRequest, PullRequestState } from '@repo/shared';
+import type { Deployment, Pipeline, PullRequestState } from '@repo/shared';
+import type { SourcePullRequest } from '../../sources/connectors/source-connector.interface';
 import {
   mapGitHubDeploymentState,
   mapGitHubStatus,
@@ -21,7 +22,7 @@ import { ageHours } from '../../sources/connectors/scope.util';
 
 /** One thing to write. Null is a perfectly good outcome — most events say nothing. */
 export type IngestIntent =
-  | { kind: 'pull-request'; item: PullRequest }
+  | { kind: 'pull-request'; item: SourcePullRequest }
   | { kind: 'pipeline'; item: Pipeline }
   | { kind: 'deployment'; item: Deployment };
 
@@ -74,6 +75,7 @@ function gitHubPullRequest(body: Payload): IngestIntent | null {
       id: `gh:${repo}:${number}`,
       number,
       title: asString(pr.title) ?? '',
+      body: asString(pr.body) ?? '',
       state: pullRequestState(asString(pr.state), asBoolean(pr.draft), mergedAt),
       author: asString(asObject(pr.user)?.login) ?? 'unknown',
       repo,
@@ -166,6 +168,7 @@ function gitLabMergeRequest(body: Payload): IngestIntent | null {
       id: `gl:${repo}:${iid}`,
       number: iid,
       title: asString(mr.title) ?? '',
+      body: asString(mr.description) ?? '',
       state: pullRequestState(asString(mr.state), draft, mergedAt),
       author: asString(asObject(body.user)?.username) ?? 'unknown',
       repo,

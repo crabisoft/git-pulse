@@ -85,3 +85,68 @@ describe('StoreService.readDeployments', () => {
     expect(deployments[0].createdAt).toBe('2026-07-20T10:00:00.000Z');
   });
 });
+
+/** A stored pull request, with only the columns a read maps back. */
+function prRow(body: string | null) {
+  return {
+    externalId: 'gh:api:42',
+    repo: 'api',
+    number: 42,
+    title: 'Ajoute la pagination',
+    body,
+    state: 'open',
+    author: 'alice',
+    url: 'https://github.com/acme/api/pull/42',
+    repoUrl: 'https://github.com/acme/api',
+    headRef: 'feat/pagination',
+    openedAt: new Date('2026-07-20T08:00:00Z'),
+    updatedAt: new Date('2026-07-25T08:00:00Z'),
+    mergedAt: null as Date | null,
+    reviewers: 2,
+    firstCommitAt: null,
+    firstReviewAt: null,
+    seenAt: new Date('2026-07-27T12:00:00Z'),
+  };
+}
+
+function prStore(rows: ReturnType<typeof prRow>[]) {
+  const prisma = {
+    storedPullRequest: { findMany: vi.fn(async () => rows) },
+    $transaction: (ops: unknown[]) => Promise.all(ops),
+  } as unknown as PrismaService;
+  return new StoreService(prisma);
+}
+
+/** The same row, merged — what a lead-time sample is read from. */
+function mergedRow(body: string | null) {
+  return { ...prRow(body), state: 'merged', mergedAt: new Date('2026-07-26T10:00:00Z') };
+}
+
+describe('StoreService.readPullRequests', () => {
+  it('hands back the description, so a stored source feeds the rules a live one does', async () => {
+    const prs = await prStore([prRow('Closes OPS-42')]).readPullRequests('src', ['api']);
+
+    expect(prs[0].body).toBe('Closes OPS-42');
+  });
+
+  it('reads a row no feed ever told a description as having none', async () => {
+    // A row written before the column existed. Empty rather than null: to a rule
+    // matching against it, a description nobody wrote and an empty one are the
+    // same absence of a key.
+    const prs = await prStore([prRow(null)]).readPullRequests('src', ['api']);
+
+    expect(prs[0].body).toBe('');
+  });
+});
+
+describe('StoreService.readMergedPullRequests', () => {
+  it('hands back the description too, so DORA reads what the board reads', async () => {
+    const prs = await prStore([mergedRow('Closes OPS-42')]).readMergedPullRequests(
+      'src',
+      ['api'],
+      SINCE,
+    );
+
+    expect(prs[0].body).toBe('Closes OPS-42');
+  });
+});

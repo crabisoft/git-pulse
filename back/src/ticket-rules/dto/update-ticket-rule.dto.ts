@@ -1,4 +1,5 @@
-import { IsInt, IsOptional, IsString, Min, MinLength } from 'class-validator';
+import { ArrayNotEmpty, IsIn, IsInt, IsOptional, IsString, Min, MinLength } from 'class-validator';
+import { TICKET_SOURCES, type TicketSource } from '@repo/shared';
 
 /** Partial update — only the supplied keys are persisted. */
 export class UpdateTicketRuleDto {
@@ -16,6 +17,11 @@ export class UpdateTicketRuleDto {
   @IsString()
   @MinLength(1)
   pattern?: string;
+
+  @IsOptional()
+  @ArrayNotEmpty()
+  @IsIn(TICKET_SOURCES, { each: true })
+  sources?: TicketSource[];
 
   @IsOptional()
   @IsInt()

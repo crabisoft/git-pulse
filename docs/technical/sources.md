@@ -101,7 +101,11 @@ read tags and commits, which are not stored.
 
 > Classification and ticket rules still apply **at read time**, exactly as they
 > did: changing a rule takes effect on the next page load, with nothing to
-> re-ingest. Only the platform data is stored, never what we make of it.
+> re-ingest. Only the platform data is stored, never what we make of it — which
+> is why `StoredPullRequest` keeps the **description**: it is a text the
+> platform answered, and a ticket rule reading it must find the same thing in
+> either mode, on the board as in the DORA samples. It is read and dropped,
+> never returned to the front.
 
 [Version rules](versions.md) are the exception to that last sentence, and
 knowingly: what an environment answered can only be known by asking it at the

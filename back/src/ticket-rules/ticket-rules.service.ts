@@ -1,5 +1,12 @@
 import { Injectable, HttpStatus } from '@nestjs/common';
-import type { Page, TicketRef, TicketRulePublic, TrackerKind } from '@repo/shared';
+import {
+  TICKET_SOURCES,
+  type Page,
+  type TicketRef,
+  type TicketRulePublic,
+  type TicketSource,
+  type TrackerKind,
+} from '@repo/shared';
 import { PrismaService } from '../prisma/prisma.service';
 import { CodedException } from '../common/coded-exception';
 import { toPage, type PageWindow } from '../common/pagination';
@@ -23,6 +30,7 @@ export class TicketRulesService {
         trackerId: dto.trackerId,
         name: dto.name,
         pattern: dto.pattern,
+        ...(dto.sources ? { sources: assertReadsSomething(dto.sources) } : {}),
         priority: dto.priority ?? 100,
       },
     });
@@ -51,6 +59,7 @@ export class TicketRulesService {
           trackerId: dto.trackerId,
           name: dto.name,
           pattern: dto.pattern,
+          ...(dto.sources ? { sources: assertReadsSomething(dto.sources) } : {}),
           priority: dto.priority,
         },
       })
@@ -74,6 +83,8 @@ export class TicketRulesService {
   async preview(sample: {
     branch?: string;
     title?: string;
+    body?: string;
+    commit?: string;
     owner?: string;
     repo?: string;
   }): Promise<TicketRef[]> {
@@ -82,24 +93,31 @@ export class TicketRulesService {
       include: { tracker: true },
     });
     return extractTickets(
-      { branch: sample.branch ?? '', title: sample.title ?? '' },
+      {
+        branch: sample.branch,
+        title: sample.title,
+        body: sample.body,
+        commit: sample.commit,
+      },
       rules.map(toRuleLike),
       sample.repo ? { owner: sample.owner ?? '', repo: sample.repo } : undefined,
     );
   }
 
   /**
-   * Whether any rule reaches this source at all.
+   * Which texts the rules reaching this source ask to read, merged.
    *
    * Asked before work whose only purpose is to feed the extraction — resolving
-   * the branch a commit came in on, which costs a call per commit. With no rule
-   * attached there is nothing to find in it, and the answer is one count.
+   * the pull request a commit came in on, which costs a call per commit. With
+   * no rule attached the set is empty and the work is skipped entirely; with
+   * rules that read only the commit message, it is skipped just as well.
    */
-  async anyFor(sourceId: string): Promise<boolean> {
-    const rules = await this.prisma.ticketRule.count({
+  async sourcesFor(sourceId: string): Promise<Set<TicketSource>> {
+    const rules = await this.prisma.ticketRule.findMany({
       where: { tracker: { sources: { some: { sourceId } } } },
+      select: { sources: true },
     });
-    return rules > 0;
+    return new Set(rules.flatMap((rule) => rule.sources as TicketSource[]));
   }
 
   /**
@@ -139,15 +157,35 @@ function assertValidPattern(pattern: string): void {
   }
 }
 
+/**
+ * A rule reading no text is refused rather than stored: it would match nothing,
+ * silently, and look exactly like a rule whose pattern is wrong.
+ */
+function assertReadsSomething(sources: TicketSource[]): TicketSource[] {
+  const kept = TICKET_SOURCES.filter((source) => sources.includes(source));
+  if (kept.length === 0) {
+    throw new CodedException('errors.ticketRule.noSource', HttpStatus.BAD_REQUEST);
+  }
+  return kept;
+}
+
 export function toRuleLike(r: {
   name: string;
   pattern: string;
+  sources: string[];
   priority: number;
-  tracker: { id: string; name: string; kind: string; baseUrl: string; urlTemplate: string | null };
+  tracker: {
+    id: string;
+    name: string;
+    kind: string;
+    baseUrl: string;
+    urlTemplate: string | null;
+  };
 }): TicketRuleLike {
   return {
     name: r.name,
     pattern: r.pattern,
+    sources: r.sources as TicketSource[],
     priority: r.priority,
     tracker: {
       id: r.tracker.id,
@@ -164,6 +202,7 @@ function toPublic(r: {
   trackerId: string;
   name: string;
   pattern: string;
+  sources: string[];
   priority: number;
   createdAt: Date;
   updatedAt: Date;
@@ -173,6 +212,7 @@ function toPublic(r: {
     trackerId: r.trackerId,
     name: r.name,
     pattern: r.pattern,
+    sources: r.sources as TicketSource[],
     priority: r.priority,
     createdAt: r.createdAt.toISOString(),
     updatedAt: r.updatedAt.toISOString(),

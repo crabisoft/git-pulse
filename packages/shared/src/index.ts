@@ -316,11 +316,19 @@ export interface TicketRef {
 }
 
 /** Texts a ticket reference is looked for in, in that order. */
-export type TicketSource = 'branch' | 'title';
+export type TicketSource = 'branch' | 'title' | 'body' | 'commit';
 
 /**
- * A RegEx extracting ticket references from a branch name or a PR title. Kept
- * apart from EnvRule: it yields references rather than attributes.
+ * Reading order, and the order a rule's texts are scanned in: cheapest and most
+ * reliable first, so a key found in several of them is attributed to the branch
+ * that named it rather than to the message that repeated it.
+ */
+export const TICKET_SOURCES: readonly TicketSource[] = ['branch', 'title', 'body', 'commit'];
+
+/**
+ * A RegEx extracting ticket references from a branch name, a PR title, a PR
+ * description or a commit message. Kept apart from EnvRule: it yields
+ * references rather than attributes.
  *
  * It belongs to a tracker and to nothing else — a key format is a property of
  * the tracker. Which sources it applies to follows from the sources attached to
@@ -331,6 +339,11 @@ export interface TicketRulePublic {
   trackerId: string;
   name: string;
   pattern: string;
+  /**
+   * Which texts the pattern is run over. Never empty: a rule reading nothing
+   * would match nothing, which is a rule one deletes rather than one one saves.
+   */
+  sources: TicketSource[];
   priority: number;
   createdAt: string;
   updatedAt: string;

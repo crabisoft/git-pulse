@@ -2,10 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Gitlab } from '@gitbeaker/rest';
 import type {
   Commit,
-  PullRequest,
   Pipeline,
   Deployment,
-  MergedPullRequest,
   PipelineStatus,
   ConnectionTestResult,
   RepoVisibility,
@@ -18,6 +16,8 @@ import type {
   ConnectorContext,
   RefCommit,
   SourceConnector,
+  SourceMergedPullRequest,
+  SourcePullRequest,
 } from './source-connector.interface';
 import { gitlabQuota, type HeaderBag, type QuotaSink } from '../../api-quota/rate-limit-headers';
 import { applyScope, ageHours } from './scope.util';
@@ -117,9 +117,9 @@ export class GitLabConnector implements SourceConnector {
     }));
   }
 
-  async listPullRequests(ctx: ConnectorContext, repos: string[]): Promise<PullRequest[]> {
+  async listPullRequests(ctx: ConnectorContext, repos: string[]): Promise<SourcePullRequest[]> {
     const gl = this.client(ctx);
-    const out: PullRequest[] = [];
+    const out: SourcePullRequest[] = [];
     for (const repo of repos) {
       ctx.signal?.throwIfAborted();
       const mrs = await gl.MergeRequests.all({
@@ -133,6 +133,8 @@ export class GitLabConnector implements SourceConnector {
           id: `gl:${repo}:${mr.iid}`,
           number: mr.iid as number,
           title: mr.title as string,
+          // In the listing's own payload, as on the other platform.
+          body: (mr.description as string | undefined) ?? '',
           state: (mr.draft as boolean) ? 'draft' : 'open',
           author: (mr.author as { username?: string })?.username ?? 'unknown',
           repo,
@@ -231,10 +233,10 @@ export class GitLabConnector implements SourceConnector {
     ctx: ConnectorContext,
     repos: string[],
     since: string,
-  ): Promise<MergedPullRequest[]> {
+  ): Promise<SourceMergedPullRequest[]> {
     const gl = this.client(ctx);
     const sinceMs = new Date(since).getTime();
-    const out: MergedPullRequest[] = [];
+    const out: SourceMergedPullRequest[] = [];
     let skipped = 0;
     for (const repo of repos) {
       ctx.signal?.throwIfAborted();
@@ -267,6 +269,8 @@ export class GitLabConnector implements SourceConnector {
           repo,
           number: mr.iid as number,
           title: mr.title as string,
+          // In the listing's payload, unlike the lead-time segments below.
+          body: (mr.description as string | undefined) ?? '',
           url: mr.web_url as string,
           headRef: (mr.source_branch as string | undefined) ?? '',
           openedAt: mr.created_at as string,
@@ -417,6 +421,9 @@ export class GitLabConnector implements SourceConnector {
             number: iid,
             url: merged.web_url as string,
             headRef: (merged.source_branch as string | undefined) ?? '',
+            // Already in the association's payload, as on the other platform.
+            title: (merged.title as string | undefined) ?? '',
+            body: (merged.description as string | undefined) ?? '',
           });
         }
       } catch {

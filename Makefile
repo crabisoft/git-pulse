@@ -5,12 +5,15 @@ COMPOSE := sh .docker/compose.sh
 mode ?= dev
 # Where `make backup` writes. Override with `out=/somewhere/else`.
 out ?= backup
+# Where `make restore` reads. Defaults to what the backup wrote, so a pair run
+# with the same `out=` needs it stated once.
+in ?= $(out)
 
 .PHONY: help install build typecheck test storybook docs \
         dev dev-down logs restart restart-back ps \
         prod prod-down \
         migrate deploy studio db-reset psql sh-back set-password \
-        backup \
+        backup restore \
         demo demo-clear \
         clean clean-all
 
@@ -116,6 +119,44 @@ backup: ## Back up the database and the master key (usage: make backup [out=back
 	$(COMPOSE) $(mode) exec -T back cat /data/master.key > "$(out)/master.key"
 	@chmod 600 "$(out)/master.key"
 	@echo "Wrote $(out)/dashboard.dump and $(out)/master.key — store the key apart from the dump."
+
+# The inverse, in the one order that works: the database first, then the key
+# **before the API starts**, since it is read once on boot.
+#
+# Destructive where the backup was not. `--clean --if-exists` drops what the
+# dump replaces, so this overwrites the install it is pointed at rather than
+# merging into it — hence the confirmation, which `yes=1` skips for a script.
+# The database is started on its own and waited on: `pg_restore` against a
+# container that is up but not yet accepting connections fails halfway.
+#
+# A missing key is a case rather than a failure: the dump restores, every
+# encrypted column stays unreadable, and each secret is re-entered by hand. That
+# is a documented way out of a lost key, so it is reported and not refused.
+restore: ## Restore the database and the master key (usage: make restore [in=backup] [mode=prod] [yes=1])
+	@test -f "$(in)/dashboard.dump" \
+		|| { echo "No dump at $(in)/dashboard.dump — point at one with in=<directory>."; exit 1; }
+	@test -n "$(yes)" || { \
+		printf 'Replace the %s database with %s? Type yes to continue: ' "$(mode)" "$(in)/dashboard.dump"; \
+		read -r reply; test "$$reply" = yes; \
+	} || { echo "Aborted."; exit 1; }
+	$(COMPOSE) $(mode) up -d db
+	@echo "Waiting for the database to accept connections…"
+	@i=0; until $(COMPOSE) $(mode) exec -T db pg_isready -U dashboard >/dev/null 2>&1; do \
+		i=$$((i + 1)); \
+		test $$i -lt 60 || { echo "The database is still not ready after 60s."; exit 1; }; \
+		sleep 1; \
+	done
+	$(COMPOSE) $(mode) exec -T db pg_restore -U dashboard -d dashboard --clean --if-exists < "$(in)/dashboard.dump"
+	@if [ -f "$(in)/master.key" ]; then \
+		$(COMPOSE) $(mode) run --rm -T back \
+			sh -c 'cat > /data/master.key && chmod 600 /data/master.key' < "$(in)/master.key"; \
+	else \
+		echo "No $(in)/master.key: the stored credentials stay unreadable and each secret has to be"; \
+		echo "re-entered from Settings — see docs/runbooks/backup-and-restore.md."; \
+	fi
+	$(COMPOSE) $(mode) up -d
+	@echo "Restored. Open Settings › Sources and press Test on a source: that call decrypts a token,"
+	@echo "which is what proves the key matches the data."
 
 # ─── Accounts ────────────────────────────────────────────────────────
 # Recovery only: the UI handles accounts. Use it when no admin can sign in —

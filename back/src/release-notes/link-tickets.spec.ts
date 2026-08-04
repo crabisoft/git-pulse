@@ -75,6 +75,46 @@ describe('linkTickets', () => {
     expect(linkTickets('* **auth:** reset a password', [])).toBe('* **auth:** reset a password');
   });
 
+  it('sends a key the renderer linked to the tracker its rule names', () => {
+    const odd = ticket('#42', 'https://jira.example.com/browse/OPS-42');
+    const out = linkTickets('closes [#42](https://gh.example.com/acme/widget/issues/42)', [odd], {
+      prefix: 'https://gh.example.com/acme/widget/issues/',
+      keep: new Map(),
+    });
+
+    expect(out).toBe('closes [#42](https://jira.example.com/browse/OPS-42)');
+  });
+
+  it('unlinks a reference the renderer guessed at and no rule claims', () => {
+    const out = linkTickets('closes [#42](https://gh.example.com/acme/widget/issues/42)', [OPS], {
+      prefix: 'https://gh.example.com/acme/widget/issues/',
+      keep: new Map(),
+    });
+
+    expect(out).toBe('closes #42');
+  });
+
+  it('keeps a default link it was told to keep', () => {
+    const out = linkTickets('lands in [#42](https://gh.example.com/acme/widget/issues/42)', [], {
+      prefix: 'https://gh.example.com/acme/widget/issues/',
+      keep: new Map([['#42', 'https://gh.example.com/acme/widget/pull/42']]),
+    });
+
+    expect(out).toBe('lands in [#42](https://gh.example.com/acme/widget/pull/42)');
+  });
+
+  it('leaves a link somebody wrote themselves alone', () => {
+    // Only the renderer's own guesses are reconsidered. A link in a commit
+    // message was put there on purpose.
+    const written = '[the RFC](https://example.com/rfc)';
+    expect(
+      linkTickets(`see ${written}`, [], {
+        prefix: 'https://gh.example.com/',
+        keep: new Map(),
+      }),
+    ).toBe(`see ${written}`);
+  });
+
   it('survives a key holding regex punctuation', () => {
     const odd = ticket('#42', 'https://github.example.com/acme/widget/issues/42');
     expect(linkTickets('closes #42', [odd])).toBe(

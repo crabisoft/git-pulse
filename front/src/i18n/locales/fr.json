@@ -408,7 +408,8 @@
     },
     "ticketRule": {
       "notFound": "Règle de ticket introuvable.",
-      "invalidPattern": "Expression régulière invalide : {{pattern}}"
+      "invalidPattern": "Expression régulière invalide : {{pattern}}",
+      "noSource": "Une règle doit lire au moins un texte, sans quoi elle ne peut rien reconnaître."
     },
     "version": {
       "bodyTooLarge": "La réponse est plus volumineuse que ce qu'un endpoint de version devrait renvoyer.",
@@ -831,7 +832,7 @@
   },
   "ticketRules": {
     "listTitle": "Règles de ticket",
-    "hint": "Extraites du nom de la branche puis du titre de la PR. Une règle appartient à son tracker : elle s'applique partout où ce tracker est rattaché.",
+    "hint": "Chaque règle indique les textes qu'elle lit. Une règle appartient à son tracker : elle s'applique partout où ce tracker est rattaché, et les liens des release notes sont construits à partir de ce qu'elle a reconnu — rien d'autre.",
     "listEmpty": "Aucune règle pour l'instant.",
     "addTitle": "Ajouter une règle",
     "editTitle": "Modifier « {{name}} »",
@@ -843,13 +844,23 @@
     "testAll": "Tester le jeu de règles",
     "source": {
       "branch": "branche",
-      "title": "titre"
+      "title": "titre de la PR",
+      "body": "description de la PR",
+      "commit": "message de commit"
+    },
+    "sourceHint": {
+      "branch": "la branche source de la pull request",
+      "title": "coûte un appel API par commit à la génération des release notes",
+      "body": "coûte un appel API par commit à la génération des release notes",
+      "commit": "déjà en main — le lire ne coûte rien"
     },
     "form": {
       "name": "Nom",
       "pattern": "Pattern (RegEx)",
       "patternHint": "le groupe nommé (?<key>…) donne la clé ; à défaut, le match entier",
       "tracker": "Tracker",
+      "sources": "S'applique à",
+      "sourcesHint": "les textes sur lesquels ce pattern est passé",
       "priority": "Priorité",
       "priorityHint": "le plus petit gagne quand deux règles revendiquent la même clé",
       "submit": "Ajouter la règle",
@@ -857,9 +868,11 @@
     },
     "preview": {
       "title": "Tester l'extraction",
-      "hint": "Passe une branche et un titre au jeu de règles enregistré. Indispensable pour repérer un pattern trop large : [A-Z]{2,}-\\\\d+ attrape aussi UTF-8.",
+      "hint": "Passe un échantillon de chaque texte lisible au jeu de règles enregistré. Indispensable pour repérer un pattern trop large : [A-Z]{2,}-\\\\d+ attrape aussi UTF-8.",
       "branch": "Nom de branche",
       "prTitle": "Titre de PR",
+      "body": "Description de PR",
+      "commit": "Message de commit",
       "run": "Extraire",
       "found": "Tickets trouvés",
       "none": "aucun",

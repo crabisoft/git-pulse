@@ -806,6 +806,12 @@ textarea {
 .empty p { color: var(--muted); margin: 0 0 20px; }
 
 /* A switch reads as a sentence, so the label sits beside the box, not above it. */
+/* A field whose control is a set of checkboxes. It is the column a label is,
+   except that its name belongs to the set rather than to any one box — so it
+   is a name of its own above them, not the first checkbox's label doing double
+   duty. */
+.form .check-group { display: flex; flex-direction: column; gap: 7px; }
+.form .check-group > .group-name { font-size: .85rem; color: var(--muted); }
 .form label.checkbox { flex-direction: row; align-items: flex-start; gap: 9px; color: var(--ink); }
 .form label.checkbox input { width: auto; margin: 2px 0 0; padding: 0; accent-color: var(--accent); }
 

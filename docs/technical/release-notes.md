@@ -30,9 +30,45 @@ first. A message following no convention is filed under `other` rather than
 dropped, since most histories are mixed. The parser is deliberately strict —
 `Reverting this: fix login` yields nothing rather than a type named `reverting`.
 
-Ticket references are read from commit messages by the **same rules** as branch
-names and PR titles, so a release note links its tickets without any further
-configuration.
+Ticket references are read by the **same rules** as everywhere else, each over
+the texts it declares — see [Ticket references](ticket-references.md). Those
+rules are the **only** thing that creates a ticket link in the notes.
+
+That is a deliberate choice about `#42`. The `conventional-changelog` writer
+links every reference it parses to *this repository's* issues, which is a guess
+about where a team files its tickets; the rules are the answer to that question,
+so they overrule it. A key a rule claims is sent to that rule's tracker, and a
+reference none of them claims is handed back as plain text rather than pointed
+at an issue nobody opened. The one exception is the **request the range itself
+carries**: `(#42)` in a squashed subject is the pull request the change landed
+in, and the entry already knows its URL, so that link is kept.
+
+### Naming a ticket the text never held
+
+Linking can only reach a key the rendered text already contains, and the
+`conventional-changelog` generator renders the commit message and nothing else.
+A ticket the rules read off a **branch name** or a **request's description**
+therefore appears nowhere in it — found by the extraction, and lost by the page.
+
+So a second pass names them. Each rendered line is tied back to its entry by the
+**sha inside the commit link** the writer hangs on every one of them — the only
+thing in that output that identifies a line, a summary being something two
+commits may share. What the line does not already mention is appended after that
+link, where the convention puts its own references:
+
+```
+* **auth:** reset a password ([aaaaaaa](…/commit/aaa…)), [OPS-9](https://acme.atlassian.net/browse/OPS-9)
+```
+
+It adds and never repeats: a key linked in place by the pass above is already a
+mention, and is left alone. A ticket that resolved to no URL is still named —
+the key is what one searches a tracker for, and the link is the bonus.
+
+A commit the preset dropped has no line to be named on, and its tickets stay
+unmentioned. That is the trade-off this generator already is rather than a
+second one: a commit following no convention is absent from these notes
+entirely. The built-in generator has neither problem — it lists an entry's
+tickets on the bullet itself, written in the message or not.
 
 ## Reading a whole range, squashes included
 

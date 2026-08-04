@@ -408,7 +408,8 @@
     },
     "ticketRule": {
       "notFound": "Ticket rule not found.",
-      "invalidPattern": "Invalid regular expression: {{pattern}}"
+      "invalidPattern": "Invalid regular expression: {{pattern}}",
+      "noSource": "A rule must read at least one text, or it can match nothing."
     },
     "version": {
       "bodyTooLarge": "The response is larger than a version endpoint should answer with.",
@@ -831,7 +832,7 @@
   },
   "ticketRules": {
     "listTitle": "Ticket rules",
-    "hint": "Extracted from the branch name, then the PR title. A rule belongs to its tracker: it applies wherever that tracker is attached.",
+    "hint": "Each rule says which texts it reads. A rule belongs to its tracker: it applies wherever that tracker is attached, and the links in the release notes are built from what it recognised — nothing else.",
     "listEmpty": "No rule yet.",
     "addTitle": "Add a rule",
     "editTitle": "Edit \"{{name}}\"",
@@ -843,13 +844,23 @@
     "testAll": "Test the rule set",
     "source": {
       "branch": "branch",
-      "title": "title"
+      "title": "PR title",
+      "body": "PR description",
+      "commit": "commit message"
+    },
+    "sourceHint": {
+      "branch": "the source branch of the pull request",
+      "title": "costs one API call per commit when generating release notes",
+      "body": "costs one API call per commit when generating release notes",
+      "commit": "already in hand — reading it costs nothing"
     },
     "form": {
       "name": "Name",
       "pattern": "Pattern (RegEx)",
       "patternHint": "the (?<key>…) named group yields the key; otherwise the whole match",
       "tracker": "Tracker",
+      "sources": "Applies to",
+      "sourcesHint": "the texts this pattern is run over",
       "priority": "Priority",
       "priorityHint": "lower wins when two rules claim the same key",
       "submit": "Add rule",
@@ -857,9 +868,11 @@
     },
     "preview": {
       "title": "Test extraction",
-      "hint": "Runs the saved rule set over a branch and a title. The way to catch a pattern that matches too much: [A-Z]{2,}-\\\\d+ also eats UTF-8.",
+      "hint": "Runs the saved rule set over a sample of each text a rule may read. The way to catch a pattern that matches too much: [A-Z]{2,}-\\\\d+ also eats UTF-8.",
       "branch": "Branch name",
       "prTitle": "PR title",
+      "body": "PR description",
+      "commit": "Commit message",
       "run": "Extract",
       "found": "Tickets found",
       "none": "none",

@@ -8,20 +8,19 @@
  * database, a clock or an HTTP client to be exercised.
  */
 
+import type { Deployment, Pipeline, PipelineStatus, PullRequestState } from '@repo/shared';
 import type {
-  Deployment,
-  MergedPullRequest,
-  Pipeline,
-  PipelineStatus,
-  PullRequest,
-  PullRequestState,
-} from '@repo/shared';
+  SourceMergedPullRequest,
+  SourcePullRequest,
+} from '../sources/connectors/source-connector.interface';
 
 /** The columns a feed writes on a stored pull request. */
 export interface PullRequestRow {
   repo: string;
   number: number;
   title: string;
+  /** Null where no feed has ever reported one — not the same as an empty one. */
+  body: string | null;
   state: PullRequestState;
   author: string | null;
   url: string;
@@ -96,7 +95,7 @@ export function laterStatus(stored: PipelineStatus | undefined, incoming: Pipeli
  */
 export function mergeOpenPullRequest(
   stored: PullRequestRow | undefined,
-  incoming: PullRequest,
+  incoming: SourcePullRequest,
   seenAt: Date,
 ): PullRequestRow | null {
   const updatedAt = new Date(incoming.updatedAt);
@@ -109,6 +108,7 @@ export function mergeOpenPullRequest(
     repo: incoming.repo,
     number: incoming.number,
     title: incoming.title,
+    body: incoming.body,
     state: settledState(incoming.state, mergedAt),
     author: incoming.author,
     url: incoming.url,
@@ -130,11 +130,13 @@ export function mergeOpenPullRequest(
  * listing reports a state that moves.
  *
  * It reports no author, no reviewer count and no repository URL, so those are
- * kept from whatever the open feed already wrote rather than blanked.
+ * kept from whatever the open feed already wrote rather than blanked. The
+ * description it does report, and writes: both feeds read it off the same
+ * listing payload, so neither is better informed than the other.
  */
 export function mergeMergedPullRequest(
   stored: PullRequestRow | undefined,
-  incoming: MergedPullRequest,
+  incoming: SourceMergedPullRequest,
   seenAt: Date,
 ): PullRequestRow {
   const mergedAt = new Date(incoming.mergedAt);
@@ -147,6 +149,7 @@ export function mergeMergedPullRequest(
     repo: incoming.repo,
     number: incoming.number,
     title: incoming.title,
+    body: incoming.body,
     state: 'merged',
     author: stored?.author ?? null,
     url: incoming.url,
