@@ -8,8 +8,12 @@ from — and why the value and its chart are two different reads — is
 ## Filters
 
 `GET /api/sources/:id/dora` answers a `DoraReport`: the paginated results, plus
-the vocabularies the filter controls need (`repos`, `dimensions`) and the
-`period` actually applied.
+the vocabularies the filter controls need (`repos`, `dimensions`), the `period`
+actually applied, and `truncated` — the listings that ran out of pages before
+reaching the start of that period. Empty is the normal answer, and always the
+answer in `stored` mode, where the read makes no call: what the ingestion
+reached is a property of that run and of the source's depth, not of this read.
+See [What a period costs](sources.md#what-a-period-costs-either-way).
 
 | Parameter | Effect |
 |---|---|
@@ -91,6 +95,37 @@ The correlation is therefore by repository and time — the earliest *successful
 deployment of that repo after the merge. A change merged just before a
 deployment that did not include it is attributed to it anyway, so read
 `deploy_time` as an upper bound rather than a per-commit truth.
+
+### One repo, several deployables
+
+That correlation was reasoned for one repo = one deployable. In a monorepo the
+repo is a constant, so a request touching only the front is paired with whichever
+component deployed first after the merge — not a loose upper bound but a
+measurement of something else.
+
+`componentAttribute` (a setting, null by default) names the dimension that
+designates a deployable. `deploymentsCarrying` then also requires the two sides
+to agree on it — **when both state it**. Where either is silent it falls back to
+repo and time, which is what makes this safe to leave half-configured and safe
+to ship to installs that never touch it: the presence of the attribute *is* the
+declaration, so nothing says "this repo is a monorepo" and nothing has to. The
+rules decide where it appears, and they are already confinable to a repo.
+
+It is a name rather than a comparison of every dimension because a request
+carries attributes a deployment never will — `change=fix` says nothing about
+where the change landed, and requiring agreement on it would pair nothing with
+anything.
+
+Blame follows the same narrowing, `incidentsByDeployment` reading through
+`deploymentCarrying`: an incident traced to a front-end change is counted against
+the front-end release rather than against whatever shipped next.
+
+> The one failure mode this introduces: both sides state a component and
+> **disagree** — `component=api` off the environment names, `component=backend`
+> off the labels. Neither is silent, so the fallback cannot fire, and
+> `deploy_time` empties for that repo. `componentMismatches` reports exactly
+> those pairs — the ones repo-and-time would have matched — and the service logs
+> them, for the same reason the orphan incident combinations below are logged.
 
 `deploy_time` is grouped by the **deployment's** dimensions where the other
 three use the pull request's: how long a change takes to arrive is a property of

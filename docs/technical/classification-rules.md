@@ -11,7 +11,8 @@ Two independent axes:
   yields `app=…`); `meta` only tests membership and adds the **rule name** as a
   meta-environment. A `meta` rule ignores its named groups entirely.
 - **`target`** — `environment` applies to deployment environment names,
-  `repository` to repo names, `incident` to incident labels.
+  `repository` to repo names, `incident` to incident labels, `pull_request` to
+  each label of a merged request, and `pull_request_title` to its title.
 
 `repository` rules exist because a pull request has no environment: without
 them, `lead_time`, `coding_time`, `pickup_time` and `review_time` all fall into
@@ -23,6 +24,21 @@ either, and its labels are how it joins the deployment dimensions. An incident
 accumulates the attributes of every label it carries; on conflict the first
 label wins, labels being sorted so the outcome does not depend on the tracker's
 ordering.
+
+The two `pull_request*` targets exist because `repository` answers nothing in a
+monorepo: one repo name classifies every request identically, so `lead_time` and
+its three segments collapse into the single bucket those rules were created to
+avoid. A label and a title belong to the request rather than to what holds it,
+and both travel in the listing the collection already pages through — unlike the
+changed paths, which describe a monorepo better and cost a call per request.
+
+`toMergedPrEvents` merges the three in the order `PULL_REQUEST_TARGETS` states —
+labels, title, repo — first to state a key keeps it, labels sorted as an
+incident's are. Every subject carries its repo, so a rule confined to one
+contributes here; that is what lets a monorepo be classified by its labels while
+the repos beside it stay classified by their names, with nothing declared per
+repo. The `incident` target deliberately passes none, so its rules stay
+install-wide.
 
 `GET /api/env-rules?target=repository` lists the catalogue one target at a time
 (`environment` by default). `POST /api/sources/:id/env-rules/classify` classifies
