@@ -840,21 +840,30 @@ export const api = {
   /** Repos in a source's scope — free on a stored source, one call on a live one. */
   sourceRepos: (sourceId: string, signal?: AbortSignal) =>
     request<string[]>(`/sources/${sourceId}/repos`, { signal }),
-  /** Tags of a repo, for whoever picks the range a release is cut from. */
-  tags: (sourceId: string, repo: string, signal?: AbortSignal) =>
-    request<Tag[]>(`/sources/${sourceId}/tags${qs({ repo })}`, { signal }),
+  /**
+   * Tags of a repo, for whoever picks the range a release is cut from.
+   * `tagPattern` narrows them to one component's releases, on a repo that tags
+   * several — without it the picker offers tags the defaults would never pick.
+   */
+  tags: (sourceId: string, repo: string, tagPattern?: string, signal?: AbortSignal) =>
+    request<Tag[]>(`/sources/${sourceId}/tags${qs({ repo, tagPattern })}`, { signal }),
   /** Branches of the same repo — a range bound may be either. */
   branches: (sourceId: string, repo: string, signal?: AbortSignal) =>
     request<Branch[]>(`/sources/${sourceId}/branches${qs({ repo })}`, { signal }),
   /** Walks a history, so as expensive as a DORA report — cancellable for that reason. */
   releaseNotes: (
     sourceId: string,
-    query: { repo: string; from?: string; to?: string },
+    query: { repo: string; from?: string; to?: string; tagPattern?: string },
     signal?: AbortSignal,
   ) =>
     request<ReleaseNotes>(
       `/sources/${sourceId}/release-notes` +
-        qs({ repo: query.repo, from: query.from, to: query.to }),
+        qs({
+          repo: query.repo,
+          from: query.from,
+          to: query.to,
+          tagPattern: query.tagPattern,
+        }),
       { signal },
     ),
   /** Bound to no source: the notes travel in the body, already generated. */

@@ -221,6 +221,11 @@ export interface ReleaseNotesRange {
   repo: string;
   from: string;
   to: string;
+  /**
+   * Which tags count as releases of the thing being summarised, on a repo that
+   * tags several. Empty means every tag does — one repo, one deployable.
+   */
+  tagPattern: string;
 }
 
 export const releaseNotesCodec: UrlCodec<ReleaseNotesRange> = {
@@ -228,12 +233,14 @@ export const releaseNotesCodec: UrlCodec<ReleaseNotesRange> = {
     repo: params.get('repo') ?? '',
     from: params.get('from') ?? '',
     to: params.get('to') ?? '',
+    tagPattern: params.get('tagPattern') ?? '',
   }),
   serialize: (query) => {
     const params = new URLSearchParams();
     if (query.repo) params.set('repo', query.repo);
     if (query.from) params.set('from', query.from);
     if (query.to) params.set('to', query.to);
+    if (query.tagPattern) params.set('tagPattern', query.tagPattern);
     return params;
   },
 };

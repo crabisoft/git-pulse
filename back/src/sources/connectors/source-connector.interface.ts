@@ -9,6 +9,7 @@ import type {
   RepositoryRef,
   Tag,
   Branch,
+  TruncatedRead,
 } from '@repo/shared';
 import type { QuotaSink } from '../../api-quota/rate-limit-headers';
 
@@ -56,6 +57,21 @@ export interface ConnectorContext {
    * an install whose consumption nobody knows, attempts everything.
    */
   allowsOptionalCalls?: () => boolean;
+  /**
+   * How many pages a bounded listing may read before giving up on reaching its
+   * bound. Absent means the connector's own default — a connector run outside
+   * a Nest context has no settings to read.
+   */
+  maxPages?: number;
+  /**
+   * Where a listing says it ran out of pages before reaching the date it was
+   * bounded by. It travels here for the same reason the quota sink does: the
+   * connector states what it observed, and the caller decides whether anybody
+   * is told.
+   *
+   * Absent when nobody is collecting, which is every caller that only logs.
+   */
+  onTruncated?: (read: TruncatedRead) => void;
 }
 
 /** A commit a ref points at, or the one two refs last had in common. */
@@ -204,6 +220,13 @@ export interface SourceConnector {
 export interface SourcePullRequest extends PullRequest {
   /** Empty when the platform reports none, which is a description of nothing. */
   body: string;
+  /**
+   * Labels, carried here for the same reason as the description: both feeds
+   * read them off the listing they already page through, and the open board
+   * displays none of them. Writing them from this feed too is what stops a
+   * synchronisation of open requests from blanking what the merged one wrote.
+   */
+  labels: string[];
 }
 
 /**

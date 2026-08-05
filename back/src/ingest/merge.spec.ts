@@ -31,6 +31,7 @@ function open(over: Partial<SourcePullRequest> = {}): SourcePullRequest {
     mergedAt: null,
     reviewers: 2,
     ageHours: 168,
+    labels: ['area/api'],
     tickets: [],
     ...over,
   };
@@ -49,6 +50,7 @@ function merged(over: Partial<SourceMergedPullRequest> = {}): SourceMergedPullRe
     firstCommitAt: '2026-07-19T17:00:00Z',
     firstReviewAt: '2026-07-22T09:00:00Z',
     mergedAt: '2026-07-26T10:00:00Z',
+    labels: ['area/api'],
     ...over,
   };
 }
@@ -100,6 +102,7 @@ function stored(over: Partial<PullRequestRow> = {}): PullRequestRow {
     reviewers: 2,
     firstCommitAt: null,
     firstReviewAt: null,
+    labels: ['area/api'],
     seenAt: SEEN,
     ...over,
   };

@@ -18,6 +18,7 @@ function mergedPr(over: Partial<SourceMergedPullRequest> = {}): SourceMergedPull
     firstCommitAt: '2026-07-19T17:00:00.000Z',
     firstReviewAt: '2026-07-22T09:00:00.000Z',
     mergedAt: '2026-07-26T10:00:00.000Z',
+    labels: [],
     ...over,
   };
 }

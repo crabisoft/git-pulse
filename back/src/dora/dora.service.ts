@@ -12,6 +12,7 @@ import type {
   Page,
   PipelineStatus,
   RuleTarget,
+  TruncatedRead,
 } from '@repo/shared';
 import { CodedException } from '../common/coded-exception';
 import type { SourceMergedPullRequest } from '../sources/connectors/source-connector.interface';
@@ -30,6 +31,7 @@ import { TrackersService } from '../trackers/trackers.service';
 import { TicketRulesService } from '../ticket-rules/ticket-rules.service';
 import { SettingsService } from '../settings/settings.service';
 import {
+  componentMismatches,
   deploymentFrequency,
   changeFailureRate,
   deployTime,
@@ -81,6 +83,10 @@ interface GatheredEvents {
   incidentEvents: IncidentEvent[];
   allRepos: string[];
   failureSource: FailureSource;
+  /** Attribute designating a deployable, null where none is configured. */
+  componentAttribute: string | null;
+  /** Listings that never reached the start of the period they were asked for. */
+  truncated: TruncatedRead[];
 }
 
 @Injectable()
@@ -120,10 +126,10 @@ export class DoraService {
    * screen of.
    */
   async report(sourceId: string, query: DoraQuery, signal?: AbortSignal): Promise<DoraReport> {
-    const { results, repos, period } = await this.build(sourceId, query, signal);
+    const { results, repos, period, truncated } = await this.build(sourceId, query, signal);
     const dimensions = collectDimensions(results);
     const sliced = results.filter((r) => matchesDimensions(r.dimensions, query.dimensions));
-    return { results: foldByMetric(sliced), repos, dimensions, period };
+    return { results: foldByMetric(sliced), repos, dimensions, period, truncated };
   }
 
   /**
@@ -151,7 +157,12 @@ export class DoraService {
     maxPoints: number,
     signal?: AbortSignal,
   ): Promise<DoraReport & { trend: DoraResult[][] }> {
-    const { results, repos, period, slices } = await this.build(sourceId, query, signal, maxPoints);
+    const { results, repos, period, slices, truncated } = await this.build(
+      sourceId,
+      query,
+      signal,
+      maxPoints,
+    );
     const sliced = (of: (DoraResult | MeasuredResult)[]) =>
       of.filter((r) => matchesDimensions(r.dimensions, query.dimensions));
     return {
@@ -159,6 +170,7 @@ export class DoraService {
       repos,
       dimensions: collectDimensions(results),
       period,
+      truncated,
       trend: slices.map((slice) => foldByMetric(sliced(slice))),
     };
   }
@@ -208,15 +220,21 @@ export class DoraService {
     repos: string[];
     period: ResolvedRange;
     slices: (DoraResult | MeasuredResult)[][];
+    truncated: TruncatedRead[];
   }> {
     const period = await this.resolveRange(query);
     const gathered = await this.gather(sourceId, period.from, query.repos, signal);
-    const context = { failureSource: gathered.failureSource, sourceId };
+    const context = {
+      failureSource: gathered.failureSource,
+      componentAttribute: gathered.componentAttribute,
+      sourceId,
+    };
     return {
       results: this.computeOver(gathered, period, context),
       // The full list stays the filter vocabulary, exactly like the dashboard.
       repos: gathered.allRepos,
       period,
+      truncated: gathered.truncated,
       slices: sliceRange(period, maxPoints).map((slice) =>
         // Quiet: the slices are the same events a dozen times over, so a gap
         // worth warning about has already been reported by the computation
@@ -245,13 +263,22 @@ export class DoraService {
     repoFilter: string[] | undefined,
     signal?: AbortSignal,
   ): Promise<GatheredEvents> {
-    const reader = await this.readers.for(sourceId, signal);
+    // Collected rather than logged and forgotten: a window read short produces
+    // figures that look ordinary, so the report has to carry the caveat.
+    const truncated: TruncatedRead[] = [];
+    const seen = new Set<string>();
+    const reader = await this.readers.for(sourceId, signal, (read) => {
+      const key = `${read.repo}\u0000${read.resource}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      truncated.push(read);
+    });
     const allRepos = await reader.listRepositories();
     // Scoping here rather than after the fact: the connectors iterate repo by
     // repo, so a narrower list is also fewer API calls.
     const repos = filterRepos(allRepos, repoFilter);
 
-    const { failureSource, incidentLabels } = await this.settings.get();
+    const { failureSource, incidentLabels, componentAttribute } = await this.settings.get();
     // Which tracker the incidents come from is a property of the source, not of
     // its Git platform: a GitHub org may well file its incidents elsewhere.
     const incidentTracker =
@@ -307,7 +334,15 @@ export class DoraService {
       this.toIncidentEvents(sourceId, owner, incidents),
     ]);
 
-    return { deploymentEvents, prEvents, incidentEvents, allRepos, failureSource };
+    return {
+      deploymentEvents,
+      prEvents,
+      incidentEvents,
+      allRepos,
+      failureSource,
+      componentAttribute,
+      truncated,
+    };
   }
 
   /**
@@ -325,16 +360,26 @@ export class DoraService {
       incidentEvents: IncidentEvent[];
     },
     period: ResolvedRange,
-    context: { failureSource: FailureSource; sourceId: string; quiet?: boolean },
+    context: {
+      failureSource: FailureSource;
+      sourceId: string;
+      componentAttribute: string | null;
+      quiet?: boolean;
+    },
   ): (DoraResult | MeasuredResult)[] {
     const deploymentEvents = events.deploymentEvents.filter((d) => within(d.createdAt, period));
     const prEvents = events.prEvents.filter((p) => within(p.mergedAt, period));
     const incidentEvents = events.incidentEvents.filter((i) => within(i.openedAt, period));
-    const { failureSource, sourceId } = context;
+    const { failureSource, sourceId, componentAttribute } = context;
 
     // A shared ticket between an incident and a merged pull request says which
     // deployment broke what — the question the failure rate actually asks.
-    const linked = incidentsByDeployment(incidentEvents, prEvents, deploymentEvents);
+    const linked = incidentsByDeployment(
+      incidentEvents,
+      prEvents,
+      deploymentEvents,
+      componentAttribute,
+    );
 
     // What is left divides by deployments, so a slice with no deployment
     // produces no rate at all. Saying so beats letting numbers go missing.
@@ -346,12 +391,26 @@ export class DoraService {
       );
     }
 
+    // The other way a slice goes missing, and the only one the component test
+    // can cause: both sides name a deployable and they disagree. Named here
+    // because the metric it empties says nothing at all about why.
+    const mismatched = componentMismatches(prEvents, deploymentEvents, componentAttribute);
+    if (mismatched.length > 0 && !context.quiet) {
+      this.logger.warn(
+        `${mismatched.length} repo/${componentAttribute} pair(s) have merged pull requests ` +
+          `whose ${componentAttribute} matches no deployment of the same repo (${sourceId}): ` +
+          `${mismatched.map((m) => `${m.repo}=${m.component}`).join(', ')}. ` +
+          `Deploy time is empty for them — the environment rules and the pull request rules ` +
+          `are extracting different values.`,
+      );
+    }
+
     return [
       ...deploymentFrequency(deploymentEvents),
       ...changeFailureRate(deploymentEvents, incidentEvents, failureSource, linked),
       ...mttr(deploymentEvents, incidentEvents, failureSource, linked),
       ...leadTimeBreakdown(prEvents),
-      ...deployTime(prEvents, deploymentEvents),
+      ...deployTime(prEvents, deploymentEvents, componentAttribute),
     ];
   }
 
@@ -403,7 +462,12 @@ export class DoraService {
       };
       const results = this.computeOver(gathered, period, {
         failureSource: gathered.failureSource,
+        componentAttribute: gathered.componentAttribute,
         sourceId,
+        // One replay writes as many days as the depth asks for, and every one
+        // of them reads the same events: a mismatch worth naming would be named
+        // once per day otherwise.
+        quiet: true,
       });
       // A day with no event produces no result, so it writes no row: an empty
       // window must leave a gap in the series, never a flat zero somebody
@@ -493,9 +557,21 @@ export class DoraService {
   }
 
   /**
-   * A PR has no environment, so its dimensions come from classifying the repo
-   * name against the `repository` rules. Without such rules every PR lands in
-   * the same bucket — the historical behavior.
+   * A PR has no environment, so its dimensions come from three targets, merged
+   * in the order `PULL_REQUEST_TARGETS` states: its labels, its title, then the
+   * name of its repo. The first to state a key keeps it. Without any such rule
+   * every PR lands in the same bucket — the historical behavior.
+   *
+   * The repo alone used to be the whole answer, which holds only where one repo
+   * is one deployable. In a monorepo the name is a constant, so every request
+   * classified alike and the lead time was a single global figure; the labels
+   * and the title are what a request carries of its own, and both travel in the
+   * listing already read.
+   *
+   * Every subject states its repo, so a rule confined to one contributes here —
+   * which is what lets a monorepo be classified by its labels while the repos
+   * beside it keep being classified by their names, with no setting to say
+   * which is which.
    */
   private async toMergedPrEvents(
     sourceId: string,
@@ -503,7 +579,17 @@ export class DoraService {
     prs: SourceMergedPullRequest[],
   ): Promise<MergedPrEvent[]> {
     const inWindow = prs;
-    const [dimensionsByRepo, tickets] = await Promise.all([
+    const [byLabel, byTitle, byRepo, tickets] = await Promise.all([
+      this.dimensionsFor(
+        sourceId,
+        inWindow.flatMap((p) => p.labels.map((name) => ({ name, repo: p.repo }))),
+        'pull_request',
+      ),
+      this.dimensionsFor(
+        sourceId,
+        inWindow.map((p) => ({ name: p.title, repo: p.repo })),
+        'pull_request_title',
+      ),
       // The subject is the repo name, so the repo is known by construction.
       this.dimensionsFor(
         sourceId,
@@ -517,17 +603,34 @@ export class DoraService {
       ),
     ]);
 
-    return inWindow.map((p, i) => ({
-      repo: p.repo,
-      number: p.number,
-      url: p.url,
-      firstCommitAt: p.firstCommitAt,
-      openedAt: p.openedAt,
-      firstReviewAt: p.firstReviewAt,
-      mergedAt: p.mergedAt,
-      tickets: tickets[i],
-      dimensions: dimensionsByRepo.get(subjectKey({ name: p.repo, repo: p.repo })) ?? {},
-    }));
+    return inWindow.map((p, i) => {
+      const dimensions: Record<string, string> = {};
+      const take = (attributes: Record<string, string> | undefined) => {
+        for (const [key, value] of Object.entries(attributes ?? {})) {
+          if (!(key in dimensions)) dimensions[key] = value;
+        }
+      };
+      // Labels sorted, exactly as an incident's are: a request carrying two
+      // that disagree must not classify differently because the platform
+      // listed them in another order.
+      for (const label of [...p.labels].sort()) {
+        take(byLabel.get(subjectKey({ name: label, repo: p.repo })));
+      }
+      take(byTitle.get(subjectKey({ name: p.title, repo: p.repo })));
+      take(byRepo.get(subjectKey({ name: p.repo, repo: p.repo })));
+
+      return {
+        repo: p.repo,
+        number: p.number,
+        url: p.url,
+        firstCommitAt: p.firstCommitAt,
+        openedAt: p.openedAt,
+        firstReviewAt: p.firstReviewAt,
+        mergedAt: p.mergedAt,
+        tickets: tickets[i],
+        dimensions,
+      };
+    });
   }
 
   /**

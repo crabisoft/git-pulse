@@ -766,6 +766,13 @@ textarea {
    full, which is the width worth having. */
 .filter-field.wide { flex: 1; min-width: 240px; }
 .filter-field.wide input { flex: 1; min-width: 0; }
+/* The opposite trade, for values short by nature — a tag is `front@1.3.0`, not
+   a repository path. Narrow enough that a bar holding a repo, a component and
+   two bounds stays one bar, wide enough for a version and the qualifier a
+   branch carries after it. Past that a name truncates, which is the right
+   casualty here: the picker is open when it is being read from. */
+.filter-field.narrow select { max-width: 160px; }
+.filter-field.narrow input { width: 120px; }
 .period-filter label, .dimension-filter label, .filter-field { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: .8rem; }
 .period-effective { font-size: .78rem; font-variant-numeric: tabular-nums; }
 

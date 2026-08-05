@@ -77,15 +77,20 @@ export function deploymentFrequency(deployments: DeploymentEvent[]): DoraResult[
  * broke something — where matching on dimensions alone only asks whether a
  * failure happened in the same slice. Incidents with no ticket in common fall
  * back to that slice, so nothing is lost while the rules are still thin.
+ *
+ * The component narrows which deployment carried the request, so blame follows
+ * it: in a monorepo, an incident traced to a front-end change is counted
+ * against the front-end release rather than against whatever shipped next.
  */
 export function incidentsByDeployment(
   incidents: IncidentEvent[],
   prs: MergedPrEvent[],
   deployments: DeploymentEvent[],
+  componentKey: string | null = null,
 ): Map<DeploymentEvent, IncidentEvent[]> {
   const carrier = new Map<string, DeploymentEvent>();
   for (const pr of prs) {
-    const deployment = deploymentCarrying(pr, deployments);
+    const deployment = deploymentCarrying(pr, deployments, componentKey);
     if (!deployment) continue;
     for (const ticket of pr.tickets) carrier.set(ticketKey(ticket), deployment);
   }
@@ -258,20 +263,81 @@ export function mttr(
  * PR merged just before a deployment that did not include it is attributed to
  * it anyway. Read `deploy_time` as an upper bound on how quickly changes reach
  * an environment, not as a per-commit truth.
+ *
+ * `componentKey` narrows it further where one repo holds several deployables.
+ * The repo is a constant in a monorepo, so on its own it pairs a request that
+ * touched the front with whichever component happened to deploy first — an
+ * upper bound on nothing, since it measures another component's release.
  */
 export function deploymentsCarrying(
   pr: MergedPrEvent,
   deployments: DeploymentEvent[],
+  componentKey: string | null = null,
 ): DeploymentEvent[] {
   const mergedAt = msOf(pr.mergedAt);
   const earliest = new Map<string, DeploymentEvent>();
   for (const d of deployments) {
     if (d.repo !== pr.repo || d.status !== 'success') continue;
     if (msOf(d.createdAt) < mergedAt) continue;
+    if (!sameComponent(componentKey, pr.dimensions, d.dimensions)) continue;
     const held = earliest.get(d.environment);
     if (!held || msOf(d.createdAt) < msOf(held.createdAt)) earliest.set(d.environment, d);
   }
   return [...earliest.values()];
+}
+
+/**
+ * Whether a request and a deployment speak of the same deployable.
+ *
+ * True wherever the question does not arise: no component attribute configured,
+ * or one of the two silent about it. Deliberately **not** treating silence as a
+ * wildcard match against a stated value either — it is a fallback onto repository
+ * and time, which is what the correlation did before any of this existed.
+ *
+ * That is what lets one install hold a monorepo and a dozen ordinary repos with
+ * nothing to declare: the rules produce the attribute where they were written
+ * to, and the pairs that carry it on both sides are the only ones narrowed.
+ * A half-written rule set therefore degrades to the old behaviour rather than
+ * to an empty metric.
+ */
+function sameComponent(
+  componentKey: string | null,
+  pr: Record<string, string>,
+  deployment: Record<string, string>,
+): boolean {
+  if (!componentKey) return true;
+  const left = pr[componentKey];
+  const right = deployment[componentKey];
+  if (left === undefined || right === undefined) return true;
+  return left === right;
+}
+
+/**
+ * Repo and component of every request the component test left with nothing,
+ * where repository and time alone would have found a deployment.
+ *
+ * The one way this can go wrong: both sides state a component and they disagree
+ * — `component=api` extracted from environment names, `component=backend` from
+ * labels. The fallback above cannot fire, since neither side is silent, and
+ * `deploy_time` empties for that repo without saying why. Reported for the same
+ * reason orphan incident combinations are: a metric that goes missing is worth
+ * a line in the log, and the fix is one rule away once it is named.
+ */
+export function componentMismatches(
+  prs: MergedPrEvent[],
+  deployments: DeploymentEvent[],
+  componentKey: string | null,
+): Array<{ repo: string; component: string }> {
+  if (!componentKey) return [];
+  const found = new Map<string, { repo: string; component: string }>();
+  for (const pr of prs) {
+    const component = pr.dimensions[componentKey];
+    if (component === undefined) continue;
+    if (deploymentsCarrying(pr, deployments, componentKey).length > 0) continue;
+    if (deploymentsCarrying(pr, deployments).length === 0) continue;
+    found.set(`${pr.repo} ${component}`, { repo: pr.repo, component });
+  }
+  return [...found.values()];
 }
 
 /**
@@ -284,8 +350,9 @@ export function deploymentsCarrying(
 export function deploymentCarrying(
   pr: MergedPrEvent,
   deployments: DeploymentEvent[],
+  componentKey: string | null = null,
 ): DeploymentEvent | null {
-  return deploymentsCarrying(pr, deployments).reduce<DeploymentEvent | null>(
+  return deploymentsCarrying(pr, deployments, componentKey).reduce<DeploymentEvent | null>(
     (earliest, d) => (!earliest || msOf(d.createdAt) < msOf(earliest.createdAt) ? d : earliest),
     null,
   );
@@ -348,14 +415,18 @@ export function leadTimeBreakdown(prs: MergedPrEvent[]): DoraResult[] {
  * contributes a sample to each, so the sample sizes here count landings rather
  * than pull requests.
  */
-export function deployTime(prs: MergedPrEvent[], deployments: DeploymentEvent[]): DoraResult[] {
+export function deployTime(
+  prs: MergedPrEvent[],
+  deployments: DeploymentEvent[],
+  componentKey: string | null = null,
+): DoraResult[] {
   const samplesByKey = new Map<string, { dimensions: Record<string, string>; samples: DoraSample[] }>();
 
   for (const pr of prs) {
     // One sample per environment the change reached: a pull request that goes
     // to pre-production and then to production took two different times, and
     // both are worth a reading.
-    for (const deployment of deploymentsCarrying(pr, deployments)) {
+    for (const deployment of deploymentsCarrying(pr, deployments, componentKey)) {
       const key = dimensionKey(deployment.dimensions);
       const bucket = samplesByKey.get(key) ?? { dimensions: deployment.dimensions, samples: [] };
       bucket.samples.push({

@@ -22,6 +22,7 @@ function pullRequest(over: Partial<SourcePullRequest> = {}): SourcePullRequest {
     mergedAt: null,
     reviewers: 2,
     ageHours: 168,
+    labels: [],
     tickets: [],
     ...over,
   };

@@ -70,6 +70,20 @@ export class UpdateSettingsDto {
   @IsInt()
   quotaReservePct?: number;
 
+  /**
+   * Attribute designating a deployable, for the pull request → deployment
+   * correlation. Empty clears it, which is why no `MinLength` guards it: an
+   * install saying it has none must be able to say so.
+   */
+  @IsOptional()
+  @IsString()
+  componentAttribute?: string;
+
+  /** Pages a bounded listing reads per repo before giving up on its bound. */
+  @IsOptional()
+  @IsInt()
+  collectionPageCap?: number;
+
   /** Which engine renders the Markdown of a release note. */
   @IsOptional()
   @IsEnum(RELEASE_NOTES_GENERATORS)

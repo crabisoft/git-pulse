@@ -10,6 +10,7 @@ import type {
   RepositoryRef,
   Tag,
   Branch,
+  TruncatedRead,
 } from '@repo/shared';
 import type {
   CommitPullRequest,
@@ -57,8 +58,41 @@ const MAX_PAGES = 20;
  * a live view wants nor what an ingestion is asked for. `maxPages` is the only
  * way to say otherwise, and it is ignored unless `perPage` travels with it.
  */
-function bound(since: string | undefined): { maxPages: number } {
-  return { maxPages: since ? MAX_PAGES : 1 };
+function bound(since: string | undefined, ctx: ConnectorContext): { maxPages: number } {
+  return { maxPages: since ? (ctx.maxPages ?? MAX_PAGES) : 1 };
+}
+
+/**
+ * Whether a bounded listing stopped short of the date it was bounded by.
+ *
+ * gitbeaker gives no signal of its own: `.all()` simply returns fewer pages
+ * than it would have, and a caller cannot tell that from a project that had
+ * nothing more to give. What can be told is the result — if nothing it returned
+ * is older than the bound, the far end was never reached, and the window is
+ * whatever those rows happened to span.
+ *
+ * The GitHub connector knows the same thing by counting its own pages; this is
+ * the same question asked of the answer instead of of the loop.
+ */
+function reportIfTruncated<T>(
+  ctx: ConnectorContext,
+  repo: string,
+  resource: TruncatedRead['resource'],
+  items: T[],
+  at: (item: T) => string | undefined,
+  since: string | undefined,
+  logger: Logger,
+): void {
+  if (!since || items.length === 0) return;
+  const sinceMs = new Date(since).getTime();
+  const reached = items.some((item) => {
+    const date = at(item);
+    return date !== undefined && new Date(date).getTime() < sinceMs;
+  });
+  if (reached) return;
+  const cap = ctx.maxPages ?? MAX_PAGES;
+  logger.warn(`History truncated for ${repo}: ${cap} pages read without reaching ${since}.`);
+  ctx.onTruncated?.({ repo, resource });
 }
 
 /** GitLab connector — gitlab.com or a self-hosted instance via baseUrl. */
@@ -146,6 +180,7 @@ export class GitLabConnector implements SourceConnector {
           mergedAt: (mr.merged_at as string) ?? null,
           reviewers: Array.isArray(mr.reviewers) ? mr.reviewers.length : 0,
           ageHours: ageHours(createdAt),
+          labels: labelNames(mr.labels),
           // Filled by the service, which owns the rules.
           tickets: [],
         });
@@ -160,10 +195,19 @@ export class GitLabConnector implements SourceConnector {
     for (const repo of repos) {
       ctx.signal?.throwIfAborted();
       const pipelines = await gl.Pipelines.all(repo, {
-        ...bound(since),
+        ...bound(since, ctx),
         ...(since ? { createdAfter: since } : {}),
         perPage: since ? DEEP_PAGE : LIVE_PIPELINE_PAGE,
       });
+      reportIfTruncated(
+        ctx,
+        repo,
+        'pipelines',
+        pipelines,
+        (p) => p.created_at as string | undefined,
+        since,
+        this.logger,
+      );
       for (const p of pipelines) {
         out.push({
           id: `gl:${repo}:${p.id}`,
@@ -195,10 +239,22 @@ export class GitLabConnector implements SourceConnector {
       // does not filter on: a deployment is only ever updated after it is
       // created, so this reads a superset of the window and never less than it.
       const deployments = await gl.Deployments.all(repo, {
-        ...bound(since),
+        ...bound(since, ctx),
         ...(since ? { updatedAfter: since } : {}),
         perPage: since ? DEEP_PAGE : LIVE_DEPLOYMENT_PAGE,
       });
+      // Read on `updatedAfter`, so that is the field the bound is tested on:
+      // asking whether a creation date got there would call a listing short
+      // whenever the oldest row was merely touched recently.
+      reportIfTruncated(
+        ctx,
+        repo,
+        'deployments',
+        deployments,
+        (d) => (d.updated_at as string | undefined) ?? (d.created_at as string | undefined),
+        since,
+        this.logger,
+      );
       for (const d of deployments) {
         // The environment travels embedded in the listing, so its external URL
         // comes free — when the environment was configured with one at all.
@@ -245,8 +301,17 @@ export class GitLabConnector implements SourceConnector {
         state: 'merged',
         updatedAfter: since,
         perPage: LIVE_MERGED_PAGE,
-        maxPages: MAX_PAGES,
+        maxPages: ctx.maxPages ?? MAX_PAGES,
       });
+      reportIfTruncated(
+        ctx,
+        repo,
+        'merged_pull_requests',
+        mrs,
+        (mr) => mr.updated_at as string | undefined,
+        since,
+        this.logger,
+      );
       for (const mr of mrs) {
         const mergedAt = mr.merged_at as string | null;
         if (!mergedAt || new Date(mergedAt).getTime() < sinceMs) continue;
@@ -277,6 +342,7 @@ export class GitLabConnector implements SourceConnector {
           firstCommitAt,
           firstReviewAt,
           mergedAt,
+          labels: labelNames(mr.labels),
         });
       }
     }
@@ -639,4 +705,17 @@ export function mapGitLabStatus(status: string): PipelineStatus {
 
 function asMessage(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
+}
+
+/**
+ * Label names off a merge-request payload.
+ *
+ * GitLab answers plain strings, scoped labels included — `size::M` is one label
+ * whose name carries its own family. Nothing is split on the separator here: a
+ * rule that cares about the family says so in its pattern, and splitting would
+ * invent two labels where the platform reports one.
+ */
+function labelNames(labels: unknown): string[] {
+  if (!Array.isArray(labels)) return [];
+  return labels.filter((label): label is string => typeof label === 'string' && label.length > 0);
 }
