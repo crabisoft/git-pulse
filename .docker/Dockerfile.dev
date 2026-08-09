@@ -25,6 +25,11 @@ RUN python3 -m venv $DOCS_VENV \
 # unset, which a slim image is.
 ENV LANG=C.UTF-8
 
+# So a `make` typed in here — from `make sh-back`, say — runs the checks on the
+# spot, instead of looking for a Docker daemon to enter the container it is
+# already in.
+ENV DEVCONTAINER=true
+
 WORKDIR /app
 
 # The dependency directories are named volumes, and a volume created empty takes

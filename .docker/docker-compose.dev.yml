@@ -48,6 +48,7 @@ services:
       - master-key:/data
     ports:
       - "${API_PORT:-3001}:${API_PORT:-3001}"
+      - "${STUDIO_PORT:-5555}:5555"
     depends_on:
       db:
         condition: service_healthy
