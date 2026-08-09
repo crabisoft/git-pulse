@@ -19,12 +19,13 @@ npm run prisma:deploy -w @repo/back
 # A schema edited without a migration is a column that exists on one machine and
 # nowhere else. --exit-code turns "they differ" into a failure rather than a
 # report nobody reads.
+#
+# From back/, where the config the CLI takes the shadow database from lives.
 echo "→ Checking that the schema and the migrations agree"
-npx prisma migrate diff \
-  --from-migrations back/prisma/migrations \
-  --to-schema-datamodel back/prisma/schema.prisma \
-  --shadow-database-url "$SHADOW_DATABASE_URL" \
-  --exit-code
+(cd back && npx prisma migrate diff \
+  --from-migrations prisma/migrations \
+  --to-schema prisma/schema.prisma \
+  --exit-code)
 
 echo "→ Building the API"
 npm run build:shared
