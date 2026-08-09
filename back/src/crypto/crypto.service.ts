@@ -6,11 +6,11 @@ const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12; // 96-bit nonce, recommended for GCM
 const AUTH_TAG_LENGTH = 16;
 
-/** Encryption output — persisted as-is (bytea columns). */
+/** Encryption output — persisted as-is, in the type a Bytes column now has. */
 export interface EncryptedSecret {
-  ciphertext: Buffer;
-  iv: Buffer;
-  authTag: Buffer;
+  ciphertext: Uint8Array<ArrayBuffer>;
+  iv: Uint8Array<ArrayBuffer>;
+  authTag: Uint8Array<ArrayBuffer>;
   keyVersion: number;
 }
 

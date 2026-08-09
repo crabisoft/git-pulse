@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { prismaAdapter } from '../prisma/adapter';
 import { hashPassword } from '../auth/password';
 
 /**
@@ -466,7 +467,7 @@ function repoOf(app: string): string {
 }
 
 async function main(): Promise<void> {
-  const prisma = new PrismaClient();
+  const prisma = new PrismaClient({ adapter: prismaAdapter() });
   const now = Date.now();
 
   try {

@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { prismaAdapter } from '../prisma/adapter';
 import { hashPassword } from '../auth/password';
 import { PASSWORD_MIN_LENGTH } from '@repo/shared';
 
@@ -24,7 +25,7 @@ async function main(): Promise<void> {
     fail(`The password must be at least ${PASSWORD_MIN_LENGTH} characters.`);
   }
 
-  const prisma = new PrismaClient();
+  const prisma = new PrismaClient({ adapter: prismaAdapter() });
   try {
     const normalized = email.trim().toLowerCase();
     const passwordHash = await hashPassword(password);
