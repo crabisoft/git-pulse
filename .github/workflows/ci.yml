@@ -18,9 +18,9 @@ jobs:
     name: Typecheck and tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -51,7 +51,7 @@ jobs:
     name: Production images
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The images are how the project is meant to be deployed, so a broken
       # Dockerfile is a broken release.
