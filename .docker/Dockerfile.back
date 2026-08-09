@@ -26,7 +26,11 @@ COPY --from=build /app/packages/shared/dist ./packages/shared/dist
 COPY --from=build /app/packages/shared/package.json ./packages/shared/
 COPY --from=build /app/back/dist ./back/dist
 COPY --from=build /app/back/prisma ./back/prisma
+COPY --from=build /app/back/prisma.config.ts ./back/
 COPY --from=build /app/back/package.json ./back/
+# The CMD's `-w @repo/back` resolves against the root manifest, so it has to be
+# here — npm reads no package.json above its working directory.
+COPY --from=build /app/package.json ./package.json
 EXPOSE 3001
 # Apply versioned migrations (back/prisma/migrations) then start.
 # migrate deploy is non-interactive and idempotent — safe for prod.
