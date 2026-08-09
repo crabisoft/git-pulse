@@ -6,6 +6,7 @@ What went where, when, and whether it worked — then, for any one of them, the
 commits it carried.
 
 .. figure:: images/deployments.png
+   :width: 1000px
    :alt: The deployments list: one row per deployment with its date,
          repository, environment, ref and status.
 

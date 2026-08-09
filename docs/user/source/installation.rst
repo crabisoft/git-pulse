@@ -129,6 +129,13 @@ the source appears as **Acme Platform (demo)** at ``/dashboard/acme-platform``.
 What you get to click through
 -----------------------------
 
+.. figure:: images/overview-instrument.png
+   :width: 1000px
+   :alt: The Overview read as an instrument panel: four gauges with their
+         tier, and a matrix crossing two dimensions.
+
+   Ninety days of invented history, on the real application.
+
 .. list-table::
    :header-rows: 1
    :widths: 30 70

@@ -6,6 +6,7 @@ Yours alone. What the install is like for everybody else lives in
 :doc:`settings`, and needs an admin.
 
 .. figure:: images/account.png
+   :width: 1000px
    :alt: The account page: identity, password, and the display preferences of
          this account.
 

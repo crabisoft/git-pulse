@@ -14,7 +14,9 @@ both track the active LTS.
 ```bash
 make dev      # db + redis + API (watch) + front (Vite HMR)
 make logs     # follow them
-make dev-down # stop
+make stop     # pause them, containers kept
+make start    # pick them up again
+make dev-down # stop and remove the containers
 ```
 
 Front on <http://localhost:5173>, API on <http://localhost:3001/api>. The first

@@ -162,6 +162,13 @@ Configuring the application to read them
 Three steps, whichever platform applied the labels. All of it lives in
 :doc:`settings`.
 
+.. figure:: images/settings-environments.png
+   :width: 1000px
+   :alt: The classification rules and their five tabs — Environments,
+         Repositories, PR labels, PR titles, Incidents.
+
+   One catalogue, five tabs. Steps 1 and 2 below are two of them.
+
 Step 1 — classify the deployments
 ---------------------------------
 

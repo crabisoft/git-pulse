@@ -11,11 +11,14 @@ full self-documented list:
 |---|---|
 | `make dev` | Dev stack (db + redis + API watch + Vite HMR) |
 | `make logs` | Follow the logs |
+| `make stop` / `make start` | Pause and resume the containers, keeping them |
+| `make dev-down` | Stop **and remove** the containers; volumes survive |
 | `make migrate name=x` | Create a migration |
 | `make deploy` | Apply pending migrations |
 | `make prod` | Prod stack (build + nginx) |
 | `make test` | Unit tests of the pure engines |
 | `make storybook` | Component catalogue, on `:6006` (dev stack up) |
+| `make screenshots` | Regenerate the user guide's images, in a container of its own |
 | `make build` | Full monorepo build |
 | `make clean` | Clean build artifacts |
 

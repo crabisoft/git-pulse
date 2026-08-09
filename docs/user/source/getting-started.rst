@@ -12,6 +12,13 @@ show something.
 Open the application. An install with **no account at all** offers to create
 one — *Create the first admin*: a name, an email address and a password.
 
+.. figure:: images/first-admin.png
+   :width: 400px
+   :alt: The sign-in screen of an install with no account: a name, an email
+         address, a password and its confirmation.
+
+   Offered once, on an install nobody has signed into yet.
+
 That offer closes for good as soon as an account exists. There is no
 self-registration afterwards and no sign-up link to find: every other account
 is handed out from :ref:`settings-accounts`. The same screen becomes the
@@ -28,6 +35,14 @@ ordinary sign-in form from then on.
 
 **Settings › Sources › Add a source.** A source is one organization or group on
 one platform.
+
+.. figure:: images/source-form.png
+   :width: 720px
+   :alt: The Add a source dialog: name, platform, base URL, organization,
+         authentication and secret.
+
+   The fields below, in the order the form asks for them. It scrolls: *Data
+   read from* and the rest of the source's settings follow.
 
 .. list-table::
    :header-rows: 1
@@ -122,6 +137,16 @@ name. ``(?<client>[a-z]+)-(?<app>[a-z]+)-prod`` turns the environment
 are then what every filter offers, what the board folds on, what the matrix
 crosses and what DORA slices by.
 
+.. figure:: images/settings-environments.png
+   :width: 1000px
+   :alt: The classification rules: five tabs, and three rules under
+         Environments — one capturing three attributes, one declaring a meta
+         environment, one forcing attributes onto a name that spells out
+         neither.
+
+   The catalogue. A rule captures, declares a meta environment, or forces
+   what a name does not spell out.
+
 **Settings › Environments** holds the catalogue, on five tabs. The first three
 are where to start:
 
@@ -160,6 +185,13 @@ Two things catch people out:
 Use **Test the rule set** as you go. It classifies a name you type against the
 saved rules and shows what comes out, which is faster than a collection and
 tells you the same thing.
+
+.. figure:: images/rule-test.png
+   :width: 720px
+   :alt: Testing a rule set: the name acme-billing-prod classified into
+         client, app and type, and one meta environment.
+
+   One name in, the attributes and meta environments it would carry out.
 
 .. note::
 

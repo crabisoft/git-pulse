@@ -5,6 +5,14 @@ Release notes
 A range of commits, read as Conventional Commits and summarised as Markdown —
 then, if you want it, rewritten into prose by a model.
 
+.. figure:: images/release-notes.png
+   :width: 1000px
+   :alt: The release notes page: the range bar above, then the notes — the
+         breaking change lifted out, the features and fixes filed under their
+         sections, and the commits following no convention kept.
+
+   The range on top, what it amounts to underneath.
+
 Nothing on this page is stored. It is generated when you press **Generate**,
 from the platform, and it stays on screen.
 

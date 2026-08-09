@@ -76,3 +76,17 @@ the pages are what a reader wants to see.
 The [user guide](user-guide.md) has a suite of its own, on the same harness and
 asserting no more than the first — a different list of pages, moving for
 different reasons. Neither suite runs under `npm run test:layout`.
+
+### The fixtures are typed, and that is what checks them
+
+`e2e/fixtures.ts` answers every route these three harnesses touch, and each
+fixture is annotated with the type its endpoint returns — `DoraReport`,
+`OverviewReport`, `Page<EnvRulePublic>`. `e2e` is in the front's `tsconfig`, so
+`npm run typecheck` is what says a fixture has fallen behind the API.
+
+It is the only thing that can. Nothing here asserts, and a view that throws on a
+field it expected renders as an empty picture rather than as a failure: two
+figures shipped in the guide that way — a report predating `DoraReport.truncated`,
+and incidents answered as a page where the view reads an array. Annotating them
+turned both into compile errors, and turned up four more fields the API had
+grown since: two settings, two rule subscriptions on a source.

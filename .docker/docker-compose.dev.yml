@@ -87,10 +87,58 @@ services:
     depends_on:
       - back
 
+  # The user guide's screenshots — `make screenshots`.
+  #
+  # Behind a profile, so nothing here starts it: `docker compose up` ignores a
+  # service with one, and the image is built the first time the profile is
+  # named and reused after — `run` builds only what is missing. That is the
+  # point of it being a service at all: a job that runs to completion and then
+  # should not exist, not a fifth thing kept alive beside the database.
+  #
+  # The flip side is an image that no longer follows the Dockerfile below, so
+  # editing it — or PLAYWRIGHT_IMAGE — wants `make screenshots rebuild=1`.
+  #
+  # It needs neither db, nor redis, nor the API: the suite stubs every call
+  # from `front/e2e/fixtures.ts`, and Playwright starts a Vite of its own inside
+  # this container. So it runs against a stack that is down, and it never sees
+  # the one that is up — the 5173 published on the host is not this container's.
+  screenshots:
+    profiles: ["screenshots"]
+    build:
+      context: ..
+      dockerfile: .docker/Dockerfile.screenshots
+      args:
+        PLAYWRIGHT_IMAGE: ${PLAYWRIGHT_IMAGE:-mcr.microsoft.com/playwright:v1.62.1-noble}
+    image: git-pulse-screenshots
+    working_dir: /app
+    # As the caller, so the images land in the working tree owned by whoever
+    # asked for them. `make screenshots` fills these in; the defaults are for
+    # anyone driving compose by hand.
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      # That user has no home directory in this image, and npm, Vite and
+      # Playwright all want somewhere to write.
+      HOME: /tmp
+      npm_config_cache: /tmp/.npm
+    # Which suite to run — the guide's by default, the README's five with
+    # `make screenshots suite=screenshots`.
+    command: >
+      sh -c "npm install
+      && npm run build:shared
+      && npm run ${SCREENSHOT_SUITE:-screenshots:docs} -w @repo/front"
+    volumes:
+      - ..:/app
+      # Its own dependency volumes, deliberately not the front's: this image is
+      # a different base, and a native module built for one is not the other's.
+      - screenshots-node-modules:/app/node_modules
+      - screenshots-local-modules:/app/front/node_modules
+
 volumes:
   back-node-modules:
   back-local-modules:
   front-node-modules:
   front-local-modules:
+  screenshots-node-modules:
+  screenshots-local-modules:
   back-dist:
   shared-dist:

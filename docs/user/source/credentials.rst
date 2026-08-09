@@ -6,6 +6,14 @@ What to create on GitHub or GitLab, what to grant it, and why each grant is
 asked for. Everything on this page is **read-only**: no call any connector makes
 writes anything to your platform.
 
+.. figure:: images/source-form.png
+   :width: 720px
+   :alt: The source form: platform, base URL, organization, authentication
+         kind, and the secret field the credential is pasted into.
+
+   Whatever you create below ends up in one field of this form — **Settings ›
+   Sources**. It is encrypted the moment it is saved and never shown again.
+
 .. important::
 
    A missing permission does not fail loudly. The services degrade rather than
