@@ -23,7 +23,7 @@ jobs:
     name: Typecheck and tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # No setup-node: the checks run in the dev image, whose Node comes from
       # NODE_IMAGE in .docker/.env. One place states the version.
@@ -48,7 +48,7 @@ jobs:
     name: Production images
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Build the production images
         run: make images

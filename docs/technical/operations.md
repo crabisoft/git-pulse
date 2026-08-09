@@ -99,6 +99,7 @@ published alongside the dev server's:
 ```bash
 make dev
 make storybook             # http://localhost:6006 · STORYBOOK_PORT moves it
+make studio                # http://localhost:5555 · STUDIO_PORT moves it
 ```
 
 **Prod mode (validating a build)** — compiled API + static front served by nginx.
