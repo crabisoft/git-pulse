@@ -30,7 +30,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # `make docs` and nothing else: Sphinx and its pinned requirements are
       # installed in the dev image (.docker/Dockerfile.dev), so this builds the
