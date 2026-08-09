@@ -923,6 +923,16 @@ export interface MergedPullRequest {
   firstCommitAt: string | null;
   firstReviewAt: string | null;
   mergedAt: string;
+  /**
+   * Labels as the platform reports them: what the `pull_request` rules
+   * classify. Read off the listing payload both platforms already answer, so
+   * they cost nothing — unlike the changed paths, which they describe better
+   * and which neither platform states without a call of its own.
+   *
+   * Empty on a request carrying none, and on a row stored before the column
+   * existed. The two read alike: no label matches no rule either way.
+   */
+  labels: string[];
 }
 
 // ─── Release notes ───────────────────────────────────────────────────
@@ -1149,8 +1159,33 @@ export type EnvRuleKind = 'simple' | 'meta';
  * capture groups become attributes. The extra targets exist so things that have
  * no environment get dimensions too — a PR has only a repo, an incident only
  * its labels.
+ *
+ * `repository` classifies a pull request by the name of the repo it belongs to,
+ * which says nothing at all in a monorepo: one name, one bucket, every request.
+ * `pull_request` and `pull_request_title` are what a request carries of its own
+ * — its labels and its title — and both travel in the listing already read, so
+ * neither costs a call.
  */
-export type RuleTarget = 'environment' | 'repository' | 'incident';
+export type RuleTarget =
+  | 'environment'
+  | 'repository'
+  | 'incident'
+  | 'pull_request'
+  | 'pull_request_title';
+
+/**
+ * The targets whose subject is a merged pull request, in the order their
+ * attributes are merged — first to state a key keeps it.
+ *
+ * What the request says of itself beats what its repo says: a label is put
+ * there deliberately, a title follows a convention, and the repo name is the
+ * coarsest of the three — the one that says nothing at all in a monorepo.
+ */
+export const PULL_REQUEST_TARGETS = [
+  'pull_request',
+  'pull_request_title',
+  'repository',
+] as const satisfies readonly RuleTarget[];
 
 /**
  * A RegEx-based classification rule. Defined once for the whole install: a
@@ -1433,6 +1468,25 @@ export interface DoraPeriod {
  * filter controls need: the vocabularies are computed before filtering, so
  * narrowing a filter never empties the list you pick from.
  */
+/**
+ * A listing that gave up before reaching the far end of the period asked for.
+ *
+ * The bound of a deep read is a date, and what stops it is a page count, so a
+ * repository busy enough to fill the window with more rows than the cap allows
+ * is read down to wherever the pages ran out. The metrics are then computed
+ * over a shorter period than the one on screen — a plausible figure, and a
+ * wrong one, which is why this travels with the report rather than staying in
+ * a log nobody is reading at the time.
+ *
+ * A monorepo is where this stops being theoretical: the cap is per repository,
+ * so the traffic that ten repos spread over ten budgets now lands in one.
+ */
+export interface TruncatedRead {
+  repo: string;
+  /** Which listing ran out of pages. */
+  resource: 'deployments' | 'pipelines' | 'merged_pull_requests';
+}
+
 export interface DoraReport {
   /**
    * One reading per metric, folded over whatever the filter asked for. Not a
@@ -1447,6 +1501,13 @@ export interface DoraReport {
   dimensions: Record<string, string[]>;
   /** The period actually used, defaults resolved. */
   period: DoraPeriod;
+  /**
+   * Listings that did not reach the start of that period. Empty is the normal
+   * answer, and an empty array is also what a `stored` source always answers:
+   * its depth is its own setting, and what the ingestion managed to reach is
+   * not a property of this read.
+   */
+  truncated: TruncatedRead[];
 }
 
 /** A historized metric point (basis for time-series trends). */
@@ -1690,6 +1751,42 @@ export interface AppSettings {
    * provider says no.
    */
   quotaReservePct: number;
+  /**
+   * Name of the dimension attribute that designates a **deployable**, or null
+   * where nothing designates one — the default, and the historical behaviour.
+   *
+   * Not a "this repo is a monorepo" flag: there is none, and one would be at
+   * the wrong granularity anyway, a source holding a monorepo and a dozen
+   * ordinary repos alike. It declares a word, once, for the whole install —
+   * `component`, say — and the correlation between a merged request and the
+   * deployment that carried it narrows to pairs that agree on it.
+   *
+   * Which pairs those are is decided by the rules, not by this: where either
+   * side does not state the attribute, the correlation falls back to repository
+   * and time. So a repo whose rules produce nothing is untouched, and the
+   * monorepo beside it is narrowed, with nothing declared per repo.
+   *
+   * A name is needed rather than comparing every dimension because a request
+   * carries attributes a deployment never will — `change=fix` says nothing
+   * about where the change landed, and requiring agreement on it would pair
+   * nothing with anything.
+   */
+  componentAttribute: string | null;
+  /**
+   * How many pages a bounded listing reads before giving up on reaching its
+   * bound, per repository and per listing.
+   *
+   * Calibrated for one repo of ordinary traffic, which is what it was born as.
+   * A monorepo holds what would otherwise be a dozen repositories' worth of
+   * merges and deployments behind a single one of these budgets, so it is the
+   * install that has one which needs to raise this — deliberately, since a
+   * higher ceiling on a busy source is a larger bill.
+   *
+   * Whether it was reached is reported by `DoraReport.truncated`, which is the
+   * half of this that matters: guessing a number is only safe when overshooting
+   * says so.
+   */
+  collectionPageCap: number;
   /** Which engine renders the Markdown of a release note. */
   releaseNotesGenerator: ReleaseNotesGenerator;
   /**
@@ -1704,6 +1801,15 @@ export interface AppSettings {
 /** Bounds of `quotaReservePct`; a reserve of everything would collect nothing. */
 export const QUOTA_RESERVE_PCT_MIN = 0;
 export const QUOTA_RESERVE_PCT_MAX = 90;
+
+/**
+ * Bounds of `collectionPageCap`. One page is a floor rather than zero — a
+ * listing that reads nothing is a source that reports nothing — and a hundred
+ * is ten thousand rows per repository and per listing, past which the honest
+ * answer is a narrower period rather than a deeper read.
+ */
+export const COLLECTION_PAGE_CAP_MIN = 1;
+export const COLLECTION_PAGE_CAP_MAX = 100;
 
 /**
  * Bounds of `retentionMarginDays`.

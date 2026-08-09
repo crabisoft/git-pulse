@@ -1,10 +1,11 @@
 # Release notes
 
-`GET /api/sources/:id/release-notes?repo=&from=&to=` summarises a range of
-commits; `GET /api/sources/:id/tags?repo=` lists what a range can be picked
-from, and `GET /api/sources/:id/repos` the repos to pick among. That last one
-goes through the `SourceReader`, so a `stored` source answers it from its own
-table instead of spending a call on a list it already has.
+`GET /api/sources/:id/release-notes?repo=&from=&to=&tagPattern=` summarises a
+range of commits; `GET /api/sources/:id/tags?repo=&tagPattern=` lists what a
+range can be picked from, and `GET /api/sources/:id/repos` the repos to pick
+among. That last one goes through the `SourceReader`, so a `stored` source
+answers it from its own table instead of spending a call on a list it already
+has.
 
 **A bound is a ref, not a release**: a tag or a branch, since that is what the
 platforms compare. `GET /api/sources/:id/branches?repo=` lists the second kind
@@ -23,6 +24,21 @@ history to the default branch, which is what a first release needs.
 > becomes the most recent tag instead of the beginning of history: *everything
 > on this branch since the last release* is the question a branch as an upper
 > bound is asking. `resolveRange` is pure and tested for exactly that.
+
+Every one of those defaults reads *the most recent tag*, which is a question a
+monorepo cannot answer: it tags per deployable, so its tags interleave —
+`front@1.2.0`, `api@3.0.1`, `front@1.3.0` — and the most recent is whichever
+component released last. Unnarrowed, the range for the API starts at a front-end
+release and the note lists commits nobody asked about.
+
+`tagPattern` is a RegEx applied by `tagsMatching` **before** the defaults, never
+after — narrowing the result would leave the bounds themselves picked off the
+wrong list. The tag listing takes it too, so the picker offers what the defaults
+would choose from; the two would otherwise disagree about which release is the
+latest. A pattern matching nothing yields no tag, hence the default branch and
+the whole history — what a component's first release is. One the engine cannot
+read filters nothing: the bound is a note somebody is waiting on, and the DTO
+already refused the typo at the door where it could still be pointed at.
 
 Each commit is read as a **Conventional Commit** and filed under its type, with
 breaking changes repeated at the top: they are what a reader upgrading needs

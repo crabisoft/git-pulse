@@ -22,6 +22,8 @@ const SETTINGS: AppSettings = {
   failureSource: 'pipelines',
   incidentLabels: [],
   quotaReservePct: 10,
+  componentAttribute: null,
+  collectionPageCap: 20,
   releaseNotesGenerator: 'builtin',
   overviewDirection: 'control',
   displayMode: 'system',

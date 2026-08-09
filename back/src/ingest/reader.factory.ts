@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { Deployment, Pipeline, ScopeRules } from '@repo/shared';
+import type { Deployment, Pipeline, ScopeRules, TruncatedRead } from '@repo/shared';
 import { SourcesService } from '../sources/sources.service';
 import { ConnectorFactory } from '../sources/connectors/connector.factory';
 import type {
@@ -106,10 +106,20 @@ export class ReaderFactory {
     private readonly store: StoreService,
   ) {}
 
-  async for(sourceId: string, signal?: AbortSignal): Promise<SourceReader> {
+  /**
+   * `onTruncated` is where a live listing says it ran out of pages before
+   * reaching the date it was bounded by. A `stored` source never calls it: what
+   * the ingestion managed to reach is a property of that run, not of this read,
+   * and its depth is a setting of its own.
+   */
+  async for(
+    sourceId: string,
+    signal?: AbortSignal,
+    onTruncated?: (read: TruncatedRead) => void,
+  ): Promise<SourceReader> {
     const { mode, scope } = await this.sources.readSpec(sourceId);
     if (mode === 'stored') return new StoreReader(this.store, sourceId, scope);
     const { ctx, kind } = await this.sources.resolveContext(sourceId, signal);
-    return new ConnectorReader(this.connectors.for(kind), ctx);
+    return new ConnectorReader(this.connectors.for(kind), { ...ctx, onTruncated });
   }
 }

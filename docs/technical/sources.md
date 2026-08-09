@@ -121,9 +121,21 @@ recent slice. The two modes pay for that very differently:
 
 - **`stored`**: one indexed query. The rows are already local, so a ninety-day
   window costs what a one-day window costs.
-- **`live`**: the connector pages down to the date, up to twenty pages of a
-  hundred per repo — and on GitHub each deployment then costs a status call on
-  top. Widening the period on a live source widens its bill, per request.
+- **`live`**: the connector pages down to the date, up to `collectionPageCap`
+  pages of a hundred per repo — and on GitHub each deployment then costs a
+  status call on top. Widening the period on a live source widens its bill, per
+  request.
+
+That cap is **per repo and per listing**, which is where a monorepo stops
+behaving like the sources it was calibrated on: traffic that ten repos spread
+over ten budgets lands in one. A listing that runs out of pages before reaching
+the date reports it — `ConnectorContext.onTruncated`, collected by
+`DoraService.gather` and carried on `DoraReport.truncated` — because the metrics
+then cover a shorter period than the one on screen, which is a plausible figure
+and a wrong one. GitHub knows it by counting its own pages; gitbeaker follows
+`next` links and gives no such signal, so the GitLab connector asks the same
+question of the answer: nothing older than the bound came back, so the bound was
+never reached.
 
 That is the trade the mode already described, sharpened. A live source under
 budget pressure degrades rather than exhausting itself: past the **API reserve**

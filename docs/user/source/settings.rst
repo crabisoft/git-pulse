@@ -92,7 +92,7 @@ rule is and the two traps. What matters here is how the catalogue is organised.
 from the source form. A pattern describes a naming convention, and a naming
 convention rarely stops at one repository host.
 
-Three tabs, matched against three different things:
+Five tabs, matched against five different things:
 
 .. list-table::
    :header-rows: 1
@@ -106,9 +106,22 @@ Three tabs, matched against three different things:
    * - **Repositories**
      - Repository names. A pull request has no environment, so this is what
        breaks lead time down by application or customer
+   * - **PR labels**
+     - Each label a merged pull request carries. What the repository name
+       cannot say in a monorepo, where it is the same for every request
+   * - **PR titles**
+     - The title of a merged pull request. Reads a convention nobody has to
+       maintain — ``feat(front): …`` names its component in every title
    * - **Incidents**
      - Incident labels. An incident has no environment either; this is how it
        joins the deployment dimensions
+
+The three pull-request tabs feed the same four metrics — lead time and the
+segments it splits into — and are merged in that order: **a label beats a
+title, and a title beats the repository name**. What a request says of itself
+wins over what merely holds it. None of the three costs an API call: labels and
+titles travel in the listing already read. :doc:`monorepo` is where this stops
+being a nicety.
 
 Each rule carries:
 
@@ -466,6 +479,10 @@ What the metrics are computed over, and what counts as a failure.
    * - **Incident labels**
      - Comma separated. An issue carrying one of them is an incident. Only
        asked for when incidents count
+   * - **Deployable attribute**
+     - The dimension naming what deploys on its own — for a monorepo. Empty,
+       the usual case, where one repository is one deployable. See
+       :doc:`monorepo`
 
 Collection and store
 --------------------
@@ -490,6 +507,11 @@ back.
      - The share of a budget kept for the essential calls. Below it, the
        collection drops the per-pull-request and per-deployment enrichment
        rather than stopping
+   * - **API page cap**
+     - Pages a deep listing reads **per repository** before giving up on
+       reaching the start of the period. A monorepo holds several
+       repositories' worth of history behind that one budget — see
+       :ref:`monorepo-collection`
 
 Interface
 ---------

@@ -11,6 +11,7 @@ import type {
   RepositoryRef,
   Tag,
   Branch,
+  TruncatedRead,
 } from '@repo/shared';
 import type {
   CommitPullRequest,
@@ -143,6 +144,7 @@ export class GitHubConnector implements SourceConnector {
           mergedAt: pr.merged_at ?? null,
           reviewers: pr.requested_reviewers?.length ?? 0,
           ageHours: ageHours(pr.created_at),
+          labels: labelNames(pr.labels),
           // Filled by the service, which owns the rules.
           tickets: [],
         });
@@ -170,6 +172,7 @@ export class GitHubConnector implements SourceConnector {
           return res.data.workflow_runs;
         },
         (run) => run.created_at,
+        'pipelines',
       );
       for (const run of runs) {
         const created = run.created_at;
@@ -217,6 +220,7 @@ export class GitHubConnector implements SourceConnector {
             })
           ).data,
         (d) => d.created_at,
+        'deployments',
       );
       for (const d of deps) {
         // One status call per deployment, and the helper below swallows errors:
@@ -284,6 +288,7 @@ export class GitHubConnector implements SourceConnector {
             })
           ).data,
         (pr) => pr.updated_at,
+        'merged_pull_requests',
       );
       for (const pr of prs) {
         if (!pr.merged_at || new Date(pr.merged_at).getTime() < sinceMs) continue;
@@ -313,6 +318,7 @@ export class GitHubConnector implements SourceConnector {
           firstCommitAt,
           firstReviewAt,
           mergedAt: pr.merged_at,
+          labels: labelNames(pr.labels),
         });
       }
     }
@@ -343,10 +349,12 @@ export class GitHubConnector implements SourceConnector {
     since: string | undefined,
     fetch: (page: number) => Promise<T[]>,
     at: (item: T) => string,
+    resource: TruncatedRead['resource'] = 'deployments',
   ): Promise<T[]> {
     const first = await fetch(1);
     if (!since) return first;
 
+    const cap = ctx.maxPages ?? MAX_PAGES;
     const sinceMs = new Date(since).getTime();
     const older = (item: T) => new Date(at(item)).getTime() < sinceMs;
     const out = [...first];
@@ -355,7 +363,7 @@ export class GitHubConnector implements SourceConnector {
     // left to read below.
     let done = first.length === 0 || first.some(older);
     let page = 1;
-    while (!done && page < MAX_PAGES) {
+    while (!done && page < cap) {
       ctx.signal?.throwIfAborted();
       page += 1;
       const next = await fetch(page);
@@ -364,8 +372,12 @@ export class GitHubConnector implements SourceConnector {
     }
     if (!done) {
       this.logger.warn(
-        `History truncated for ${repo}: ${MAX_PAGES} pages read without reaching ${since}.`,
+        `History truncated for ${repo}: ${cap} pages read without reaching ${since}.`,
       );
+      // Also reported to whoever asked, when anybody is collecting: a period
+      // computed over less than it says is worth stating beside the figures,
+      // not only in a log read after somebody has acted on them.
+      ctx.onTruncated?.({ repo, resource });
     }
     return out.filter((item) => !older(item));
   }
@@ -918,3 +930,21 @@ function toTag(node: TagNode): Tag {
   return { name: node.name, sha: '', taggedAt: null };
 }
 
+
+/**
+ * Label names off a listing payload.
+ *
+ * GitHub types a label as an object in the pull-request listings and as a bare
+ * string in a few older shapes, so both are accepted rather than narrowed: an
+ * unreadable entry is dropped, which classifies as no label at all.
+ */
+function labelNames(labels: unknown): string[] {
+  if (!Array.isArray(labels)) return [];
+  return labels
+    .map((label) => {
+      if (typeof label === 'string') return label;
+      const name = (label as { name?: unknown } | null)?.name;
+      return typeof name === 'string' ? name : '';
+    })
+    .filter(Boolean);
+}

@@ -424,7 +424,7 @@ export class SourcesService {
     // against — the consumption — is what moves during a run, and that is read
     // from memory at every item.
     const subject = { kind: 'source' as const, id };
-    const { quotaReservePct } = await this.settings.get();
+    const { quotaReservePct, collectionPageCap } = await this.settings.get();
     return {
       kind: source.kind as SourceKind,
       ctx: {
@@ -436,6 +436,7 @@ export class SourcesService {
         // here too — which is right: they spend this source's token.
         onQuota: this.quotas.sinkFor(subject),
         allowsOptionalCalls: () => this.quotas.allowsOptional(subject, quotaReservePct),
+        maxPages: collectionPageCap,
       },
     };
   }

@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  COLLECTION_PAGE_CAP_MAX,
+  COLLECTION_PAGE_CAP_MIN,
   DISPLAY_MODES,
   OVERVIEW_DIRECTIONS,
   PAGE_LIMIT_MAX,
@@ -130,6 +132,19 @@ export function GeneralSettings({
                 />
               </label>
             )}
+            {/* Empty is a valid answer and the common one — most installs have
+                one deployable per repo and nothing to designate. */}
+            <label className="wide">
+              {t('settings.general.componentAttribute')}{' '}
+              <span className="hint">{t('settings.general.componentAttributeHint')}</span>
+              <input
+                className="mono-input"
+                value={form.componentAttribute ?? ''}
+                onChange={(e) => set('componentAttribute', e.target.value.trim() || null)}
+                spellCheck={false}
+                placeholder={t('settings.general.componentAttributePlaceholder')}
+              />
+            </label>
           </div>
         </section>
 
@@ -180,6 +195,18 @@ export function GeneralSettings({
                 max={QUOTA_RESERVE_PCT_MAX}
                 value={form.quotaReservePct}
                 onChange={(e) => set('quotaReservePct', Number(e.target.value))}
+                required
+              />
+            </label>
+            <label>
+              {t('settings.general.collectionPageCap')}{' '}
+              <span className="hint">{t('settings.general.collectionPageCapHint')}</span>
+              <input
+                type="number"
+                min={COLLECTION_PAGE_CAP_MIN}
+                max={COLLECTION_PAGE_CAP_MAX}
+                value={form.collectionPageCap}
+                onChange={(e) => set('collectionPageCap', Number(e.target.value))}
                 required
               />
             </label>

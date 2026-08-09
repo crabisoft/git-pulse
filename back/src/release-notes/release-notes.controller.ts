@@ -26,7 +26,7 @@ export class ReleaseNotesController {
     @Query() query: RepoQueryDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    return this.releaseNotes.tags(id, query.repo, abortOnDisconnect(res));
+    return this.releaseNotes.tags(id, query.repo, query.tagPattern, abortOnDisconnect(res));
   }
 
   /** Branches of a repo — a range bound may be one. */

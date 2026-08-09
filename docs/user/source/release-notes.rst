@@ -23,6 +23,48 @@ the release about to go out.
 - *No repository in this source scope* means the credential lists none — a
   permission, not an empty organization.
 
+.. _release-notes-component:
+
+The **Component** field, between the repository and the bounds
+--------------------------------------------------------------
+
+Leave it empty and every tag of the repository is a candidate, which is the
+right answer wherever a repository releases one thing.
+
+It earns its keep on a repository that releases several. Such a repository tags
+per component, so its tags interleave — ``front@1.2.0``, ``api@3.0.1``,
+``front@1.3.0`` — and *the most recent tag* then means whichever component
+released last. Unnarrowed, the range for the API starts at a front-end release
+and the notes list commits nobody asked about.
+
+The field takes a **regular expression**, matched against tag names and applied
+**before** the bounds fill themselves in. So it decides what the two pickers
+offer as much as what the defaults choose:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 26 74
+
+   * - Typed
+     - Range on the tags above
+   * - *(empty)*
+     - ``front@1.3.0`` → ``api@3.0.1`` — two different components
+   * - ``^front@``
+     - ``front@1.2.0`` → ``front@1.3.0``
+   * - ``^worker@``
+     - The whole history → the default branch: nothing has released under that
+       name yet
+
+A plain ``front`` works too — the expression is not anchored, so it matches
+anywhere in the name. Anchor it with ``^`` when two components share a word.
+
+It travels in the address with the rest of the range, so a link reproduces what
+its sender was reading. Changing it clears both bounds, exactly as changing the
+repository does: they belonged to the component that was showing.
+
+Why a repository would be shaped that way, and what else it changes, is
+:doc:`monorepo`.
+
 The generated notes
 ===================
 

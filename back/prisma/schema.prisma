@@ -115,12 +115,19 @@ enum EnvRuleKind {
   meta
 }
 
-/// What the pattern is matched against: an environment name, a repo name, or
-/// an incident label.
+/// What the pattern is matched against: an environment name, a repo name, an
+/// incident label, or what a pull request carries of its own — each of its
+/// labels, or its title.
+///
+/// The last two exist because a repo name says nothing in a monorepo: one
+/// name, one bucket, every request. A label and a title belong to the request
+/// rather than to what holds it.
 enum RuleTarget {
   environment
   repository
   incident
+  pull_request
+  pull_request_title
 }
 
 /// RegEx-based classification rule, defined once for the whole install and
@@ -799,6 +806,14 @@ model StoredPullRequest {
   /// reserve, which is why an upsert never overwrites a known value with null.
   firstCommitAt DateTime?
   firstReviewAt DateTime?
+  /// Labels as the platform reports them — what the `pull_request` rules
+  /// classify. Both feeds read them off the listing they already page through,
+  /// so both write them and neither has to preserve the other's.
+  ///
+  /// Empty on a row written before this column, which reads as a request
+  /// carrying no label. A backfill would be a lie either way: the platforms
+  /// answer today's labels, never the ones a request carried when it merged.
+  labels        String[]
   /// Last sync or event that touched the row — what reconciliation compares.
   seenAt        DateTime
 

@@ -122,7 +122,8 @@ name. ``(?<client>[a-z]+)-(?<app>[a-z]+)-prod`` turns the environment
 are then what every filter offers, what the board folds on, what the matrix
 crosses and what DORA slices by.
 
-**Settings › Environments** holds the catalogue, on three tabs:
+**Settings › Environments** holds the catalogue, on five tabs. The first three
+are where to start:
 
 .. list-table::
    :header-rows: 1
@@ -141,6 +142,11 @@ crosses and what DORA slices by.
    * - **Incidents**
      - Incident labels
      - Change failure rate finds no deployment to divide by
+
+The other two — **PR labels** and **PR titles** — classify a merged request by
+what it carries rather than by the repository holding it. Skip them unless one
+repository holds several things that ship on their own, which is
+:doc:`monorepo`.
 
 Two things catch people out:
 

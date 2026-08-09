@@ -1,5 +1,7 @@
 import { Injectable, HttpStatus, Logger } from '@nestjs/common';
 import {
+  COLLECTION_PAGE_CAP_MAX,
+  COLLECTION_PAGE_CAP_MIN,
   DORA_WINDOW_MAX,
   DORA_WINDOW_MIN,
   PAGE_LIMIT_DEFAULT,
@@ -46,6 +48,12 @@ const FALLBACKS: AppSettings = {
   // A tenth of the budget: enough to leave the calls that carry the metrics
   // room to finish, small enough that the enrichment runs on any normal day.
   quotaReservePct: 10,
+  // Nothing designates a deployable until somebody says what does. An install
+  // upgrading into this therefore correlates exactly as it did yesterday.
+  componentAttribute: null,
+  // What both connectors have always used, so nothing moves for an install
+  // that never opens the field. Raising it is the monorepo's decision.
+  collectionPageCap: 20,
   // The renderer that lists every commit. The other one is better on a history
   // that holds the convention, and nothing here knows whether this one does.
   releaseNotesGenerator: 'builtin',
@@ -63,6 +71,7 @@ const LIMITS = {
   pageSize: { min: 1, max: PAGE_LIMIT_MAX },
   quotaReservePct: { min: QUOTA_RESERVE_PCT_MIN, max: QUOTA_RESERVE_PCT_MAX },
   retentionMarginDays: { min: RETENTION_MARGIN_MIN, max: RETENTION_MARGIN_MAX },
+  collectionPageCap: { min: COLLECTION_PAGE_CAP_MIN, max: COLLECTION_PAGE_CAP_MAX },
 };
 
 type Listener = (settings: AppSettings) => void;
@@ -96,6 +105,8 @@ export class SettingsService {
       failureSource: readFailureSource(stored.get('failureSource')),
       incidentLabels: readList(stored.get('incidentLabels')),
       quotaReservePct: readNumber(stored.get('quotaReservePct'), FALLBACKS.quotaReservePct),
+      componentAttribute: readOptionalText(stored.get('componentAttribute')),
+      collectionPageCap: readNumber(stored.get('collectionPageCap'), FALLBACKS.collectionPageCap),
       releaseNotesGenerator: readGenerator(stored.get('releaseNotesGenerator')),
       overviewDirection: readOneOf(
         stored.get('overviewDirection'),
@@ -118,19 +129,24 @@ export class SettingsService {
     assertInRange('pageSize', dto.pageSize);
     assertInRange('quotaReservePct', dto.quotaReservePct);
     assertInRange('retentionMarginDays', dto.retentionMarginDays);
+    assertInRange('collectionPageCap', dto.collectionPageCap);
     if (dto.collectCron !== undefined) assertValidCron(dto.collectCron);
     if (dto.pruneCron !== undefined) assertValidCron(dto.pruneCron);
     await this.assertIncidentsConfigured(dto);
 
     const entries = Object.entries(dto).filter(([, value]) => value !== undefined);
     await this.prisma.$transaction(
-      entries.map(([key, value]) =>
-        this.prisma.appSetting.upsert({
+      entries.map(([key, value]) => {
+        // Null is how a nullable setting is cleared, and the column is text:
+        // stringifying it as-is would store the word "null" and read back as an
+        // attribute nobody can name.
+        const stored = value === null ? '' : String(value);
+        return this.prisma.appSetting.upsert({
           where: { key },
-          create: { key, value: String(value) },
-          update: { value: String(value) },
-        }),
-      ),
+          create: { key, value: stored },
+          update: { value: stored },
+        });
+      }),
     );
 
     const settings = await this.get();
@@ -196,6 +212,17 @@ function readOneOf<T extends string>(
   fallback: T,
 ): T {
   return allowed.find((value) => value === raw) ?? fallback;
+}
+
+/**
+ * A stored word, or nothing at all. Blank reads as nothing rather than as an
+ * attribute nobody can name: clearing the field in the form is how an install
+ * says it has no deployable to designate, and it must not leave the correlation
+ * hunting for an attribute spelled `''`.
+ */
+function readOptionalText(raw: string | undefined): string | null {
+  const value = raw?.trim();
+  return value ? value : null;
 }
 
 /** `AppSetting.value` is a plain string column, so booleans travel as text. */

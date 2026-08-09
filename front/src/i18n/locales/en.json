@@ -113,10 +113,15 @@
       },
       "incidentLabels": "Incident labels",
       "incidentLabelsHint": "comma separated; an issue carrying one of them is an incident",
+      "componentAttribute": "Deployable attribute",
+      "componentAttributeHint": "the dimension naming what deploys on its own — for a monorepo. Empty where a repo is one deployable, which is the usual case",
+      "componentAttributePlaceholder": "e.g. component",
       "publicDashboard": "Public dashboard",
       "publicDashboardHint": "Dashboard and DORA readable without signing in. Off, the whole application asks for an account — the settings always do.",
       "quotaReservePct": "API reserve (%)",
       "quotaReservePctHint": "share of a budget kept for the essential calls: below it, the collection drops the per-pull-request and per-deployment enrichment",
+      "collectionPageCap": "API page cap",
+      "collectionPageCapHint": "pages a deep listing reads per repo before giving up on reaching the start of the period. Per repo, so a monorepo holds several repositories' worth of history behind one budget — the DORA page says when it was not enough",
       "releaseNotesGenerator": "Release notes generator",
       "releaseNotesGeneratorHint": "what renders the Markdown of a release note; the sections shown on the page list every commit either way",
       "generator": {
@@ -198,6 +203,18 @@
         "listTitle": "Repository rules",
         "hint": "Matched against repo names. A pull request has no environment, so this is what breaks lead time down by application or customer.",
         "placeholder": "e.g. portal-api"
+      },
+      "pull_request": {
+        "tab": "PR labels",
+        "listTitle": "Pull request label rules",
+        "hint": "Matched against each label a merged pull request carries. What the repo name cannot say in a monorepo, where it is the same for every request. Costs no API call — labels travel in the listing already read.",
+        "placeholder": "e.g. area/front"
+      },
+      "pull_request_title": {
+        "tab": "PR titles",
+        "listTitle": "Pull request title rules",
+        "hint": "Matched against the title of a merged pull request. Reads a convention nobody has to maintain: ^\\w+\\((?<component>[^)]+)\\) turns feat(front): … into component=front, with no label to apply.",
+        "placeholder": "e.g. feat(front): add the picker"
       },
       "incident": {
         "tab": "Incidents",
@@ -534,6 +551,7 @@
     }
   },
   "dora": {
+    "truncated": "Read short on {{count}} listing(s) ({{repos}}): the platform ran out of pages before reaching the start of this period, so the figures below cover less than they say. Raise the API page cap in the settings, or narrow the period.",
     "title": "DORA metrics",
     "empty": "No data yet — configure environment rules and run a collection.",
     "global": "global",
@@ -1017,6 +1035,8 @@
     "repo": "Repository",
     "from": "From",
     "fromAuto": "The tag below",
+    "component": "Component",
+    "componentPlaceholder": "e.g. ^front@",
     "to": "To",
     "toAuto": "Most recent tag",
     "generate": "Generate",

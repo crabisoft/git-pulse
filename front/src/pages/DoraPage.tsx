@@ -104,6 +104,18 @@ export function DoraPage({ sourceId, slug }: { sourceId: string; slug: string })
 
       {error && <div className="banner error">{error}</div>}
 
+      {/* A window read short produces perfectly ordinary-looking figures over a
+          period nobody asked for, so it is said here rather than left in a log:
+          this is the one caveat a reader cannot infer from the numbers. */}
+      {report && report.truncated.length > 0 && (
+        <div className="banner warn">
+          {t('dora.truncated', {
+            count: report.truncated.length,
+            repos: [...new Set(report.truncated.map((read) => read.repo))].join(', '),
+          })}
+        </div>
+      )}
+
       {/* Every filter in one left-aligned bar: period, scope, then slice. */}
       <div className="filters-row">
         <PeriodFilter

@@ -28,7 +28,13 @@ type AttributeRow = { key: string; value: string };
 /** Module constant so resetting on source change never re-triggers a fetch. */
 const FIRST_PAGE: PageQuery = {};
 
-const TARGETS: RuleTarget[] = ['environment', 'repository', 'incident'];
+const TARGETS: RuleTarget[] = [
+  'environment',
+  'repository',
+  'pull_request',
+  'pull_request_title',
+  'incident',
+];
 
 export function EnvRulesPage() {
   const { t } = useTranslation();

@@ -407,6 +407,7 @@ interface PullRequestRecord {
   reviewers: number;
   firstCommitAt: Date | null;
   firstReviewAt: Date | null;
+  labels: string[];
   seenAt: Date;
 }
 
@@ -452,6 +453,7 @@ function toPullRequestRow(row: PullRequestRecord): PullRequestRow {
     reviewers: row.reviewers,
     firstCommitAt: row.firstCommitAt,
     firstReviewAt: row.firstReviewAt,
+    labels: row.labels,
     seenAt: row.seenAt,
   };
 }
@@ -483,6 +485,7 @@ function toPullRequest(row: PullRequestRecord): SourcePullRequest {
     mergedAt: row.mergedAt?.toISOString() ?? null,
     reviewers: row.reviewers,
     ageHours: ageHours(row.openedAt.toISOString()),
+    labels: row.labels,
     // Filled by the service, which owns the rules — exactly as a connector
     // leaves them, so the rules apply at read time in either mode.
     tickets: [],
@@ -505,6 +508,9 @@ function toMergedPullRequest(row: PullRequestRecord): SourceMergedPullRequest {
     firstReviewAt: row.firstReviewAt?.toISOString() ?? null,
     // Only rows carrying one are read as merged.
     mergedAt: (row.mergedAt as Date).toISOString(),
+    // Empty on a row written before the column existed, which classifies as a
+    // request carrying no label — the same thing, to every rule.
+    labels: row.labels,
   };
 }
 

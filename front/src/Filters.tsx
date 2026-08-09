@@ -32,6 +32,7 @@ export function FilterField({
   label,
   hint,
   wide,
+  narrow,
   children,
 }: {
   label: string;
@@ -43,10 +44,18 @@ export function FilterField({
    * given is how much of it they can still read.
    */
   wide?: boolean;
+  /**
+   * Takes less than a filter's usual width, for a control whose values are
+   * short and known to be: a version tag is a dozen characters where a
+   * repository path is a sentence. What it buys is a row that stays one row —
+   * the reason to reach for it is never the field itself, it is the two beside
+   * it that would otherwise wrap.
+   */
+  narrow?: boolean;
   children: ReactNode;
 }) {
   return (
-    <label className={wide ? 'filter-field wide' : 'filter-field'}>
+    <label className={['filter-field', wide && 'wide', narrow && 'narrow'].filter(Boolean).join(' ')}>
       <span className="filter-label">{label}</span>
       {children}
       {hint && <span className="hint">{hint}</span>}

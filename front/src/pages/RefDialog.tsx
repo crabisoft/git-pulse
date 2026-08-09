@@ -37,7 +37,10 @@ export function RefDialog({
   const load = useCallback(
     async (signal: AbortSignal) => {
       const [repoTags, repoBranches] = await Promise.all([
-        api.tags(sourceId, repo, signal),
+        // Every tag: this dialog picks a ref to look at, not a release to
+        // summarise, so narrowing it to one component would hide refs the
+        // reader came here to find.
+        api.tags(sourceId, repo, undefined, signal),
         api.branches(sourceId, repo, signal),
       ]);
       setTags(repoTags);

@@ -89,6 +89,7 @@ function gitHubPullRequest(body: Payload): IngestIntent | null {
       mergedAt,
       reviewers: Array.isArray(pr.requested_reviewers) ? pr.requested_reviewers.length : 0,
       ageHours: ageHours(createdAt),
+      labels: labelNames(pr.labels),
       tickets: [],
     },
   };
@@ -180,6 +181,9 @@ function gitLabMergeRequest(body: Payload): IngestIntent | null {
       mergedAt,
       reviewers: Array.isArray(body.reviewers) ? body.reviewers.length : 0,
       ageHours: ageHours(createdAt),
+      // On the event rather than on the merge request, which is where GitLab
+      // states them; older versions put them nowhere, and read as none.
+      labels: labelNames(body.labels ?? mr.labels),
       tickets: [],
     },
   };
@@ -275,4 +279,23 @@ function asNumber(value: unknown): number | null {
 
 function asBoolean(value: unknown): boolean {
   return value === true;
+}
+
+/**
+ * Label names out of a delivery.
+ *
+ * Three shapes for the same thing: GitHub sends objects keyed `name`, GitLab
+ * objects keyed `title`, and either may send bare strings. All three are read
+ * rather than narrowed — a delivery whose labels cannot be read classifies as a
+ * request carrying none, which is what a missing key already means here.
+ */
+function labelNames(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((label) => {
+      if (typeof label === 'string') return label;
+      const entry = asObject(label);
+      return asString(entry?.name) ?? asString(entry?.title) ?? '';
+    })
+    .filter(Boolean);
 }

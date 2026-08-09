@@ -32,6 +32,8 @@ export interface PullRequestRow {
   reviewers: number;
   firstCommitAt: Date | null;
   firstReviewAt: Date | null;
+  /** Both feeds report them, so neither has to preserve the other's. */
+  labels: string[];
   seenAt: Date;
 }
 
@@ -120,6 +122,7 @@ export function mergeOpenPullRequest(
     reviewers: incoming.reviewers,
     firstCommitAt: stored?.firstCommitAt ?? null,
     firstReviewAt: stored?.firstReviewAt ?? null,
+    labels: incoming.labels,
     seenAt,
   };
 }
@@ -131,8 +134,13 @@ export function mergeOpenPullRequest(
  *
  * It reports no author, no reviewer count and no repository URL, so those are
  * kept from whatever the open feed already wrote rather than blanked. The
- * description it does report, and writes: both feeds read it off the same
- * listing payload, so neither is better informed than the other.
+ * description and the labels it does report, and writes: both feeds read them
+ * off the same listing payload, so neither is better informed than the other.
+ *
+ * Labels are therefore last-write-wins, which is also the only honest reading
+ * of them — a label removed after the merge is a label the request no longer
+ * carries, and there is no way to ask either platform what it carried the day
+ * it was merged.
  */
 export function mergeMergedPullRequest(
   stored: PullRequestRow | undefined,
@@ -167,6 +175,7 @@ export function mergeMergedPullRequest(
     firstReviewAt: incoming.firstReviewAt
       ? new Date(incoming.firstReviewAt)
       : (stored?.firstReviewAt ?? null),
+    labels: incoming.labels,
     seenAt,
   };
 }

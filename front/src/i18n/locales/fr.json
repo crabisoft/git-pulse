@@ -113,10 +113,15 @@
       },
       "incidentLabels": "Labels d'incident",
       "incidentLabelsHint": "séparés par des virgules ; une issue portant l'un d'eux est un incident",
+      "componentAttribute": "Attribut de déployable",
+      "componentAttributeHint": "la dimension qui désigne ce qui se déploie seul — pour un monorepo. Vide quand un repo est un déployable, ce qui est le cas courant",
+      "componentAttributePlaceholder": "ex. component",
       "publicDashboard": "Dashboard public",
       "publicDashboardHint": "Dashboard et DORA consultables sans connexion. Décoché, toute l'application demande un compte — les réglages le demandent de toute façon.",
       "quotaReservePct": "Réserve d'API (%)",
       "quotaReservePctHint": "part du budget gardée pour les appels essentiels : en dessous, la collecte abandonne l'enrichissement par pull request et par déploiement",
+      "collectionPageCap": "Plafond de pages API",
+      "collectionPageCapHint": "pages qu'un listing profond lit par repo avant de renoncer à atteindre le début de la période. Par repo : un monorepo tient donc l'historique de plusieurs dépôts derrière un seul budget — la page DORA signale quand cela n'a pas suffi",
       "releaseNotesGenerator": "Générateur de notes de version",
       "releaseNotesGeneratorHint": "ce qui rend le Markdown d'une note de version ; les sections affichées sur la page listent tous les commits dans les deux cas",
       "generator": {
@@ -198,6 +203,18 @@
         "listTitle": "Règles de repo",
         "hint": "Appliquées aux noms de repos. Une pull request n'a pas d'environnement : c'est par ici que le lead time se ventile par application ou par client.",
         "placeholder": "ex. portal-api"
+      },
+      "pull_request": {
+        "tab": "Labels de PR",
+        "listTitle": "Règles de labels de PR",
+        "hint": "Appliquées à chacun des labels d'une pull request mergée. Ce que le nom du repo ne peut pas dire dans un monorepo, où il est le même pour toutes les requêtes. Aucun appel d'API : les labels voyagent dans le listing déjà lu.",
+        "placeholder": "ex. area/front"
+      },
+      "pull_request_title": {
+        "tab": "Titres de PR",
+        "listTitle": "Règles de titres de PR",
+        "hint": "Appliquées au titre d'une pull request mergée. Exploitent une convention que personne n'a à entretenir : ^\\w+\\((?<component>[^)]+)\\) transforme feat(front) : … en component=front, sans aucun label à poser.",
+        "placeholder": "ex. feat(front): ajoute le sélecteur"
       },
       "incident": {
         "tab": "Incidents",
@@ -534,6 +551,7 @@
     }
   },
   "dora": {
+    "truncated": "Lecture écourtée sur {{count}} listing(s) ({{repos}}) : la plateforme a épuisé ses pages avant d'atteindre le début de cette période, les chiffres ci-dessous couvrent donc moins qu'ils ne l'annoncent. Augmentez le plafond de pages dans les réglages, ou resserrez la période.",
     "title": "Métriques DORA",
     "empty": "Aucune donnée — configurez des règles d'environnement et lancez une collecte.",
     "global": "global",
@@ -1017,6 +1035,8 @@
     "repo": "Dépôt",
     "from": "De",
     "fromAuto": "Le tag précédent",
+    "component": "Composant",
+    "componentPlaceholder": "ex. ^front@",
     "to": "À",
     "toAuto": "Tag le plus récent",
     "generate": "Générer",

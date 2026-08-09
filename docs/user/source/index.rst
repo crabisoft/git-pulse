@@ -24,6 +24,8 @@ with the code, in the :repo:`runbooks <docs/runbooks/README.md>`.
    versions
    history
    release-notes
+   monorepo
+   examples
    settings
    account
 
@@ -73,6 +75,12 @@ The pages
    * - :doc:`release-notes`
      - A range of commits summarised as Markdown, optionally rewritten by a
        model
+   * - :doc:`monorepo`
+     - What changes when one repository holds several things that ship on
+       their own — and what to do about it
+   * - :doc:`examples`
+     - CI snippets to copy, the matching configuration, and two collection
+       walkthroughs
    * - :doc:`settings`
      - Sources, rules, accounts, and everything an admin sets — admins only
    * - :doc:`account`

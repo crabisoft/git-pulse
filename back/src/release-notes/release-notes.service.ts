@@ -26,7 +26,7 @@ import { parseConventionalCommit, sectionRank } from './conventional-commit';
 import { readMergeCommit } from './merge-commit';
 import { renderChangelog } from './changelog';
 import { linkTickets } from './link-tickets';
-import { resolveRange } from './range';
+import { resolveRange, tagsMatching } from './range';
 import { refUrl, requestUrl, type RepoLocation } from '../sources/connectors/ref-url';
 import { REWRITE_SYSTEM, buildRewritePrompt, readRewritten } from './rewrite';
 import type { RewriteReleaseNotesDto } from './dto/rewrite-release-notes.dto';
@@ -55,6 +55,12 @@ export interface ReleaseNotesQuery {
   from?: string;
   /** Omitted, the most recent tag, or the default branch when none exists. */
   to?: string;
+  /**
+   * Which tags count as releases of the thing being summarised — `^front@`, on
+   * a repo that also tags `api@…`. Omitted, every tag does, which is the right
+   * answer for a repo holding one deployable.
+   */
+  tagPattern?: string;
 }
 
 @Injectable()
@@ -108,10 +114,19 @@ export class ReleaseNotesService {
     };
   }
 
-  /** Tags of a repo, for whoever picks the range. */
-  async tags(sourceId: string, repo: string, signal?: AbortSignal): Promise<Tag[]> {
+  /**
+   * Tags of a repo, for whoever picks the range. `pattern` narrows them to one
+   * component's releases — the picker then offers what the defaults would
+   * choose from, which is the only way the two can agree on a monorepo.
+   */
+  async tags(
+    sourceId: string,
+    repo: string,
+    pattern?: string,
+    signal?: AbortSignal,
+  ): Promise<Tag[]> {
     const { ctx, kind } = await this.sources.resolveContext(sourceId, signal);
-    return this.connectors.for(kind).listTags(ctx, repo);
+    return tagsMatching(await this.connectors.for(kind).listTags(ctx, repo), pattern);
   }
 
   /**
@@ -132,7 +147,10 @@ export class ReleaseNotesService {
   ): Promise<ReleaseNotes> {
     const { ctx, kind } = await this.sources.resolveContext(sourceId, signal);
     const connector = this.connectors.for(kind);
-    const tags = await connector.listTags(ctx, query.repo);
+    // Narrowed before the defaults are applied, never after: every one of them
+    // reads "the most recent tag", and on a monorepo that is whichever
+    // component released last unless this has already spoken.
+    const tags = tagsMatching(await connector.listTags(ctx, query.repo), query.tagPattern);
 
     const { from, to } = await resolveRange(query, tags, () =>
       connector.defaultBranch(ctx, query.repo),

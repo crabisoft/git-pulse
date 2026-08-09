@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   PAGE_LIMIT_MAX,
@@ -42,7 +42,7 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
    * pasted into a chat.
    */
   const { query, setQuery, replaceQuery } = useUrlQuery(releaseNotesCodec);
-  const { repo, from, to } = query;
+  const { repo, from, to, tagPattern } = query;
   const setRange = (patch: Partial<typeof query>) => setQuery((q) => ({ ...q, ...patch }));
 
   const [notes, setNotes] = useState<ReleaseNotes | null>(null);
@@ -94,7 +94,10 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
         return;
       }
       const [repoTags, repoBranches] = await Promise.all([
-        api.tags(sourceId, repo, signal),
+        // Every tag of the repo, unnarrowed. The component pattern is applied
+        // to this list below rather than sent here: it is typed a character at
+        // a time, and this call reaches the platform.
+        api.tags(sourceId, repo, undefined, signal),
         api.branches(sourceId, repo, signal),
       ]);
       setTags(repoTags);
@@ -107,6 +110,27 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
     [sourceId, repo],
   );
   const refsLoad = useCancellableLoad(loadRefs);
+
+  /**
+   * The tags the bound pickers offer: the repo's own, narrowed to the component
+   * being summarised. Computed here rather than asked of the server — the same
+   * filter the generation applies, over a list already in hand, so a pattern
+   * being typed costs nothing.
+   *
+   * A pattern the engine cannot read narrows nothing, which is what the backend
+   * does too: half of `^front@(` is a state every regex passes through while it
+   * is being typed, and emptying the pickers at each of them would be noise.
+   */
+  const visibleTags = useMemo(() => {
+    if (!tagPattern) return tags;
+    let regex: RegExp;
+    try {
+      regex = new RegExp(tagPattern);
+    } catch {
+      return tags;
+    }
+    return tags.filter((tag) => regex.test(tag.name));
+  }, [tags, tagPattern]);
 
   /**
    * Generating walks a history and is as expensive as a DORA report, so it runs
@@ -122,6 +146,7 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
           repo,
           from: from || undefined,
           to: to || undefined,
+          tagPattern: tagPattern || undefined,
         }),
       );
     } catch (e) {
@@ -176,12 +201,20 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
           <p className="muted">{t('releaseNotes.noRepo')}</p>
         )}
 
+        {/* One bar, left to right in the order the controls decide things: the
+            repo, the component narrowing its tags, then the two bounds picked
+            from what is left. The three short fields are narrowed rather than
+            given a filter's usual width — a repository path is a sentence, a
+            tag is `front@1.3.0` — which is what keeps five controls on one
+            line instead of wrapping the bounds onto their own. */}
         {repos.length > 0 && (
           <div className="filters-row">
             <FilterField label={t('releaseNotes.repo')}>
               <select
                 value={repo}
-                onChange={(e) => setQuery({ repo: e.target.value, from: '', to: '' })}
+                onChange={(e) =>
+                  setQuery({ repo: e.target.value, from: '', to: '', tagPattern: '' })
+                }
               >
                 {repos.map((name) => (
                   <option key={name} value={name}>
@@ -190,24 +223,38 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
                 ))}
               </select>
             </FilterField>
-            <FilterField label={t('releaseNotes.from')}>
+            {/* Beside the repo rather than beside the bounds: the two of them
+                say *what* is being summarised, and this one decides what the
+                bounds after it are even picked from. */}
+            <FilterField label={t('releaseNotes.component')} narrow>
+              <input
+                className="mono-input"
+                value={tagPattern}
+                /* The bounds belong to the component that was showing, exactly
+                   as they belong to the repo. */
+                onChange={(e) => setQuery({ ...query, tagPattern: e.target.value, from: '', to: '' })}
+                placeholder={t('releaseNotes.componentPlaceholder')}
+                spellCheck={false}
+              />
+            </FilterField>
+            <FilterField label={t('releaseNotes.from')} narrow>
               <RefSelect
                 value={from}
                 onChange={(value) => setRange({ from: value })}
                 /* Empty is not "no bound": it is the tag below `to`, which is
                    what a release note almost always wants. */
                 autoLabel={t('releaseNotes.fromAuto')}
-                tags={tags}
+                tags={visibleTags}
                 branches={branches}
                 disabled={refsLoad.loading}
               />
             </FilterField>
-            <FilterField label={t('releaseNotes.to')}>
+            <FilterField label={t('releaseNotes.to')} narrow>
               <RefSelect
                 value={to}
                 onChange={(value) => setRange({ to: value })}
                 autoLabel={t('releaseNotes.toAuto')}
-                tags={tags}
+                tags={visibleTags}
                 branches={branches}
                 disabled={refsLoad.loading}
               />
@@ -217,7 +264,7 @@ export function ReleaseNotesPage({ sourceId }: { sourceId: string }) {
             </button>
           </div>
         )}
-        {tags.length === 0 && repo && !refsLoad.loading && (
+        {visibleTags.length === 0 && repo && !refsLoad.loading && (
           <p className="muted">{t('releaseNotes.noTag')}</p>
         )}
       </section>

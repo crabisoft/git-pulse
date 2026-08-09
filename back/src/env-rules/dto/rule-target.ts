@@ -5,4 +5,10 @@ import type { RuleTarget } from '@repo/shared';
  * each DTO, the list silently fell behind when `incident` was added to
  * RuleTarget, and every request carrying it was rejected with a 400.
  */
-export const RULE_TARGETS = ['environment', 'repository', 'incident'] as const satisfies readonly RuleTarget[];
+export const RULE_TARGETS = [
+  'environment',
+  'repository',
+  'incident',
+  'pull_request',
+  'pull_request_title',
+] as const satisfies readonly RuleTarget[];
