@@ -26,3 +26,14 @@ RUN python3 -m venv $DOCS_VENV \
 ENV LANG=C.UTF-8
 
 WORKDIR /app
+
+# The dependency directories are named volumes, and a volume created empty takes
+# the ownership of the image directory it covers. The checks container installs
+# as whoever asked for it — 1000 on a workstation, 1001 on a GitHub runner — so
+# these are made writable by any of them rather than owned by one: npm has to be
+# able to populate them whatever id it runs as. The stack's own services run as
+# root and are unaffected.
+RUN mkdir -p /app/node_modules /app/back/node_modules /app/front/node_modules \
+             /app/packages/shared/node_modules \
+  && chmod 0777 /app/node_modules /app/back/node_modules /app/front/node_modules \
+                /app/packages/shared/node_modules

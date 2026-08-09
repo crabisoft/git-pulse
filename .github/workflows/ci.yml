@@ -13,6 +13,11 @@ concurrency:
 permissions:
   contents: read
 
+# Every step below is a make target, and nothing else. The recipe, the Node
+# version, the database and Redis images all live in the repository — in the
+# Makefile and in .docker — so `make check` on a workstation runs what this file
+# runs. A step written here and nowhere else would only be verifiable after a
+# push, and would drift from what the project actually does.
 jobs:
   check:
     name: Typecheck and tests
@@ -20,32 +25,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: npm
-
-      - run: npm ci
-
-      # Both sides resolve @repo/shared through its built types.
-      - name: Build shared
-        run: npm run build:shared
-
-      # The back typechecks against the generated Prisma client. No database
-      # is needed to generate it, and none is needed by the tests either.
-      - name: Generate Prisma client
-        run: npm run prisma:generate -w @repo/back
+      # No setup-node: the checks run in the dev image, whose Node comes from
+      # NODE_IMAGE in .docker/.env. One place states the version.
+      - name: Install and generate
+        run: make prepare
 
       - name: Typecheck
-        run: npm run typecheck
+        run: make typecheck
 
       - name: Unit tests
-        run: npm test
+        run: make test
 
-      # A story that no longer compiles is a catalogue entry nobody would
-      # notice was gone — nothing renders it until somebody opens it.
       - name: Build the component catalogue
-        run: npm run build-storybook -w @repo/front
+        run: make catalogue
+
+      # The suites mock Prisma from end to end, so this is the only step that
+      # applies a migration, constructs a client and asks the API a question.
+      - name: Boot against a real database
+        run: make smoke
 
   images:
     name: Production images
@@ -53,10 +50,5 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # The images are how the project is meant to be deployed, so a broken
-      # Dockerfile is a broken release.
-      - name: Build the API image
-        run: docker build -f .docker/Dockerfile.back -t git-pulse-back:ci .
-
-      - name: Build the web image
-        run: docker build -f .docker/Dockerfile.front -t git-pulse-front:ci .
+      - name: Build the production images
+        run: make images
