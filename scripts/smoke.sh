@@ -35,14 +35,28 @@ node back/dist/main.js &
 api=$!
 trap 'kill "$api" 2>/dev/null || true' EXIT
 
-# The dashboard is public by default, so this needs no session. That it answers
-# at all is the point: the process booted, the client constructed, the database
-# and Redis replied.
-echo "→ Waiting for /api/overview"
+# `/api/auth/me` rather than a dashboard route: it is the one endpoint that
+# answers before there is a session — `@Anonymous()` — and it still reads the
+# settings and counts the users, so a 200 means the client constructed and the
+# database replied. A route under `/api/overview` would need a source id, and a
+# seeded database is a second thing to keep true.
+#
+# Three outcomes, deliberately: nothing listening yet is worth waiting for, a
+# wrong status never becomes a right one, and a process that died says so now
+# rather than in a minute.
+echo "→ Waiting for /api/auth/me"
 i=0
-until node -e "fetch('http://localhost:${API_PORT}/api/overview').then(r => process.exit(r.ok ? 0 : 1), () => process.exit(1))" 2>/dev/null; do
+until node -e "
+  fetch('http://localhost:${API_PORT}/api/auth/me').then(
+    (r) => {
+      if (!r.ok) console.error('Answered ' + r.status + ' where 200 was expected.');
+      process.exit(r.ok ? 0 : 2);
+    },
+    () => process.exit(1),
+  );
+"; do
+  test $? -eq 1 || exit 1
   i=$((i + 1))
-  # A process that died is not a slow start: say so now rather than in 60s.
   kill -0 "$api" 2>/dev/null || { echo "The API exited before it answered."; exit 1; }
   test "$i" -lt 60 || { echo "The API never answered on port ${API_PORT}."; exit 1; }
   sleep 1
