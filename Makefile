@@ -15,8 +15,12 @@ suite ?= screenshots:docs
 # means the existing image is reused — see the target for why that is the
 # default, and when this is the answer.
 rebuild ?=
+# Database `make smoke` creates and drops. Its default matches the value the
+# checks service builds its DATABASE_URL from in .docker/docker-compose.dev.yml.
+SMOKE_DB ?= smoke
 
-.PHONY: help install build typecheck test storybook docs screenshots \
+.PHONY: help install prepare build typecheck test catalogue images smoke \
+        check ci storybook docs screenshots \
         dev dev-down stop start logs restart restart-back ps \
         prod prod-down \
         migrate deploy studio db-reset psql sh-back set-password \
@@ -31,17 +35,71 @@ help: ## Show this help
 		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 
 # ─── Project ─────────────────────────────────────────────────────────
-install: ## Install dependencies (npm)
+# Every check runs in the dev image through the `checks` service, and the CI
+# runs these very targets — so what breaks there breaks here, on the same Node
+# and the same dependencies, with no version of anything restated in a workflow
+# file. `run` builds the image when it is missing and reuses it after: the first
+# check on a fresh clone costs an image build and an install, and the
+# dependencies then live in volumes of their own and survive.
+#
+# As the calling user, so what lands in the working tree — dist, the catalogue,
+# the guide — belongs to whoever asked for it.
+CHECKS := HOST_UID=$$(id -u) HOST_GID=$$(id -g) \
+	$(COMPOSE) dev --profile checks run --rm -T checks sh -c
+
+install: ## Install on the host, for editors and language servers only
 	npm install
 
-build: ## Full build (shared → back → front)
-	npm run build
+# What every check reads before it can say anything true: both sides typecheck
+# against @repo/shared's dist and the generated Prisma client, and a clone that
+# skips this reports errors that are not in the code.
+#
+# The install is skipped while the installed tree is newer than the lockfile —
+# npm writes node_modules/.package-lock.json on every install, and the CI starts
+# from empty volumes, so it installs once there and never again in the same run.
+prepare: ## Install and generate what the checks read
+	$(CHECKS) "[ node_modules/.package-lock.json -nt package-lock.json ] || npm ci; \
+		npm run build:shared && npm run prisma:generate -w @repo/back"
 
-typecheck: ## Type-check the whole monorepo
-	npm run typecheck
+build: prepare ## Full build (shared → back → front)
+	$(CHECKS) "npm run build"
 
-test: ## Run the unit tests (pure engines: classification, DORA, tickets)
-	npm test
+typecheck: prepare ## Type-check the whole monorepo
+	$(CHECKS) "npm run typecheck"
+
+test: prepare ## Run the unit tests (pure engines: classification, DORA, tickets)
+	$(CHECKS) "npm test"
+
+# A story that no longer compiles is a catalogue entry nobody would notice was
+# gone — nothing renders it until somebody opens it.
+catalogue: prepare ## Build the component catalogue
+	$(CHECKS) "npm run build-storybook -w @repo/front"
+
+# The images are how the project is meant to be deployed, so a broken Dockerfile
+# is a broken release. Tagged `local` rather than `ci`: the same build, run from
+# either side.
+images: ## Build the production images
+	docker build -f .docker/Dockerfile.back -t git-pulse-back:local .
+	docker build -f .docker/Dockerfile.front -t git-pulse-front:local .
+
+# The one check that opens a database connection — see scripts/smoke.sh for what
+# that buys. On a database of its own, so a check never migrates and never
+# resets the data being worked on; the second one is the shadow the migration
+# diff needs. Both are dropped and recreated here rather than cleaned up after:
+# the run starts from a known empty state whatever the last one did, and a
+# failed run leaves its database standing to be looked at. The owner comes from
+# the db container's own environment rather than from a second copy of it here.
+smoke: prepare ## Boot the API against a real database
+	$(COMPOSE) dev up -d --wait db redis
+	@$(COMPOSE) dev exec -T db sh -c 'psql -U "$$POSTGRES_USER" -d postgres -q \
+		-c "DROP DATABASE IF EXISTS $(SMOKE_DB)" -c "CREATE DATABASE $(SMOKE_DB)" \
+		-c "DROP DATABASE IF EXISTS $(SMOKE_DB)_shadow" -c "CREATE DATABASE $(SMOKE_DB)_shadow"'
+	$(CHECKS) "sh scripts/smoke.sh"
+
+check: typecheck test catalogue smoke ## Every check the CI runs, except the images
+	@echo "All checks passed."
+
+ci: check images ## Everything the CI runs
 
 # In the running front container, like every other target that needs the
 # dependencies installed: the host has no node_modules of its own for this, and
@@ -49,18 +107,17 @@ test: ## Run the unit tests (pure engines: classification, DORA, tickets)
 storybook: ## Component catalogue on http://localhost:6006 (needs the dev stack up)
 	$(COMPOSE) dev exec front npm run storybook -w @repo/front -- --host 0.0.0.0 --no-open
 
-# In the back container for the same reason, and because that is where Sphinx
-# is: the dev image carries it in a virtualenv, so nothing has to be installed
-# on the host to build the guide. Warnings are fatal here exactly as they are on
-# Read the Docs — see docs/technical/user-guide.md.
+# In the checks container, which is where Sphinx is: the dev image carries it in
+# a virtualenv, so nothing has to be installed on the host to build the guide,
+# and the CI builds it the same way rather than with a Python of its own.
+# Warnings are fatal here exactly as they are on Read the Docs — see
+# docs/technical/user-guide.md.
 #
-# As the calling user, not as root. The build writes into the bind-mounted tree
-# rather than into a named volume — the point is to open the result in a browser
-# on the host — and everything else this stack writes there is kept out of it
-# precisely because a root-owned file needs sudo to delete.
-docs: ## Build the user guide (HTML in docs/user/build/html; needs the dev stack up)
-	$(COMPOSE) dev exec --user $$(id -u):$$(id -g) back \
-		sh -c 'make -C docs/user html SPHINXBUILD=$$DOCS_VENV/bin/sphinx-build'
+# No stack needed, unlike before: the guide is text, it reads nothing from the
+# database. As the calling user, so the HTML in the working tree is openable in
+# a browser on the host without sudo.
+docs: ## Build the user guide (HTML in docs/user/build/html)
+	$(CHECKS) 'make -C docs/user html SPHINXBUILD=$$DOCS_VENV/bin/sphinx-build'
 	@echo "Open docs/user/build/html/index.html"
 
 # The one target with a container of its own, and the one that needs no stack
