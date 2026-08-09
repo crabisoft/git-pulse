@@ -56,8 +56,10 @@ CHECKS := HOST_UID=$$(id -u) HOST_GID=$$(id -g) \
 	$(COMPOSE) dev --profile checks run --rm -T checks sh -c
 endif
 
-install: ## Install on the host, for editors and language servers only
-	npm install
+# The host tree is left alone, so an editor running there still wants a plain
+# `npm install` of its own.
+install: ## Install the dependencies the checks run on
+	$(CHECKS) "npm install"
 
 # What every check reads before it can say anything true: both sides typecheck
 # against @repo/shared's dist and the generated Prisma client, and a clone that
@@ -151,14 +153,16 @@ screenshots: ## Regenerate the user guide's images (its container is built on fi
 	@echo "Written to docs/user/source/images — review them before committing."
 
 # ─── Docker: development (watch / HMR) ───────────────────────────────
+# Compose directly rather than through the npm scripts, which only wrap it: a
+# target that starts containers should not need a Node to do it.
 dev: ## Start the dev stack (db + redis + back watch + front HMR)
-	npm run docker:dev
+	$(COMPOSE) dev up --build
 
 # Takes the containers away with it — the named volumes survive, so the
 # database and the installed dependencies do. `stop` below is the other half of
 # the distinction, and the one wanted most of the time.
 dev-down: ## Stop the dev stack and remove its containers
-	npm run docker:dev:down
+	$(COMPOSE) dev down
 
 # The pair `down`/`up` does not have: the containers stay, with their state and
 # their filesystem, and `start` puts them back exactly as they were. Nothing is
@@ -173,7 +177,7 @@ start: ## Start the containers stopped by `make stop`
 	$(COMPOSE) $(mode) start
 
 logs: ## Follow the dev stack logs
-	npm run docker:logs
+	$(COMPOSE) dev logs -f
 
 restart: dev-down dev ## Restart the dev stack
 
@@ -185,15 +189,26 @@ ps: ## Show container status
 
 # ─── Docker: production (build + nginx) ──────────────────────────────
 prod: ## Build and start the prod stack
-	npm run docker:prod
+	$(COMPOSE) prod up --build
 
 prod-down: ## Stop the prod stack and remove its containers
-	npm run docker:prod:down
+	$(COMPOSE) prod down
 
 # ─── Database ────────────────────────────────────────────────────────
+# The back service and not `checks`: its DATABASE_URL is the development
+# database, where the checks one is the throwaway `make smoke` works on. `run`
+# starts db and redis on the way in, so the stack need not be up already.
+ifeq ($(DEVCONTAINER),true)
+DB_RUN :=
+DB_EXEC :=
+else
+DB_RUN := $(COMPOSE) dev run --rm back
+DB_EXEC := $(COMPOSE) dev exec back
+endif
+
 migrate: ## Create a migration  (usage: make migrate name=add_table)
 	@test -n "$(name)" || { echo "Usage: make migrate name=<description>"; exit 1; }
-	npm run db:migrate -- --name $(name)
+	$(DB_RUN) npm run db:migrate -- --name $(name)
 
 # Through the container, unlike the targets below: DATABASE_URL is built by
 # docker-compose for the back service and exists nowhere else, so the host has
@@ -203,11 +218,13 @@ migrate: ## Create a migration  (usage: make migrate name=add_table)
 deploy: ## Apply pending migrations (in the running back container)
 	$(COMPOSE) $(mode) exec back npm run prisma:deploy -w @repo/back
 
-studio: ## Open Prisma Studio (data browser)
-	npm run db:studio
+# In the running back container rather than a new one, since the stack already
+# publishes the port it answers on, the way it does the catalogue's.
+studio: ## Open Prisma Studio on http://localhost:5555 (needs the dev stack up)
+	$(DB_EXEC) npm run db:studio -- --browser none
 
 db-reset: ## Reset the dev database (DESTRUCTIVE, asks for confirmation)
-	cd back && npx prisma migrate reset
+	$(DB_RUN) sh -c 'cd back && npx prisma migrate reset'
 
 psql: ## psql console on the dev database (running container)
 	$(COMPOSE) dev exec db psql -U dashboard dashboard
