@@ -44,8 +44,17 @@ help: ## Show this help
 #
 # As the calling user, so what lands in the working tree — dist, the catalogue,
 # the guide — belongs to whoever asked for it.
+#
+# The exception is a shell already inside a container with the project's Node,
+# which says so with DEVCONTAINER=true — the devcontainer sets it, and so does
+# the dev image. There the commands run as they are, on what `make install`
+# put in place, since a container has no Docker to start another one with.
+ifeq ($(DEVCONTAINER),true)
+CHECKS := sh -c
+else
 CHECKS := HOST_UID=$$(id -u) HOST_GID=$$(id -g) \
 	$(COMPOSE) dev --profile checks run --rm -T checks sh -c
+endif
 
 install: ## Install on the host, for editors and language servers only
 	npm install
