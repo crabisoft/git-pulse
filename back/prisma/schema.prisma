@@ -813,7 +813,7 @@ model StoredPullRequest {
   /// Empty on a row written before this column, which reads as a request
   /// carrying no label. A backfill would be a lie either way: the platforms
   /// answer today's labels, never the ones a request carried when it merged.
-  labels        String[]
+  labels        String[]  @default([])
   /// Last sync or event that touched the row — what reconciliation compares.
   seenAt        DateTime
 

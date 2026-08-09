@@ -32,12 +32,19 @@ tests that touch neither the network nor a database.
 ## Before you open a pull request
 
 ```bash
-make typecheck   # the whole monorepo
-make test        # 700+ unit tests, back and front
+make check   # typecheck, unit tests, the catalogue, and a boot against a real database
 ```
 
-Both must pass. They are also what CI runs, plus a build of the two production
-images.
+That is what CI runs, minus the two production images — `make ci` adds those.
+Every check runs in the dev container, so Docker is the only thing your machine
+needs; the individual targets (`make typecheck`, `make test`, `make catalogue`,
+`make smoke`) are there for when you want to know which one is red.
+
+`make smoke` is the one that needs Postgres and Redis. It works on a database of
+its own — never yours — applies the migrations to it, checks that they and
+`schema.prisma` still describe the same tables, then boots the API and asks it a
+question. The unit suites mock Prisma from end to end, so it is the only check
+that opens a connection.
 
 The Playwright layout suite (`npm run test:layout -w @repo/front`) is **not** in
 CI: it needs browsers and a running stack. Run it locally when you change

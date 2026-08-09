@@ -133,6 +133,46 @@ services:
       - screenshots-node-modules:/app/node_modules
       - screenshots-local-modules:/app/front/node_modules
 
+  # Everything the CI runs — `make check`, and each of its parts on its own.
+  #
+  # Behind a profile like the screenshots container above, and for the same
+  # reasons: it runs to completion and then should not exist, and no `up` should
+  # ever bring it into being. The CI drives this very service, so a check that
+  # passes here is a check that passes there — same image, same Node, same
+  # dependencies, and no version of anything written in a workflow file.
+  #
+  # As the caller, so the build outputs it drops in the working tree (dist,
+  # storybook-static) belong to whoever asked for them rather than to root.
+  #
+  # Its own dependency volumes, deliberately not the back's or the front's:
+  # those are installed as root by the watchers, and an `npm ci` racing a
+  # running dev stack for the same directory is a broken stack.
+  checks:
+    profiles: ["checks"]
+    build: *dev-build
+    image: git-pulse-dev
+    working_dir: /app
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    environment:
+      # That user has no home directory in this image, and npm wants one.
+      HOME: /tmp
+      npm_config_cache: /tmp/.npm
+      # For `make smoke` only, and on a database of its own: the checks must not
+      # migrate, and certainly not reset, the data a developer is working on.
+      DATABASE_URL: postgresql://${POSTGRES_USER:-dashboard}:${POSTGRES_PASSWORD:-dashboard}@db:5432/${SMOKE_DB:-smoke}?schema=public
+      SHADOW_DATABASE_URL: postgresql://${POSTGRES_USER:-dashboard}:${POSTGRES_PASSWORD:-dashboard}@db:5432/${SMOKE_DB:-smoke}_shadow?schema=public
+      REDIS_URL: redis://redis:6379
+      # Generated on first boot in the container's own /tmp and thrown away with
+      # it — a smoke run has no secret to keep.
+      MASTER_KEY_FILE: /tmp/master.key
+      API_PORT: ${API_PORT:-3001}
+    volumes:
+      - ..:/app
+      - checks-node-modules:/app/node_modules
+      - checks-back-modules:/app/back/node_modules
+      - checks-front-modules:/app/front/node_modules
+      - checks-shared-modules:/app/packages/shared/node_modules
+
 volumes:
   back-node-modules:
   back-local-modules:
@@ -140,5 +180,9 @@ volumes:
   front-local-modules:
   screenshots-node-modules:
   screenshots-local-modules:
+  checks-node-modules:
+  checks-back-modules:
+  checks-front-modules:
+  checks-shared-modules:
   back-dist:
   shared-dist:
