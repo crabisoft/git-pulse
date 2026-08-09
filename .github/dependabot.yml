@@ -52,3 +52,10 @@ updates:
     groups:
       images:
         patterns: ['*']
+    ignore:
+      # Staying on a Node LTS line, which Dependabot has no notion of: the tag
+      # pins the major, and only its patches flow in. An odd major is never
+      # LTS, and an even one only becomes it months after release — so the move
+      # is made by hand, with the engines floor and the CI runner.
+      - dependency-name: node
+        update-types: [version-update:semver-major]
