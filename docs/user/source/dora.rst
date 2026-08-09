@@ -6,6 +6,7 @@ The four metrics of the DORA report, plus the four segments lead time breaks
 into, over whatever period and slice the filter bar asks for.
 
 .. figure:: images/dora.png
+   :width: 1000px
    :alt: The DORA page: one card per metric, each with its value, its
          sparkline and the number of events behind it.
 
@@ -107,6 +108,7 @@ different number, and a detail page that disagreed with the card it was opened
 from would be worse than no detail page.
 
 .. figure:: images/dora-metric.png
+   :width: 1000px
    :alt: One metric: a chart of the historised readings over the period, then
          the events contributing to the value.
 

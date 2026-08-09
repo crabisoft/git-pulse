@@ -11,6 +11,7 @@ separate calls could not promise that, and a dashboard whose panels disagree
 about what time it is teaches people to distrust it.
 
 .. figure:: images/overview-control.png
+   :width: 1000px
    :alt: The control room: every environment with what is running on it, the
          four metrics with their trend, what is in the way, and the last
          twenty-four hours on a time axis.
@@ -148,6 +149,7 @@ The instrument panel
 ====================
 
 .. figure:: images/overview-instrument.png
+   :width: 1000px
    :alt: The instrument panel: four gauges with their tier, and a matrix
          crossing two dimensions.
 
@@ -181,6 +183,7 @@ The delivery stream
 ===================
 
 .. figure:: images/overview-stream.png
+   :width: 1000px
    :alt: The delivery stream: deployments and incidents interleaved on one
          rail, with the metrics and the environments on a side rail.
 

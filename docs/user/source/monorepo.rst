@@ -64,6 +64,13 @@ bot to install, and it works on history already merged:
 
 ``feat(front): add the picker`` then classifies as ``component=front``.
 
+.. figure:: images/rule-form.png
+   :width: 720px
+   :alt: A PR titles rule: the pattern with its named group, the kind, the
+         priority, and the Repo field confining it to one repository.
+
+   The same rule in the form. **Repo** is what keeps it inside the monorepo.
+
 **PR labels**, for everyone else, or where the titles are not trusted:
 
 .. code-block:: text
@@ -169,6 +176,14 @@ for.
 **You will be told.** The DORA page shows a banner naming the listings that ran
 short, and the backend logs the same thing. That is what makes raising the cap
 safe: you can overshoot downwards and find out, rather than guessing.
+
+.. figure:: images/dora-truncated.png
+   :width: 1000px
+   :alt: A warning above the DORA metrics: one listing on acme/platform ran
+         out of pages before reaching the start of the period.
+
+   Above the figures, and naming the repository — the caveat no number below
+   it could carry on its own.
 
 .. list-table::
    :header-rows: 1

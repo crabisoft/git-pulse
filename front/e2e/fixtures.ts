@@ -5,7 +5,47 @@
  * depends on what a live backend happens to hold is not one that can be
  * compared between two runs. Long names and long branch names are deliberate —
  * a row that fits because the data was short proves nothing about a phone.
+ *
+ * Every fixture is annotated with the type its endpoint answers, and `e2e` is
+ * in the `tsconfig`, so a field the API grew is a compile error here rather
+ * than a blank screenshot. It was the latter twice: a `DoraReport` that
+ * predated `truncated`, and incidents answered as a page where the view reads
+ * an array — a view that throws renders as an empty picture, not as an error,
+ * and both went out in the guide.
  */
+import type {
+  AppSettings,
+  AuthState,
+  Branch,
+  ChangelogReport,
+  ClassifiedDeployment,
+  ClassifiedEnvironment,
+  DashboardEnvironment,
+  DeploymentChangelogSummary,
+  DeploymentReport,
+  DoraMetric,
+  DoraReport,
+  DoraResult,
+  DoraSample,
+  EnvRulePublic,
+  EnvironmentVersion,
+  Incident,
+  JobRunning,
+  JobsSnapshot,
+  LlmProviderPublic,
+  MetricSeries,
+  MetricSnapshotPublic,
+  OverviewEvent,
+  OverviewReport,
+  Page,
+  PipelineStatus,
+  ReleaseNoteEntry,
+  ReleaseNotes,
+  RuleTarget,
+  SourcePublic,
+  Tag,
+  UserPublic,
+} from '@repo/shared';
 
 /**
  * The instant these fixtures describe. Half of what the pages show is relative
@@ -14,7 +54,7 @@
  */
 export const NOW = '2025-07-31T10:00:00Z';
 
-export const USER = {
+export const USER: UserPublic = {
   id: 'u-1',
   email: 'john.doe@example.com',
   name: 'John Doe',
@@ -25,9 +65,9 @@ export const USER = {
   language: null,
 };
 
-export const AUTH = { user: USER, publicDashboard: true, setupRequired: false };
+export const AUTH: AuthState = { user: USER, publicDashboard: true, setupRequired: false };
 
-export const SETTINGS = {
+export const SETTINGS: AppSettings = {
   doraWindowDays: 30,
   stalePrHours: 72,
   collectCron: '*/15 * * * *',
@@ -39,11 +79,15 @@ export const SETTINGS = {
   incidentLabels: ['incident', 'production-outage'],
   quotaReservePct: 10,
   releaseNotesGenerator: 'builtin',
+  // Both arrived with the monorepo work: which dimension names a deployable,
+  // and how deep a listing may be read before it gives up.
+  componentAttribute: null,
+  collectionPageCap: 20,
   overviewDirection: 'control',
   displayMode: 'system',
 };
 
-export const SOURCES = {
+export const SOURCES: Page<SourcePublic> = {
   items: [
     {
       id: 'src-1',
@@ -58,6 +102,8 @@ export const SOURCES = {
       historyDays: 90,
       isDefault: true,
       envRuleIds: [],
+      versionRuleIds: [],
+      envUrlRuleIds: [],
       trackerIds: [],
       incidentTrackerId: null,
       createdAt: '2025-01-01T00:00:00Z',
@@ -76,16 +122,18 @@ export const SOURCES = {
       historyDays: null,
       isDefault: false,
       envRuleIds: [],
+      versionRuleIds: [],
+      envUrlRuleIds: [],
       trackerIds: [],
       incidentTrackerId: null,
       createdAt: '2025-01-01T00:00:00Z',
       updatedAt: '2025-01-01T00:00:00Z',
     },
   ],
-  page: { total: 2, limit: 25, offset: 0 },
+  page: { total: 2, limit: 25, offset: 0, hasMore: false },
 };
 
-const DEPLOYMENT = (i: number) => ({
+const DEPLOYMENT = (i: number): ClassifiedDeployment => ({
   id: `gh:checkout-service:${i}`,
   repo: 'acme/checkout-service',
   environment: i % 2 === 0 ? 'production' : 'staging',
@@ -99,13 +147,13 @@ const DEPLOYMENT = (i: number) => ({
   metaEnvironments: i % 2 === 0 ? ['prod'] : [],
 });
 
-export const EMPTY_PAGE = {
+export const EMPTY_PAGE: Page<never> = {
   items: [],
   page: { total: 0, limit: 25, offset: 0, hasMore: false },
 };
 
 /** A `DeploymentReport`: the page of rows plus the vocabularies the filters offer. */
-export const DEPLOYMENTS = {
+export const DEPLOYMENTS: DeploymentReport = {
   deployments: {
     items: Array.from({ length: 8 }, (_, i) => DEPLOYMENT(i)),
     page: { total: 8, limit: 25, offset: 0, hasMore: false },
@@ -114,10 +162,16 @@ export const DEPLOYMENTS = {
   environments: ['production', 'staging'],
   statuses: ['success', 'failed'],
   dimensions: { client: ['northwind'], app: ['checkout'] },
-  period: { from: '2025-07-01T00:00:00Z', to: '2025-07-31T00:00:00Z' },
+  // No version reading on this report. The readings the guide shows belong to
+  // the overview's matrix, over environments this page's rows never name — a
+  // source with no version rule is the state this one describes.
+  versions: [],
+  currentVersions: [],
+  versionRules: 0,
+  period: { from: '2025-07-01T00:00:00Z', to: '2025-07-31T00:00:00Z', windowDays: 30 },
 };
 
-const CHANGELOG = (i: number) => ({
+const CHANGELOG = (i: number): DeploymentChangelogSummary => ({
   id: `cl-${i}`,
   deploymentId: `gh:checkout-service:${i}`,
   repo: 'acme/checkout-service',
@@ -140,7 +194,7 @@ const CHANGELOG = (i: number) => ({
 });
 
 /** A `ChangelogReport`: what was filed, and the vocabularies the filters offer. */
-export const CHANGELOGS = {
+export const CHANGELOGS: ChangelogReport = {
   changelogs: {
     items: Array.from({ length: 6 }, (_, i) => CHANGELOG(i)),
     page: { total: 6, limit: 25, offset: 0, hasMore: false },
@@ -151,7 +205,7 @@ export const CHANGELOGS = {
 };
 
 /** A `JobsSnapshot`: both queues, one of them on a schedule. */
-export const JOBS = {
+export const JOBS: JobsSnapshot = {
   observedAt: '2025-07-31T10:00:00Z',
   unreachable: null,
   queues: [
@@ -177,7 +231,7 @@ export const JOBS = {
  * away. Wide on purpose: this is the widest table the settings hold, and a
  * phone is where it either fits or does not.
  */
-export const RUNNING = {
+export const RUNNING: Page<JobRunning> = {
   items: [
     {
       queue: 'collection',
@@ -225,11 +279,14 @@ const ENVIRONMENT = (
   attributes: Record<string, string>,
   repos: string[],
   ref: string,
-  recent: string[],
-) => ({
+  recent: PipelineStatus[],
+): DashboardEnvironment => ({
   name,
   attributes,
   metaEnvironments: name.startsWith('prod') ? ['prod'] : [],
+  // Every row here exists because something deployed to it; a declared one is
+  // the other half of the type, and the board draws it differently.
+  declared: false,
   repos,
   deployments: recent.length,
   lastDeployAt: '2025-07-31T09:24:00Z',
@@ -238,7 +295,7 @@ const ENVIRONMENT = (
   recent,
 });
 
-const OK = ['success', 'success', 'success', 'success', 'success'];
+const OK: PipelineStatus[] = ['success', 'success', 'success', 'success', 'success'];
 
 /** An `OverviewReport`: what the dashboard reads in one call. */
 /**
@@ -300,7 +357,7 @@ const SILENT = 'sandbox';
  * exception the grid exists to surface — the background of every screenshot.
  * Three environments are singled out instead, one per thing the grid can say.
  */
-export const ENVIRONMENT_VERSIONS = VERSION_REPOS.flatMap((repo, r) =>
+export const ENVIRONMENT_VERSIONS: EnvironmentVersion[] = VERSION_REPOS.flatMap((repo, r) =>
   VERSION_ENVIRONMENTS.map((environment, e) => {
     const [major, minor] = CURRENT_RELEASE[repo].split('.').map(Number);
     const lag = MINORS_BEHIND[environment] ?? 0;
@@ -326,7 +383,7 @@ export const ENVIRONMENT_VERSIONS = VERSION_REPOS.flatMap((repo, r) =>
   }),
 );
 
-export const OVERVIEW = {
+export const OVERVIEW: OverviewReport = {
   sourceId: 'src-1',
   environments: [
     ENVIRONMENT(
@@ -432,12 +489,14 @@ export const OVERVIEW = {
     queues: 'ok',
     quotaLeft: 0.68,
   },
-  events: Array.from({ length: 9 }, (_, i) => ({
+  events: Array.from({ length: 9 }, (_, i): OverviewEvent => ({
+    id: `gh:deploy:${1400 + i}`,
     at: `2025-07-31T${(2 + i * 2).toString().padStart(2, '0')}:12:00Z`,
     environment: i % 3 === 0 ? 'production' : i % 3 === 1 ? 'staging' : 'production-eu',
     repo: i % 2 === 0 ? 'acme/checkout-service' : 'acme/identity-provider',
     ref: i % 2 === 0 ? 'release/2025.07.31' : 'v4.2.0',
     status: i === 4 ? 'failed' : 'success',
+    url: 'https://github.com/acme/checkout-service/deployments/1',
     attributes:
       i % 2 === 0
         ? { client: 'northwind', app: 'checkout' }
@@ -448,7 +507,7 @@ export const OVERVIEW = {
   versions: ENVIRONMENT_VERSIONS,
 };
 
-const SAMPLE = (i: number, label: string, value: number | null) => ({
+const SAMPLE = (i: number, label: string, value: number | null): DoraSample => ({
   label,
   at: `2025-07-${(31 - i).toString().padStart(2, '0')}T14:05:00Z`,
   value,
@@ -458,12 +517,12 @@ const SAMPLE = (i: number, label: string, value: number | null) => ({
 });
 
 const RESULT = (
-  metric: string,
+  metric: DoraMetric,
   value: number,
-  unit: string,
+  unit: DoraResult['unit'],
   sampleSize: number,
   label: string,
-) => ({
+): DoraResult => ({
   metric,
   value,
   unit,
@@ -474,7 +533,7 @@ const RESULT = (
 });
 
 /** A `DoraReport`: one reading per metric, plus the filter vocabularies. */
-export const DORA = {
+export const DORA: DoraReport = {
   results: [
     RESULT('deployment_frequency', 63, 'count', 63, 'production'),
     RESULT('lead_time', 97_200, 'seconds', 48, 'acme/checkout-service#1284'),
@@ -488,10 +547,25 @@ export const DORA = {
   repos: ['acme/checkout-service', 'acme/identity-provider'],
   dimensions: { client: ['globex', 'northwind'], app: ['checkout', 'identity'] },
   period: { from: '2025-07-01T00:00:00Z', to: '2025-07-31T00:00:00Z', windowDays: 30 },
+  // The ordinary answer, and not optional: the page reads its length before it
+  // draws anything, so a report without it renders nothing at all.
+  truncated: [],
+};
+
+/**
+ * The same report over a scope the platform could not read to the end — one
+ * monorepo whose merges outran the page cap.
+ *
+ * A variant rather than a state to reach through the interface: nothing on
+ * screen produces it, it comes from what the read ran into.
+ */
+export const DORA_TRUNCATED: DoraReport = {
+  ...DORA,
+  truncated: [{ repo: 'acme/platform', resource: 'merged_pull_requests' }],
 };
 
 /** A page of `DoraSample`, as the metric sub-page lists them. */
-export const DORA_SAMPLES = {
+export const DORA_SAMPLES: Page<DoraSample> = {
   items: Array.from({ length: 8 }, (_, i) =>
     SAMPLE(i, `acme/checkout-service#${1284 - i}`, 97_200 - i * 4_200),
   ),
@@ -514,7 +588,7 @@ const HISTORY: Record<string, number[]> = {
 };
 
 /** A page of `MetricSnapshotPublic`, ascending — what the sparklines are folded from. */
-export const METRIC_SNAPSHOTS = {
+export const METRIC_SNAPSHOTS: Page<MetricSnapshotPublic> = {
   items: Object.entries(HISTORY).flatMap(([metric, values]) =>
     values.map((value, i) => ({
       id: `snap-${metric}-${i}`,
@@ -529,7 +603,7 @@ export const METRIC_SNAPSHOTS = {
 };
 
 /** A `MetricSeries`: the trend a metric sub-page plots. */
-export const METRIC_SERIES = {
+export const METRIC_SERIES: MetricSeries = {
   metric: 'lead_time',
   dimensions: {},
   bucket: 'day',
@@ -544,6 +618,278 @@ export const METRIC_SERIES = {
 };
 
 /**
+ * Incidents over the journal's window, which is the delivery stream's whole
+ * point: they are what a rail of deployments alone cannot show.
+ *
+ * Answered as a bare array, unlike almost everything else here. Left to fall
+ * through to the page envelope the view threw on it, and a thrown view renders
+ * as a blank screenshot rather than as an error — which is how it went
+ * unnoticed.
+ */
+export const INCIDENTS: Incident[] = [
+  {
+    id: 'gh:checkout-service:412',
+    key: '#412',
+    title: 'Card authorisations failing at the acquirer',
+    url: 'https://github.com/acme/checkout-service/issues/412',
+    openedAt: '2025-07-30T21:12:00Z',
+    resolvedAt: '2025-07-30T22:47:00Z',
+    labels: ['incident', 'production-outage'],
+    repo: 'acme/checkout-service',
+    tickets: [],
+  },
+  {
+    id: 'gh:identity-provider:118',
+    key: '#118',
+    title: 'Token refresh rejected for a subset of tenants',
+    url: 'https://github.com/acme/identity-provider/issues/118',
+    openedAt: '2025-07-31T08:05:00Z',
+    resolvedAt: null,
+    labels: ['incident'],
+    repo: 'acme/identity-provider',
+    tickets: [],
+  },
+];
+
+/** A rule of the catalogue, in the shape the list draws and the form reopens. */
+const ENV_RULE = (
+  id: string,
+  name: string,
+  pattern: string,
+  target: RuleTarget,
+  priority: number,
+  attributes: Record<string, string> = {},
+  repo: string | null = null,
+  kind: 'simple' | 'meta' = 'simple',
+): EnvRulePublic => ({
+  id,
+  name,
+  pattern,
+  kind,
+  target,
+  priority,
+  attributes,
+  repo,
+  createdAt: '2025-01-01T00:00:00Z',
+  updatedAt: '2025-01-01T00:00:00Z',
+});
+
+/**
+ * The catalogue, per target — a rule set that reads like one somebody wrote
+ * rather than one invented for a picture: a convention captured, a meta
+ * environment declared over it, and attributes forced onto the names that carry
+ * nothing to capture. What `CLASSIFIED` answers is what these three would.
+ */
+export const ENVIRONMENT_RULES: Page<EnvRulePublic> = {
+  items: [
+    ENV_RULE(
+      'er-1',
+      'Client, application and type',
+      '^(?<client>[a-z]+)-(?<app>[a-z]+)-(?<type>prod|staging|dev)$',
+      'environment',
+      10,
+    ),
+    // A meta rule contributes its name and nothing else, which is why this one
+    // is named as the meta environment rather than after what it matches.
+    ENV_RULE('er-2', 'production', '-prod$', 'environment', 20, {}, null, 'meta'),
+    ENV_RULE('er-3', 'Legacy Contoso estate', '^ProdContoso', 'environment', 30, {
+      client: 'contoso',
+      app: 'billing',
+      type: 'prod',
+    }),
+  ],
+  page: { total: 3, limit: 25, offset: 0, hasMore: false },
+};
+
+/** The monorepo rule the guide spells out, saved: a component read off a title. */
+export const PR_TITLE_RULES: Page<EnvRulePublic> = {
+  items: [
+    ENV_RULE(
+      'er-4',
+      'Component from a Conventional Commits scope',
+      '^\\w+\\((?<component>[^)]+)\\)',
+      'pull_request_title',
+      10,
+      {},
+      '^acme/platform$',
+    ),
+  ],
+  page: { total: 1, limit: 25, offset: 0, hasMore: false },
+};
+
+/** What the rule set makes of a name the preview is given. */
+export const CLASSIFIED: ClassifiedEnvironment = {
+  name: 'acme-billing-prod',
+  attributes: { client: 'acme', app: 'billing', type: 'prod' },
+  metaEnvironments: ['production'],
+};
+
+/** A provider on file, so the release notes page offers the rewriting. */
+export const LLM_PROVIDERS: Page<LlmProviderPublic> = {
+  items: [
+    {
+      id: 'llm-1',
+      name: 'Anthropic',
+      kind: 'anthropic',
+      model: 'claude-sonnet-4-5',
+      baseUrl: null,
+      isDefault: true,
+      hasKey: true,
+      createdAt: '2025-01-01T00:00:00Z',
+      updatedAt: '2025-01-01T00:00:00Z',
+    },
+  ],
+  page: { total: 1, limit: 100, offset: 0, hasMore: false },
+};
+
+/** The repos of a source, as the release notes page asks for them. */
+export const REPOS: string[] = ['acme/checkout-service', 'acme/identity-provider'];
+
+/** Tags of one repo, newest first — what the two bounds are picked from. */
+export const TAGS: Tag[] = [
+  { name: 'v2025.07.3', sha: '9f2c1ab4e77d3a2b5c8e10f4d6a9b3c7e2f18d40', taggedAt: '2025-07-28T08:00:00Z' },
+  { name: 'v2025.07.2', sha: '3d81f0c9a4b2e675d1c8039fae5b27c4d90e6a13', taggedAt: '2025-07-14T08:00:00Z' },
+  { name: 'v2025.07.1', sha: 'c7a5e93012b8d4f6a1e70c35b982d4f61a0c8e27', taggedAt: '2025-07-02T08:00:00Z' },
+];
+
+export const BRANCHES: Branch[] = [
+  { name: 'main', sha: '9f2c1ab4e77d3a2b5c8e10f4d6a9b3c7e2f18d40', isDefault: true },
+  { name: 'release/2025.08', sha: '5e1b7c02d9a3f486b0c25e7d1a94f3608b2c5d19', isDefault: false },
+];
+
+/** One line of a note, cited the way the page cites it. */
+const ENTRY = (
+  sha: string,
+  summary: string,
+  scope: string | null,
+  message: string,
+  pr: number,
+  ticket: string | null,
+  breaking = false,
+): ReleaseNoteEntry => ({
+  summary,
+  message,
+  scope,
+  breaking,
+  sha,
+  author: 'Dana Whitfield',
+  url: `https://github.com/acme/checkout-service/commit/${sha}`,
+  tickets: ticket
+    ? [
+        {
+          key: ticket,
+          url: `https://acme.atlassian.net/browse/${ticket}`,
+          foundIn: 'branch',
+          tracker: { id: 'tr-1', name: 'Jira', kind: 'jira' },
+        },
+      ]
+    : [],
+  pullRequest: { number: pr, url: `https://github.com/acme/checkout-service/pull/${pr}` },
+});
+
+const BREAKING_ENTRY = ENTRY(
+  '4c9e21b7a83d5f60c1e94b27a0d63f815c47e29b',
+  'the payment webhook now signs its callbacks',
+  'payments',
+  'feat(payments)!: the payment webhook now signs its callbacks\n\nBREAKING CHANGE: consumers that did not verify a signature now receive\none, and a callback carrying none is rejected.',
+  1284,
+  'PAY-841',
+  true,
+);
+
+/**
+ * A range as the generator reads it: the breaking change lifted out, the
+ * conventional types filed under their sections, and the commits that followed
+ * no convention kept rather than dropped.
+ */
+export const RELEASE_NOTES: ReleaseNotes = {
+  repo: 'acme/checkout-service',
+  from: 'v2025.07.2',
+  to: 'v2025.07.3',
+  fromUrl: 'https://github.com/acme/checkout-service/releases/tag/v2025.07.2',
+  toUrl: 'https://github.com/acme/checkout-service/releases/tag/v2025.07.3',
+  breaking: [BREAKING_ENTRY],
+  sections: [
+    {
+      type: 'feat',
+      entries: [
+        BREAKING_ENTRY,
+        ENTRY(
+          'a10f7d3e5c92b48016fa7c2d9e35b108d4f62a7c',
+          'retry a declined authorisation once, on the same card',
+          'payments',
+          'feat(payments): retry a declined authorisation once, on the same card',
+          1281,
+          'PAY-836',
+        ),
+        ENTRY(
+          '7b3c8e15d049a6f2c83b10e7d5946a2f0c8b1e34',
+          'show the acquirer response code on a failed capture',
+          'checkout',
+          'feat(checkout): show the acquirer response code on a failed capture',
+          1279,
+          null,
+        ),
+      ],
+    },
+    {
+      type: 'fix',
+      entries: [
+        ENTRY(
+          'e64a09c7b1d832f5a09e7c41b6d038a2e5c19b74',
+          'stop rounding the fee twice on a partial refund',
+          'refunds',
+          'fix(refunds): stop rounding the fee twice on a partial refund',
+          1276,
+          'PAY-829',
+        ),
+        ENTRY(
+          '2f8d51a09c6e37b4d0a85f13c9e02b6d4a71f8c5',
+          'release the idempotency key when the gateway times out',
+          'payments',
+          'fix(payments): release the idempotency key when the gateway times out\n\nThe key was held for the full ten-minute window, so a retry after a\ntimeout answered from the cache instead of reaching the gateway.',
+          1274,
+          'PAY-830',
+        ),
+      ],
+    },
+    {
+      type: 'other',
+      entries: [
+        ENTRY(
+          '8c4b06e2f9a137d5b8e04c1a6f92d370b5e8a24f',
+          'bump the acquirer SDK to 4.2.1',
+          null,
+          'bump the acquirer SDK to 4.2.1',
+          1272,
+          null,
+        ),
+      ],
+    },
+  ],
+  generator: 'builtin',
+  markdown: [
+    '## Breaking changes',
+    '',
+    '- **payments**: the payment webhook now signs its callbacks ([PAY-841](https://acme.atlassian.net/browse/PAY-841), [#1284](https://github.com/acme/checkout-service/pull/1284))',
+    '',
+    '## Features',
+    '',
+    '- **payments**: retry a declined authorisation once, on the same card ([PAY-836](https://acme.atlassian.net/browse/PAY-836), [#1281](https://github.com/acme/checkout-service/pull/1281))',
+    '- **checkout**: show the acquirer response code on a failed capture ([#1279](https://github.com/acme/checkout-service/pull/1279))',
+    '',
+    '## Bug fixes',
+    '',
+    '- **refunds**: stop rounding the fee twice on a partial refund ([PAY-829](https://acme.atlassian.net/browse/PAY-829), [#1276](https://github.com/acme/checkout-service/pull/1276))',
+    '- **payments**: release the idempotency key when the gateway times out ([PAY-830](https://acme.atlassian.net/browse/PAY-830), [#1274](https://github.com/acme/checkout-service/pull/1274))',
+    '',
+    '## Following no convention',
+    '',
+    '- bump the acquirer SDK to 4.2.1 ([#1272](https://github.com/acme/checkout-service/pull/1272))',
+  ].join('\n'),
+};
+
+/**
  * Every route the screens touch, most specific first — the collections hang off
  * `/sources/:id/…`, so a pattern for `sources` would swallow them if it came
  * before theirs.
@@ -553,6 +899,11 @@ export const ROUTES: Array<[RegExp, unknown]> = [
   [/\/api\/settings(\?|$)/, SETTINGS],
   [/\/api\/overview\//, OVERVIEW],
   [/\/api\/sources\/[^/]+\/deployments/, DEPLOYMENTS],
+  [/\/api\/sources\/[^/]+\/incidents/, INCIDENTS],
+  [/\/api\/sources\/[^/]+\/release-notes/, RELEASE_NOTES],
+  [/\/api\/sources\/[^/]+\/repos/, REPOS],
+  [/\/api\/sources\/[^/]+\/tags/, TAGS],
+  [/\/api\/sources\/[^/]+\/branches/, BRANCHES],
   [/\/api\/sources\/[^/]+\/changelogs/, CHANGELOGS],
   [/\/api\/sources\/[^/]+\/dora\/samples/, DORA_SAMPLES],
   [/\/api\/sources\/[^/]+\/dora/, DORA],
@@ -565,7 +916,13 @@ export const ROUTES: Array<[RegExp, unknown]> = [
   [/\/api\/coverage/, []],
   [/\/api\/quotas/, []],
   [/\/api\/budgets/, []],
+  // Matched before the catalogue itself: the preview is a POST to a path the
+  // pattern below would otherwise answer with a page of rules.
+  [/\/api\/env-rules\/preview/, CLASSIFIED],
+  [/\/api\/env-rules\?.*target=pull_request_title/, PR_TITLE_RULES],
+  [/\/api\/env-rules\?.*target=environment/, ENVIRONMENT_RULES],
   [/\/api\/env-rules/, EMPTY_PAGE],
+  [/\/api\/llm-providers/, LLM_PROVIDERS],
   [/\/api\/trackers/, EMPTY_PAGE],
   [/\/api\/jobs\/running/, RUNNING],
   [/\/api\/jobs\/(failures|degraded)/, EMPTY_PAGE],

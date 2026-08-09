@@ -6,6 +6,14 @@ Git Pulse reports on the Git platforms it reads: what is deployed where,
 how fast changes get out, what is in the way, and what each release carried. It
 writes nothing back — every credential it holds is read-only.
 
+.. figure:: images/overview-control.png
+   :width: 1000px
+   :alt: The Overview: every environment with what is running on it, the four
+         metrics with their trend, what is in the way, and the last
+         twenty-four hours on a time axis.
+
+   The page it opens on, over a fictional organization.
+
 Most of what follows is the application as seen from a browser. :doc:`Putting it
 somewhere <installation>` is here too, in the shape somebody evaluating it
 needs; keeping it alive afterwards — backups, upgrades, the master key — lives

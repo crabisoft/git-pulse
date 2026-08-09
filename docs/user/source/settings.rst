@@ -18,6 +18,7 @@ platform; the form itself is walked through in :doc:`getting-started`, and what
 to grant its credential is :doc:`credentials`.
 
 .. figure:: images/settings-sources.png
+   :width: 1000px
    :alt: The sources section: the configured sources with their platform,
          their mode, their quota and the actions available on each.
 
@@ -429,6 +430,7 @@ Background jobs
 What the workers are doing. The page to open when figures have stopped moving.
 
 .. figure:: images/settings-jobs.png
+   :width: 1000px
    :alt: The background jobs section: the two queues with their counts, their
          schedules, and the jobs currently in flight.
 

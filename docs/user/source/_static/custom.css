@@ -1,11 +1,12 @@
 /*
- * What the Read the Docs theme does that this guide cannot live with.
+ * What the Read the Docs theme does that this guide cannot live with, and how
+ * its screenshots are presented.
  *
- * Three rules, and the second is the one that matters: the theme forbids
- * wrapping inside every table cell, which is defensible for a table of short
- * values and wrong for these, whose cells hold sentences. Left alone, each
- * table grows past the page and carries a horizontal scrollbar with it —
- * on a wide screen as much as on a narrow one.
+ * The table rule is the one that matters most: the theme forbids wrapping
+ * inside every table cell, which is defensible for a table of short values and
+ * wrong for these, whose cells hold sentences. Left alone, each table grows
+ * past the page and carries a horizontal scrollbar with it — on a wide screen
+ * as much as on a narrow one.
  */
 
 /* The article is capped at 800px by default: a column of prose between two
@@ -35,4 +36,49 @@
 code {
   white-space: normal;
   overflow-wrap: break-word;
+}
+
+/* Figures.
+
+   Every screenshot declares its width in the page that shows it — the size the
+   interface was photographed at, halved or capped, never the raw pixel count.
+   What is left here is the framing: a hairline and a radius, so an image of an
+   interface reads as an image rather than as part of the page, and a caption
+   that stays inside the figure instead of running the width of the article.
+
+   `display: table` is what does that last part: a table shrinks to its content,
+   and a `table-caption` box does not count towards that width. The caption then
+   wraps at the image's edge, whatever the image's size. */
+.rst-content figure,
+.rst-content .figure {
+  display: table;
+  margin: 22px 0 26px;
+}
+
+.rst-content figure img,
+.rst-content .figure img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  border: 1px solid rgba(15, 23, 42, 0.12);
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.08);
+}
+
+.rst-content figcaption,
+.rst-content .figure .caption {
+  display: table-caption;
+  caption-side: bottom;
+  margin-top: 10px;
+  font-size: 0.85rem;
+  font-style: normal;
+  line-height: 1.55;
+  color: #5a6270;
+}
+
+/* The theme puts a paragraph inside the caption; its bottom margin would double
+   the gap before the prose that follows. */
+.rst-content figcaption p:last-child,
+.rst-content .figure .caption p:last-child {
+  margin-bottom: 0;
 }

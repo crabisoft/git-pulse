@@ -6,6 +6,7 @@ The same question as :doc:`deployments` â€” *what did this deployment carry?* â€
 asked months later, after the platform has stopped being able to answer.
 
 .. figure:: images/history.png
+   :width: 1000px
    :alt: The deployment history: archived deployments with their environment,
          ref, and the commits each one carried.
 

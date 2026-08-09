@@ -25,6 +25,7 @@ answers, crossing two axes you choose. **Repository** and **Environment** are
 offered alongside whatever dimensions your rules extract.
 
 .. figure:: images/overview-versions.png
+   :width: 1000px
    :alt: The versions reading: a grid of environments, each cell carrying the
          release that environment answers.
 

@@ -1,0 +1,45 @@
+# The image the user guide's screenshots are taken in.
+#
+# Its own image rather than a job on the dev one: this needs a browser and the
+# forty-odd system libraries a browser wants, which is most of the weight here
+# and none of what running the application needs. Keeping it apart is what lets
+# `make dev` stay small, and lets this be built the first time somebody asks
+# for the images rather than on every clone.
+#
+# Nothing of the source is copied. The repository is bind-mounted at run time
+# and the dependencies are installed into named volumes — see the `screenshots`
+# service in docker-compose.dev.yml.
+ARG PLAYWRIGHT_IMAGE=mcr.microsoft.com/playwright:v1.62.1-noble
+
+# The browser build must be the one this version of Playwright drives, so the
+# tag is the version in front/package.json and moves with it. A mismatch is not
+# subtle — Playwright refuses to start and names the executable it wanted.
+FROM ${PLAYWRIGHT_IMAGE}
+
+# The image ships the Node its own tooling needs; the repository declares
+# `engines: node >= 24`. Installed over it rather than worked around, so the
+# container runs what a developer's machine runs. The browsers are files on
+# disk and care about none of this.
+ARG NODE_MAJOR=24
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ca-certificates curl gnupg \
+  && curl -fsSL https://deb.nodesource.com/setup_${NODE_MAJOR}.x | bash - \
+  && apt-get install -y --no-install-recommends nodejs \
+  && apt-get purge -y gnupg \
+  && apt-get autoremove -y \
+  && rm -rf /var/lib/apt/lists/*
+
+# The container runs as the caller — see the service's `user:` — so that the
+# PNGs it writes into the bind-mounted tree belong to whoever asked for them
+# instead of to root. Two consequences, both settled here:
+#
+#   1. A fresh named volume takes the permissions of the image directory it
+#      covers, so these two are created world-writable: without it, `npm
+#      install` is a container running as uid 1001 writing into a root-owned
+#      volume.
+#   2. That user has no home directory. npm, Vite and Playwright all want one,
+#      and the service points HOME at /tmp for it.
+RUN mkdir -p /app/node_modules /app/front/node_modules \
+  && chmod 0777 /app/node_modules /app/front/node_modules
+
+WORKDIR /app

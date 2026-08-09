@@ -8,9 +8,16 @@ out ?= backup
 # Where `make restore` reads. Defaults to what the backup wrote, so a pair run
 # with the same `out=` needs it stated once.
 in ?= $(out)
+# Which suite `make screenshots` runs. The guide's by default;
+# `suite=screenshots` regenerates the README's five instead.
+suite ?= screenshots:docs
+# Set to anything to rebuild the screenshots container before running it. Empty
+# means the existing image is reused — see the target for why that is the
+# default, and when this is the answer.
+rebuild ?=
 
-.PHONY: help install build typecheck test storybook docs \
-        dev dev-down logs restart restart-back ps \
+.PHONY: help install build typecheck test storybook docs screenshots \
+        dev dev-down stop start logs restart restart-back ps \
         prod prod-down \
         migrate deploy studio db-reset psql sh-back set-password \
         backup restore \
@@ -56,12 +63,48 @@ docs: ## Build the user guide (HTML in docs/user/build/html; needs the dev stack
 		sh -c 'make -C docs/user html SPHINXBUILD=$$DOCS_VENV/bin/sphinx-build'
 	@echo "Open docs/user/build/html/index.html"
 
+# The one target with a container of its own, and the one that needs no stack
+# running: the suite stubs every API call and starts a Vite of its own, so this
+# works on a machine where `make dev` was never typed.
+#
+# No `--build`. `run` builds a service whose image is missing and reuses it
+# otherwise, which is the behaviour wanted here: the image appears the first
+# time somebody asks for the images — the service sits behind a compose profile
+# precisely so that nothing else ever brings it into existence — and every run
+# after that is a container start. Expect a few minutes on that first one: a
+# browser and its libraries are being downloaded.
+#
+# What that costs is an image that no longer tracks its Dockerfile, so a change
+# to it, or to PLAYWRIGHT_IMAGE, is picked up with `make screenshots rebuild=1`.
+#
+# As the caller, like `docs` above and for the same reason: the PNGs land in the
+# working tree, and a root-owned PNG needs sudo to regenerate.
+screenshots: ## Regenerate the user guide's images (its container is built on first use)
+	HOST_UID=$$(id -u) HOST_GID=$$(id -g) SCREENSHOT_SUITE=$(suite) \
+		$(COMPOSE) dev --profile screenshots run --rm $(if $(rebuild),--build) screenshots
+	@echo "Written to docs/user/source/images — review them before committing."
+
 # ─── Docker: development (watch / HMR) ───────────────────────────────
 dev: ## Start the dev stack (db + redis + back watch + front HMR)
 	npm run docker:dev
 
-dev-down: ## Stop the dev stack
+# Takes the containers away with it — the named volumes survive, so the
+# database and the installed dependencies do. `stop` below is the other half of
+# the distinction, and the one wanted most of the time.
+dev-down: ## Stop the dev stack and remove its containers
 	npm run docker:dev:down
+
+# The pair `down`/`up` does not have: the containers stay, with their state and
+# their filesystem, and `start` puts them back exactly as they were. Nothing is
+# recreated and nothing is rebuilt, so this is also what to reach for when a
+# rebuild is precisely what you do not want.
+#
+# Mode-aware like the database targets: `make stop mode=prod`.
+stop: ## Stop the containers without removing them
+	$(COMPOSE) $(mode) stop
+
+start: ## Start the containers stopped by `make stop`
+	$(COMPOSE) $(mode) start
 
 logs: ## Follow the dev stack logs
 	npm run docker:logs
@@ -78,7 +121,7 @@ ps: ## Show container status
 prod: ## Build and start the prod stack
 	npm run docker:prod
 
-prod-down: ## Stop the prod stack
+prod-down: ## Stop the prod stack and remove its containers
 	npm run docker:prod:down
 
 # ─── Database ────────────────────────────────────────────────────────
