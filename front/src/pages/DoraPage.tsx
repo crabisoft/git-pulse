@@ -1,12 +1,7 @@
 import { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import {
-  PAGE_LIMIT_MAX,
-  type DoraReport,
-  type DoraMetric,
-  type MetricSnapshotPublic,
-} from '@repo/shared';
+import type { DoraReport, DoraMetric, MetricSeries } from '@repo/shared';
 import { api, type DoraQuery } from '../api';
 import { formatValue } from '../doraFormat';
 import { toSearchParams } from '../doraQuery';
@@ -28,24 +23,6 @@ const METRIC_ORDER: DoraMetric[] = [
 ];
 
 /**
- * Sparklines only need the tail of the series. Snapshots come back in ascending
- * order, so grab the last window rather than the first.
- */
-async function loadRecentHistory(
-  sourceId: string,
-  signal: AbortSignal,
-): Promise<MetricSnapshotPublic[]> {
-  const first = await api.metrics(sourceId, { limit: PAGE_LIMIT_MAX }, signal);
-  if (!first.page.hasMore) return first.items;
-  const tail = await api.metrics(
-    sourceId,
-    { limit: PAGE_LIMIT_MAX, offset: first.page.total - PAGE_LIMIT_MAX },
-    signal,
-  );
-  return tail.items;
-}
-
-/**
  * One block per metric, over whatever the filters ask for.
  *
  * The blocks used to break down by dimension combination — a row for
@@ -58,7 +35,7 @@ async function loadRecentHistory(
 export function DoraPage({ sourceId, slug }: { sourceId: string; slug: string }) {
   const { t } = useTranslation();
   const [report, setReport] = useState<DoraReport | null>(null);
-  const [history, setHistory] = useState<MetricSnapshotPublic[]>([]);
+  const [history, setHistory] = useState<MetricSeries[]>([]);
   // The filters live in the address: they survive a back, and a link carries
   // them to whoever it is sent to. Debounced on the way there, so a burst of
   // clicks is one request and one history entry.
@@ -67,7 +44,20 @@ export function DoraPage({ sourceId, slug }: { sourceId: string; slug: string })
     async (signal: AbortSignal) => {
       const [live, hist] = await Promise.all([
         api.dora(sourceId, settled, signal),
-        loadRecentHistory(sourceId, signal),
+        // The same period and the same slice as the values beside them, folded
+        // server-side: a sparkline is a second reading of the window the card
+        // reports on, not of whatever happens to be in the snapshot table.
+        api.metricSeries(
+          sourceId,
+          {
+            metrics: METRIC_ORDER,
+            dimensions: settled.dimensions,
+            from: settled.from,
+            to: settled.to,
+            windowDays: settled.windowDays,
+          },
+          signal,
+        ),
       ]);
       setReport(live);
       setHistory(hist);
@@ -82,16 +72,13 @@ export function DoraPage({ sourceId, slug }: { sourceId: string; slug: string })
   /** What every block opens: the filters in effect, unaltered. */
   const search = toSearchParams(settled).toString();
 
-  // The sparkline history is folded like the report is — every snapshot whose
-  // combination satisfies the filter feeds the metric's line, rather than only
-  // the one stored against that exact combination.
-  const historyByMetric = new Map<string, number[]>();
-  for (const snapshot of history) {
-    if (!matchesFilter(snapshot.dimensions, settled.dimensions ?? {})) continue;
-    const bucket = historyByMetric.get(snapshot.metric);
-    if (bucket) bucket.push(snapshot.value);
-    else historyByMetric.set(snapshot.metric, [snapshot.value]);
-  }
+  // Already folded and bucketed by day server-side, by the same code the metric
+  // page's chart reads. Folding here instead meant appending the raw snapshots
+  // of every matching combination end to end: three combinations gave three
+  // values for one day, drawn as three moments of a line that never moved.
+  const historyByMetric = new Map<string, number[]>(
+    history.map((series) => [series.metric, series.points.map((point) => point.value)]),
+  );
 
   return (
     <div>
@@ -178,12 +165,4 @@ export function DoraPage({ sourceId, slug }: { sourceId: string; slug: string })
       )}
     </div>
   );
-}
-
-/** Every pair of the filter must be present for a snapshot to contribute. */
-function matchesFilter(
-  dimensions: Record<string, string>,
-  filter: Record<string, string>,
-): boolean {
-  return Object.entries(filter).every(([key, value]) => dimensions[key] === value);
 }

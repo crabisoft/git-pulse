@@ -59,7 +59,8 @@ export class CollectionController {
   }
 
   /**
-   * One metric over a period, folded over the filter and bucketed by day.
+   * The requested metrics over a period, each folded over the filter and
+   * bucketed by day. One series per metric asked for, in the order asked.
    *
    * The period is resolved here, through the same function the DORA report
    * uses and against the same default: the chart and the value beside it are
@@ -71,7 +72,7 @@ export class CollectionController {
   async series(@Param('id') id: string, @Query() query: MetricSeriesDto) {
     const period = resolvePeriod(query, (await this.settings.get()).doraWindowDays);
     return this.collector.series(id, {
-      metric: query.metric,
+      metrics: query.metric,
       dimensions: toDimensionFilter(query.dimension),
       from: period.from,
       to: period.to,

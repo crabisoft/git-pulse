@@ -205,7 +205,12 @@ export class CollectorService {
   }
 
   /**
-   * A metric's history over a filter, bucketed for a chart.
+   * The history of each requested metric over a filter, bucketed for a chart.
+   *
+   * Several at once because the metric list plots one line per card and they
+   * all read the same table over the same period: a single query, then a fold
+   * per metric — each in its own unit, which is why they cannot simply be
+   * summed together.
    *
    * Snapshots are stored per dimension **combination** — `{type, client, app}`
    * all at once — while a reader filters on a subset of them, often on nothing
@@ -223,33 +228,39 @@ export class CollectorService {
   async series(
     sourceId: string,
     q: {
-      metric: string;
+      metrics: string[];
       dimensions: Record<string, string>;
       from?: string;
       to?: string;
     },
-  ): Promise<MetricSeries> {
+  ): Promise<MetricSeries[]> {
     const rows = await this.snapshotsMatching({
       sourceId,
-      metric: q.metric,
+      metrics: q.metrics,
       dimensions: q.dimensions,
       from: q.from,
       to: q.to,
     });
 
-    return {
-      metric: q.metric,
-      dimensions: q.dimensions,
-      // Days: the collection runs every few minutes, so a year of raw
-      // snapshots is tens of thousands of rows no plot can say anything with.
-      bucket: 'day',
-      points: foldTrend(rows, unitOf(q.metric)),
-      snapshotCount: rows.length,
-    };
+    // Every metric asked for answers, empty included: a caller drawing a line
+    // per card needs to know which ones have no history rather than having to
+    // tell "absent" from "not asked for".
+    return q.metrics.map((metric) => {
+      const of = rows.filter((row) => row.metric === metric);
+      return {
+        metric,
+        dimensions: q.dimensions,
+        // Days: the collection runs every few minutes, so a year of raw
+        // snapshots is tens of thousands of rows no plot can say anything with.
+        bucket: 'day',
+        points: foldTrend(of, unitOf(metric)),
+        snapshotCount: of.length,
+      };
+    });
   }
 
   /**
-   * Snapshots of one metric whose combination satisfies a partial filter.
+   * Snapshots of the given metrics whose combination satisfies a partial filter.
    *
    * "Everything that is prod, whatever the client" is a containment question,
    * not an equality one: a combination is not a subset of the filter that
@@ -259,15 +270,17 @@ export class CollectorService {
    */
   async snapshotsMatching(q: {
     sourceId: string;
-    metric: string;
+    metrics: string[];
     dimensions: Record<string, string>;
     from?: string;
     to?: string;
-  }): Promise<Array<{ value: number; dimensions: Record<string, string>; capturedAt: Date }>> {
+  }): Promise<
+    Array<{ metric: string; value: number; dimensions: Record<string, string>; capturedAt: Date }>
+  > {
     const rows = await this.prisma.metricSnapshot.findMany({
       where: {
         sourceId: q.sourceId,
-        metric: q.metric,
+        metric: { in: q.metrics },
         ...(q.from || q.to
           ? {
               capturedAt: {
@@ -278,11 +291,12 @@ export class CollectorService {
           : {}),
       },
       orderBy: { capturedAt: 'asc' },
-      select: { value: true, dimensions: true, capturedAt: true },
+      select: { metric: true, value: true, dimensions: true, capturedAt: true },
     });
 
     return rows
       .map((row) => ({
+        metric: row.metric,
         value: row.value,
         dimensions: (row.dimensions ?? {}) as Record<string, string>,
         capturedAt: row.capturedAt,

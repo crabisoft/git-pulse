@@ -195,7 +195,7 @@ No metric on screen is ever read back from `MetricSnapshot`.
 | Screen / block | Source | Stored? |
 |---|---|---|
 | DORA page — the values | recomputed (`/dora`) | no |
-| DORA page — the sparklines | `MetricSnapshot` | **yes** |
+| DORA page — the sparklines | `MetricSnapshot` (`/metrics/series`) | **yes** |
 | Sub-page — the headline value | recomputed (`/dora`) | no |
 | Sub-page — the chart | `MetricSnapshot` (`/metrics/series`) | **yes** |
 | Sub-page — the event list | recomputed (`/dora/samples`), paginated | no |

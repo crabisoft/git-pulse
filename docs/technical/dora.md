@@ -217,6 +217,18 @@ server-side** — unlike the overview's sparklines, which illustrate a period an
 are therefore cut from it (see
 [Trends over the period](collection-and-metrics.md#10-trends-over-the-period)).
 
+The metric list's sparklines read the same route, which is why `metric` is
+repeatable: eight cards, eight lines, one query over the table they all share.
+Every metric asked for answers, empty points included, so a caller can line the
+series up against its cards without telling "no history" from "not asked for".
+
+They used to be folded in the browser instead, from the raw snapshot list —
+which appended every combination satisfying the filter end to end. Three
+combinations gave three values for one day, drawn as three moments of a line
+that never moved, and none of it was bounded by the period the value beside it
+was computed over. Folding a series is one rule, `foldTrend` holds it, and it
+holds it once.
+
 The collection runs every few minutes, so a year of raw snapshots is tens of
 thousands of rows — more than a page window carries and more than a plot can
 say anything with.

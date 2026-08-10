@@ -42,7 +42,7 @@ function renderPage() {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.mocked(api.metricSeries).mockResolvedValue({ metric: 'deploy_time', points: [] } as never);
+  vi.mocked(api.metricSeries).mockResolvedValue([{ metric: 'deploy_time', points: [] }] as never);
   vi.mocked(api.doraSamples).mockResolvedValue({
     items: [sample('api #1', 14_400)],
     page: { total: 260, limit: 10, offset: 0, hasMore: true },

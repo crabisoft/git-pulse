@@ -61,7 +61,7 @@ export function DoraMetricPage({ sourceId, slug }: { sourceId: string; slug: str
         api.metricSeries(
           sourceId,
           {
-            metric,
+            metrics: [metric],
             dimensions: settled.dimensions,
             from: settled.from,
             to: settled.to,
@@ -72,7 +72,8 @@ export function DoraMetricPage({ sourceId, slug }: { sourceId: string; slug: str
       ]);
       setReport({
         result: live.results.find((r) => r.metric === metric) ?? null,
-        series,
+        // One metric asked for, one series back.
+        series: series[0],
       });
     },
     [sourceId, metric, settled],
