@@ -179,11 +179,14 @@ export function orphanIncidentDimensions(
 /**
  * Median time to restore, per dimension combination. Two ways to measure it,
  * combined when `source` is `both`:
- *   pipelines — a failed deployment until the next success in the same environment
+ *   pipelines — a failed deployment until the next success of the same
+ *               deployable, meaning the same repository *and* environment
  *   incidents — an incident from opened to resolved
  *
  * Unlike the failure rate this needs no deployments at all, so a slice known
  * only through its incidents still yields a value.
+ *
+ * A slice with nothing to measure yields none: see `measured`.
  */
 export function mttr(
   deployments: DeploymentEvent[],
@@ -200,23 +203,26 @@ export function mttr(
       : groupByDimensions(incidents.filter((i) => !attributed.has(i)));
 
   const keys = new Set([...deploysByDimensions.keys(), ...incidentsByDimensions.keys()]);
-  return [...keys].map((key) => {
+  return [...keys].flatMap((key) => {
     const deploys: DeploymentEvent[] = deploysByDimensions.get(key) ?? [];
     const related: IncidentEvent[] =
       source === 'pipelines'
         ? []
         : [...deploys.flatMap((d) => linked.get(d) ?? []), ...(incidentsByDimensions.get(key) ?? [])];
-    const restores: number[] = [];
     const samples: DoraSample[] = [];
 
-    for (const [, envItems] of groupBy(deploys, (d) => d.environment)) {
+    // Repository *and* environment. On the environment alone, two repos
+    // shipping to a shared name interleave, and one repo's success closes
+    // another's failure: `portal-api` breaks production, `portal-front` deploys
+    // ten minutes later, and the pair reads as a ten-minute restore of
+    // something nobody fixed. A restore is the same deployable recovering.
+    for (const [, envItems] of groupBy(deploys, (d) => `${d.repo}\u0000${d.environment}`)) {
       const sorted = [...envItems].sort(byCreatedAt);
       for (let i = 0; i < sorted.length; i++) {
         if (sorted[i].status !== 'failed') continue;
         const next = sorted.slice(i + 1).find((d) => d.status === 'success');
         if (!next) continue;
         const durationSec = seconds(sorted[i].createdAt, next.createdAt);
-        restores.push(durationSec);
         samples.push({
           label: sorted[i].environment,
           at: sorted[i].createdAt,
@@ -232,19 +238,10 @@ export function mttr(
       // median toward zero rather than upward, so it is left out entirely.
       if (!incident.resolvedAt) continue;
       const durationSec = clamp(seconds(incident.openedAt, incident.resolvedAt));
-      restores.push(durationSec);
       samples.push({ ...incidentSample(incident), value: durationSec });
     }
 
-    return {
-      metric: 'mttr',
-      value: median(restores),
-      unit: 'seconds',
-      dimensions: (deploys[0] ?? related[0]).dimensions,
-      sampleSize: restores.length,
-      samples: takeRecent(samples),
-      population: samples,
-    };
+    return measured('mttr', (deploys[0] ?? related[0]).dimensions, samples);
   });
 }
 
@@ -335,7 +332,7 @@ export function componentMismatches(
     if (component === undefined) continue;
     if (deploymentsCarrying(pr, deployments, componentKey).length > 0) continue;
     if (deploymentsCarrying(pr, deployments).length === 0) continue;
-    found.set(`${pr.repo} ${component}`, { repo: pr.repo, component });
+    found.set(`${pr.repo}\u0000${component}`, { repo: pr.repo, component });
   }
   return [...found.values()];
 }
@@ -365,6 +362,10 @@ export function deploymentCarrying(
  *   review = first review → merge
  *   lead   = first commit → merge
  * All medians, in seconds.
+ *
+ * A segment nothing could be measured on is absent rather than zero — a
+ * platform with no review object leaves `pickup_time` and `review_time`
+ * unanswered, not instant. See `measured`.
  */
 export function leadTimeBreakdown(prs: MergedPrEvent[]): DoraResult[] {
   return [...groupByDimensions(prs)].flatMap(([, items]) => {
@@ -383,23 +384,11 @@ export function leadTimeBreakdown(prs: MergedPrEvent[]): DoraResult[] {
       }
     }
     const dims = items[0].dimensions;
-    const point = (metric: DoraMetric, samples: DoraSample[]): MeasuredResult => {
-      const values = samples.map((s) => s.value ?? 0);
-      return {
-        metric,
-        value: median(values),
-        unit: 'seconds',
-        dimensions: dims,
-        sampleSize: samples.length,
-        samples: takeRecent(samples),
-        population: samples,
-      };
-    };
     return [
-      point('coding_time', coding),
-      point('pickup_time', pickup),
-      point('review_time', review),
-      point('lead_time', lead),
+      ...measured('coding_time', dims, coding),
+      ...measured('pickup_time', dims, pickup),
+      ...measured('review_time', dims, review),
+      ...measured('lead_time', dims, lead),
     ];
   });
 }
@@ -441,21 +430,42 @@ export function deployTime(
     }
   }
 
-  return [...samplesByKey.values()].map(({ dimensions, samples }) => {
-    const values = samples.map((s) => s.value ?? 0);
-    return {
-      metric: 'deploy_time' as DoraMetric,
-      value: median(values),
-      unit: 'seconds' as const,
+  return [...samplesByKey.values()].flatMap(({ dimensions, samples }) =>
+    measured('deploy_time', dimensions, samples),
+  );
+}
+
+// ─── helpers ─────────────────────────────────────────────────────────
+
+/**
+ * A duration reading over the events it was measured on — or no reading at all.
+ *
+ * The empty case is why this exists. `median([])` is 0, and zero is not the
+ * absence of a measurement: it folds in with the real slices, the scheduled
+ * snapshot persists it as a genuine reading, the trend draws a point on it, and
+ * `doraTier` ranks it **elite** — a restore time nobody could measure reading
+ * as the best recovery on the scale. A slice with nothing to measure therefore
+ * produces nothing, which every reader already handles: a metric with no result
+ * gets no card, no snapshot row, and no point on its line.
+ */
+function measured(
+  metric: DoraMetric,
+  dimensions: Record<string, string>,
+  samples: DoraSample[],
+): MeasuredResult[] {
+  if (samples.length === 0) return [];
+  return [
+    {
+      metric,
+      value: median(samples.map((s) => s.value ?? 0)),
+      unit: 'seconds',
       dimensions,
       sampleSize: samples.length,
       samples: takeRecent(samples),
       population: samples,
-    };
-  });
+    },
+  ];
 }
-
-// ─── helpers ─────────────────────────────────────────────────────────
 
 /** Two references mean the same ticket when tracker and key agree. */
 function ticketKey(ticket: TicketRef): string {

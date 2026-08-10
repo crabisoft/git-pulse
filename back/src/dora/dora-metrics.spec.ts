@@ -22,7 +22,8 @@ const deploy = (
   status: DeploymentEvent['status'],
   dimensions: Record<string, string> = PROD,
   environment = 'prod',
-): DeploymentEvent => ({ environment, repo: 'api', status, createdAt: at, dimensions });
+  repo = 'api',
+): DeploymentEvent => ({ environment, repo, status, createdAt: at, dimensions });
 
 const ticket = (key: string) => ({
   key,
@@ -141,8 +142,14 @@ describe('mttr', () => {
   });
 
   it('leaves an unresolved incident out rather than counting it as zero', () => {
-    const [result] = mttr([], [incident('2026-01-05T00:00:00Z', null)], 'incidents');
-    expect(result.sampleSize).toBe(0);
+    expect(mttr([], [incident('2026-01-05T00:00:00Z', null)], 'incidents')).toEqual([]);
+  });
+
+  it('emits nothing for a slice that deployed without ever failing', () => {
+    // Not a restore time of zero, which reads as the best possible recovery:
+    // there is no restore time here at all.
+    const clean = [deploy('2026-01-01T00:00:00Z', 'success'), deploy('2026-01-02T00:00:00Z', 'success')];
+    expect(mttr(clean, [], 'pipelines')).toEqual([]);
   });
 
   it('reports a slice known only through its incidents', () => {
@@ -155,7 +162,27 @@ describe('mttr', () => {
 
   it('ignores a failure never followed by a success', () => {
     const stillDown = [deploy('2026-01-01T00:00:00Z', 'failed')];
-    expect(mttr(stillDown, [], 'pipelines')[0].sampleSize).toBe(0);
+    expect(mttr(stillDown, [], 'pipelines')).toEqual([]);
+  });
+
+  describe('two repos shipping to the same environment name', () => {
+    // Both call it prod, only `api` broke. Grouping restores by environment
+    // alone let the other repo's release close the incident it knew nothing of.
+    const broke = deploy('2026-01-02T00:00:00Z', 'failed');
+    const elsewhere = deploy('2026-01-02T01:00:00Z', 'success', PROD, 'prod', 'web');
+    const recovered = deploy('2026-01-02T03:00:00Z', 'success');
+
+    it('does not let another repo close the failure', () => {
+      expect(mttr([broke, elsewhere], [], 'pipelines')).toEqual([]);
+    });
+
+    it('waits for the failing repo to recover', () => {
+      const [result] = mttr([broke, elsewhere, recovered], [], 'pipelines');
+      expect({ value: result.value, sampleSize: result.sampleSize }).toEqual({
+        value: 10800, // 00:00 → 03:00, not the 01:00 deployment of `web`
+        sampleSize: 1,
+      });
+    });
   });
 });
 
@@ -179,12 +206,15 @@ describe('leadTimeBreakdown', () => {
   });
 
   it('skips pickup and review when the platform exposes no review', () => {
+    // Absent rather than zero: an unmeasurable segment must not read as instant,
+    // which is what a zero would say — and what the tier scale would call elite.
     const noReview = leadTimeBreakdown([pr({ firstReviewAt: null })]);
-    const sizes = Object.fromEntries(noReview.map((r) => [r.metric, r.sampleSize]));
-    expect(sizes.pickup_time).toBe(0);
-    expect(sizes.review_time).toBe(0);
     // The lead time itself is unaffected: it needs no review.
-    expect(sizes.lead_time).toBe(1);
+    expect(noReview.map((r) => r.metric)).toEqual(['coding_time', 'lead_time']);
+  });
+
+  it('emits nothing at all for a request with no commit date and no review', () => {
+    expect(leadTimeBreakdown([pr({ firstCommitAt: null, firstReviewAt: null })])).toEqual([]);
   });
 
   it('takes the median, not the mean, so one outlier does not carry the value', () => {

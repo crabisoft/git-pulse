@@ -139,7 +139,7 @@ failure rate** and **MTTR**:
 
 | Value | Rate numerator | MTTR |
 |---|---|---|
-| `pipelines` (default) | failed deployments | failure → next successful deployment in the same env |
+| `pipelines` (default) | failed deployments | failure → next successful deployment of the same repo in the same env |
 | `incidents` | incidents opened | opened → resolved |
 | `both` | either | median over the union of both |
 
@@ -181,6 +181,27 @@ restore time, and counting it as zero would drag the median down instead of up.
 Under `both` the rate may exceed 100% when incidents outnumber deployments in a
 slice — deliberately unclamped, since a ceiling would only hide a misconfigured
 label filter or misaligned dimensions.
+
+**Repo and environment**, not the environment alone. Two repos deploying to a
+name they both call `prod` interleave, and pairing on the name lets one repo's
+release close the other's failure: a ten-minute restore of something nobody
+fixed. A restore is the same deployable recovering.
+
+## No measurement is not a zero
+
+Every duration is a median, and the median of nothing is zero — which is not
+what "nothing was measured" means. A zero survives the fold, gets persisted by
+the scheduled snapshot as a genuine reading, draws a point on the trend, and
+lands in the **elite** band of the tier scale: a restore time nobody could
+measure would read as the best recovery on the scale.
+
+So a slice with no event behind it produces **no reading at all** — no MTTR
+where nothing failed, no `pickup_time` where the platform exposes no review, no
+`coding_time` where no commit date came back. Every reader already handles the
+absence: the DORA page draws no card for a metric with no result, `snapshot`
+writes no row, and the trend steps over the gap rather than dropping to the
+floor. Only the metrics that genuinely count something — deployment frequency,
+and the failure rate over a slice that did deploy — report a real zero.
 
 ## Metric trends
 
