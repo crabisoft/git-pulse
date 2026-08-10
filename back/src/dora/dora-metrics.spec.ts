@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { FailureSource } from '@repo/shared';
 import {
+  carriedBy,
   changeFailureRate,
   deploymentCarrying,
   deployTime,
@@ -67,6 +68,24 @@ const deployments = [
   deploy('2026-01-03T00:00:00Z', 'success'),
 ];
 const incidents = [incident('2026-01-04T00:00:00Z', '2026-01-04T02:00:00Z')];
+
+/**
+ * The correlation the readings below share, built for one call.
+ *
+ * These specs are about what gets paired with what, so they state the events
+ * and let the index be an implementation detail — which is what it is.
+ */
+const carrying = (merged: MergedPrEvent, of: DeploymentEvent[] = deployments) =>
+  deploymentCarrying(merged, carriedBy([merged], of));
+
+const deployTimeOf = (prs: MergedPrEvent[], of: DeploymentEvent[] = deployments) =>
+  deployTime(prs, carriedBy(prs, of));
+
+const linkedTo = (
+  raised: IncidentEvent[],
+  prs: MergedPrEvent[],
+  of: DeploymentEvent[] = deployments,
+) => incidentsByDeployment(raised, prs, carriedBy(prs, of));
 
 const rate = (source: FailureSource) => changeFailureRate(deployments, incidents, source)[0].value;
 const restore = (source: FailureSource) => {
@@ -229,30 +248,36 @@ describe('leadTimeBreakdown', () => {
 describe('deploymentCarrying', () => {
   it('takes the first successful deployment of the repo after the merge', () => {
     const merged = pr({ mergedAt: '2026-01-01T12:00:00Z' });
-    expect(deploymentCarrying(merged, deployments)?.createdAt).toBe('2026-01-02T01:00:00Z');
+    expect(carrying(merged)?.createdAt).toBe('2026-01-02T01:00:00Z');
   });
 
   it('ignores a failed deployment: it carried nothing anywhere', () => {
     const merged = pr({ mergedAt: '2026-01-01T12:00:00Z' });
     const onlyFailed = [deploy('2026-01-02T00:00:00Z', 'failed')];
-    expect(deploymentCarrying(merged, onlyFailed)).toBeNull();
+    expect(carrying(merged, onlyFailed)).toBeNull();
+  });
+
+  it('counts a deployment that went out at the very instant of the merge', () => {
+    // The bound the search is written on: at or after, never strictly after.
+    const merged = pr({ mergedAt: '2026-01-02T01:00:00Z' });
+    expect(carrying(merged)?.createdAt).toBe('2026-01-02T01:00:00Z');
   });
 
   it('ignores a deployment that predates the merge', () => {
     const merged = pr({ mergedAt: '2026-01-09T00:00:00Z' });
-    expect(deploymentCarrying(merged, deployments)).toBeNull();
+    expect(carrying(merged)).toBeNull();
   });
 
   it('never crosses repositories', () => {
     const elsewhere = pr({ repo: 'web', mergedAt: '2026-01-01T12:00:00Z' });
-    expect(deploymentCarrying(elsewhere, deployments)).toBeNull();
+    expect(carrying(elsewhere)).toBeNull();
   });
 });
 
 describe('deployTime', () => {
   it('measures the merge until the deployment that carried it', () => {
     const merged = pr({ mergedAt: '2026-01-02T00:00:00Z' });
-    const [result] = deployTime([merged], deployments);
+    const [result] = deployTimeOf([merged]);
     expect(result.value).toBe(3600); // merged at 00:00, deployed at 01:00
     expect(result.metric).toBe('deploy_time');
   });
@@ -261,12 +286,12 @@ describe('deployTime', () => {
     // The pull request carries repo dimensions; what matters is the environment
     // it reached, so `type=Prod` answers "time to production" on its own.
     const merged = pr({ mergedAt: '2026-01-02T00:00:00Z', dimensions: { app: 'Portal' } });
-    const [result] = deployTime([merged], deployments);
+    const [result] = deployTimeOf([merged]);
     expect(result.dimensions).toEqual(PROD);
   });
 
   it('leaves out a change that never reached anywhere', () => {
-    expect(deployTime([pr({ mergedAt: '2026-01-09T00:00:00Z' })], deployments)).toEqual([]);
+    expect(deployTimeOf([pr({ mergedAt: '2026-01-09T00:00:00Z' })])).toEqual([]);
   });
 
   describe('a repo that stages before it ships', () => {
@@ -283,20 +308,20 @@ describe('deployTime', () => {
 
     it('measures each destination on its own', () => {
       const byType = Object.fromEntries(
-        deployTime([merged], staged).map((r) => [r.dimensions.type, r.value]),
+        deployTimeOf([merged], staged).map((r) => [r.dimensions.type, r.value]),
       );
 
       expect(byType).toEqual({ Staging: 3600, Prod: 21600 });
     });
 
     it('counts landings rather than pull requests', () => {
-      const sizes = deployTime([merged], staged).map((r) => r.sampleSize);
+      const sizes = deployTimeOf([merged], staged).map((r) => r.sampleSize);
       expect(sizes).toEqual([1, 1]);
     });
 
     it('still blames the first landing anywhere for an incident', () => {
       // Attribution is not measurement: a change entered the world once.
-      expect(deploymentCarrying(merged, staged)?.environment).toBe('staging');
+      expect(carrying(merged, staged)?.environment).toBe('staging');
     });
   });
 });
@@ -306,7 +331,7 @@ describe('incidentsByDeployment', () => {
 
   it('ties an incident to the deployment carrying the change it names', () => {
     const broke = incident('2026-01-04T00:00:00Z', null, STAGING, [ticket('OPS-1')]);
-    const linked = incidentsByDeployment([broke], [shipped], deployments);
+    const linked = linkedTo([broke], [shipped]);
 
     const [[deployment, incidents]] = [...linked];
     expect(deployment.createdAt).toBe('2026-01-02T01:00:00Z');
@@ -315,19 +340,19 @@ describe('incidentsByDeployment', () => {
 
   it('refuses a deployment that happened after the incident opened', () => {
     const broke = incident('2026-01-01T00:00:00Z', null, PROD, [ticket('OPS-1')]);
-    expect(incidentsByDeployment([broke], [shipped], deployments).size).toBe(0);
+    expect(linkedTo([broke], [shipped]).size).toBe(0);
   });
 
   it('ties nothing when no ticket is shared', () => {
     const unrelated = incident('2026-01-04T00:00:00Z', null, PROD, [ticket('OPS-9')]);
-    expect(incidentsByDeployment([unrelated], [shipped], deployments).size).toBe(0);
+    expect(linkedTo([unrelated], [shipped]).size).toBe(0);
   });
 
   it('counts a linked incident in the deployment slice, not its own', () => {
     // Dimension matching would have dropped it: nothing ever deployed to
     // Staging, so it had no denominator to divide by.
     const broke = incident('2026-01-04T00:00:00Z', null, STAGING, [ticket('OPS-1')]);
-    const linked = incidentsByDeployment([broke], [shipped], deployments);
+    const linked = linkedTo([broke], [shipped]);
 
     const [rate] = changeFailureRate(deployments, [broke], 'incidents', linked);
     expect(rate.dimensions).toEqual(PROD);
@@ -337,7 +362,7 @@ describe('incidentsByDeployment', () => {
 
   it('still reports an unlinkable incident as an orphan slice', () => {
     const unrelated = incident('2026-01-04T00:00:00Z', null, STAGING, [ticket('OPS-9')]);
-    const linked = incidentsByDeployment([unrelated], [shipped], deployments);
+    const linked = linkedTo([unrelated], [shipped]);
     expect(orphanIncidentDimensions(deployments, [unrelated], linked)).toEqual([STAGING]);
   });
 });

@@ -85,12 +85,11 @@ export function deploymentFrequency(deployments: DeploymentEvent[]): DoraResult[
 export function incidentsByDeployment(
   incidents: IncidentEvent[],
   prs: MergedPrEvent[],
-  deployments: DeploymentEvent[],
-  componentKey: string | null = null,
+  carriers: Carriers,
 ): Map<DeploymentEvent, IncidentEvent[]> {
   const carrier = new Map<string, DeploymentEvent>();
   for (const pr of prs) {
-    const deployment = deploymentCarrying(pr, deployments, componentKey);
+    const deployment = deploymentCarrying(pr, carriers);
     if (!deployment) continue;
     for (const ticket of pr.tickets) carrier.set(ticketKey(ticket), deployment);
   }
@@ -246,6 +245,21 @@ export function mttr(
 }
 
 /**
+ * Every merged request paired with the deployments that carried it — one per
+ * environment the change reached, and no entry at all for a request that
+ * reached nowhere.
+ *
+ * Computed once and read by the three things that need it: `deployTime`
+ * measures each landing, `deploymentCarrying` takes the first of them for
+ * blame, and `componentMismatches` compares it against the same correlation
+ * run without the component test. Each of those used to walk every deployment
+ * for every pull request on its own — four passes of `O(requests ×
+ * deployments)` per computation, and a computation happens once per trend
+ * slice and once per replayed day.
+ */
+export type Carriers = Map<MergedPrEvent, DeploymentEvent[]>;
+
+/**
  * The first deployment to carry a merged pull request **to each environment**.
  *
  * One per environment, because reaching pre-production and reaching production
@@ -266,21 +280,39 @@ export function mttr(
  * touched the front with whichever component happened to deploy first — an
  * upper bound on nothing, since it measures another component's release.
  */
-export function deploymentsCarrying(
-  pr: MergedPrEvent,
+export function carriedBy(
+  prs: MergedPrEvent[],
   deployments: DeploymentEvent[],
   componentKey: string | null = null,
-): DeploymentEvent[] {
-  const mergedAt = msOf(pr.mergedAt);
-  const earliest = new Map<string, DeploymentEvent>();
-  for (const d of deployments) {
-    if (d.repo !== pr.repo || d.status !== 'success') continue;
-    if (msOf(d.createdAt) < mergedAt) continue;
-    if (!sameComponent(componentKey, pr.dimensions, d.dimensions)) continue;
-    const held = earliest.get(d.environment);
-    if (!held || msOf(d.createdAt) < msOf(held.createdAt)) earliest.set(d.environment, d);
+): Carriers {
+  const timeline = successTimeline(deployments, componentKey);
+  const carriers: Carriers = new Map();
+
+  for (const pr of prs) {
+    const environments = timeline.get(pr.repo);
+    if (!environments) continue;
+    const mergedAt = msOf(pr.mergedAt);
+    const component = componentKey ? pr.dimensions[componentKey] : undefined;
+    const landings: DeploymentEvent[] = [];
+
+    for (const environment of environments.values()) {
+      const landing =
+        component === undefined
+          ? // Nothing to narrow on: the whole environment, as it always was.
+            firstAfter(environment.all, mergedAt)
+          : // The releases of that component, and those naming none — the
+            // silence rule of `sameComponent`, read as a lookup rather than
+            // walked past.
+            earlier(
+              firstAfter(environment.byComponent.get(component) ?? [], mergedAt),
+              firstAfter(environment.silent, mergedAt),
+            );
+      if (landing) landings.push(landing.deployment);
+    }
+
+    if (landings.length > 0) carriers.set(pr, landings);
   }
-  return [...earliest.values()];
+  return carriers;
 }
 
 /**
@@ -309,6 +341,103 @@ function sameComponent(
   return left === right;
 }
 
+/** A deployment with its date already parsed — the loops below only compare. */
+interface TimedDeployment {
+  at: number;
+  deployment: DeploymentEvent;
+}
+
+/** One environment of one repository, in the orders the correlation reads. */
+interface EnvironmentTimeline {
+  /** Every success, oldest first. What a request with no component to state reads. */
+  all: TimedDeployment[];
+  /** Successes stating a deployable, per value, oldest first. */
+  byComponent: Map<string, TimedDeployment[]>;
+  /** Successes stating none: by the silence rule they pair with any request. */
+  silent: TimedDeployment[];
+}
+
+/**
+ * Successful deployments indexed for the one question the correlation asks:
+ * what did this repository first ship to each of its environments after a
+ * given instant.
+ *
+ * Sorted per repository and environment, so that question is a binary search
+ * instead of a walk over every deployment. It was walked once per pull request
+ * and per caller before, which a trend redoes for each of its slices and a
+ * replay for each of its ninety days — over events read once and never
+ * changing between them.
+ *
+ * The component lists are the second half of it. Scanning forward from the
+ * merge until a matching deployable turns up is linear again exactly where the
+ * setting exists to help — a monorepo, where a component's own releases are
+ * sparse among the others. Indexing each environment a second time by the value
+ * stated, plus the successes stating none, turns `sameComponent` into two
+ * lookups. Built only when a deployable is designated: without one, nothing
+ * states a component and the extra maps would index nothing.
+ */
+function successTimeline(
+  deployments: DeploymentEvent[],
+  componentKey: string | null,
+): Map<string, Map<string, EnvironmentTimeline>> {
+  const byRepo = new Map<string, Map<string, EnvironmentTimeline>>();
+
+  for (const deployment of deployments) {
+    if (deployment.status !== 'success') continue;
+    let environments = byRepo.get(deployment.repo);
+    if (!environments) byRepo.set(deployment.repo, (environments = new Map()));
+    let timeline = environments.get(deployment.environment);
+    if (!timeline) {
+      environments.set(
+        deployment.environment,
+        (timeline = { all: [], byComponent: new Map(), silent: [] }),
+      );
+    }
+
+    const timed = { at: msOf(deployment.createdAt), deployment };
+    timeline.all.push(timed);
+    if (!componentKey) continue;
+    const component = deployment.dimensions[componentKey];
+    if (component === undefined) timeline.silent.push(timed);
+    else {
+      const stated = timeline.byComponent.get(component);
+      if (stated) stated.push(timed);
+      else timeline.byComponent.set(component, [timed]);
+    }
+  }
+
+  for (const environments of byRepo.values()) {
+    for (const timeline of environments.values()) {
+      timeline.all.sort(byTime);
+      timeline.silent.sort(byTime);
+      for (const stated of timeline.byComponent.values()) stated.sort(byTime);
+    }
+  }
+  return byRepo;
+}
+
+function byTime(a: TimedDeployment, b: TimedDeployment): number {
+  return a.at - b.at;
+}
+
+/** The oldest deployment of a sorted run that is not older than `at`. */
+function firstAfter(sorted: TimedDeployment[], at: number): TimedDeployment | null {
+  let low = 0;
+  let high = sorted.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (sorted[mid].at < at) low = mid + 1;
+    else high = mid;
+  }
+  return sorted[low] ?? null;
+}
+
+function earlier(a: TimedDeployment | null, b: TimedDeployment | null): TimedDeployment | null {
+  if (!a) return b;
+  if (!b) return a;
+  return a.at <= b.at ? a : b;
+}
+
 /**
  * Repo and component of every request the component test left with nothing,
  * where repository and time alone would have found a deployment.
@@ -322,7 +451,9 @@ function sameComponent(
  */
 export function componentMismatches(
   prs: MergedPrEvent[],
-  deployments: DeploymentEvent[],
+  carriers: Carriers,
+  /** The same correlation with the component test off: repository and time. */
+  byRepoAndTime: Carriers,
   componentKey: string | null,
 ): Array<{ repo: string; component: string }> {
   if (!componentKey) return [];
@@ -330,8 +461,8 @@ export function componentMismatches(
   for (const pr of prs) {
     const component = pr.dimensions[componentKey];
     if (component === undefined) continue;
-    if (deploymentsCarrying(pr, deployments, componentKey).length > 0) continue;
-    if (deploymentsCarrying(pr, deployments).length === 0) continue;
+    if (carriers.has(pr)) continue;
+    if (!byRepoAndTime.has(pr)) continue;
     found.set(`${pr.repo}\u0000${component}`, { repo: pr.repo, component });
   }
   return [...found.values()];
@@ -341,15 +472,11 @@ export function componentMismatches(
  * The very first place a change landed, whichever environment that was.
  *
  * What blame attribution needs — an incident is tied to the deployment that
- * put the change in the world — as opposed to `deploymentsCarrying`, which
+ * put the change in the world — as opposed to the correlation itself, which
  * measures each destination separately.
  */
-export function deploymentCarrying(
-  pr: MergedPrEvent,
-  deployments: DeploymentEvent[],
-  componentKey: string | null = null,
-): DeploymentEvent | null {
-  return deploymentsCarrying(pr, deployments, componentKey).reduce<DeploymentEvent | null>(
+export function deploymentCarrying(pr: MergedPrEvent, carriers: Carriers): DeploymentEvent | null {
+  return (carriers.get(pr) ?? []).reduce<DeploymentEvent | null>(
     (earliest, d) => (!earliest || msOf(d.createdAt) < msOf(earliest.createdAt) ? d : earliest),
     null,
   );
@@ -400,22 +527,18 @@ export function leadTimeBreakdown(prs: MergedPrEvent[]): DoraResult[] {
  * how long a change takes to reach somewhere is a property of where it lands,
  * so slicing on `type=Prod` answers "time to production" with no extra setting.
  * Which only holds because each destination is measured on its own — see
- * `deploymentsCarrying`. A pull request that lands in two environments
+ * `carriedBy`. A pull request that lands in two environments
  * contributes a sample to each, so the sample sizes here count landings rather
  * than pull requests.
  */
-export function deployTime(
-  prs: MergedPrEvent[],
-  deployments: DeploymentEvent[],
-  componentKey: string | null = null,
-): DoraResult[] {
+export function deployTime(prs: MergedPrEvent[], carriers: Carriers): DoraResult[] {
   const samplesByKey = new Map<string, { dimensions: Record<string, string>; samples: DoraSample[] }>();
 
   for (const pr of prs) {
     // One sample per environment the change reached: a pull request that goes
     // to pre-production and then to production took two different times, and
     // both are worth a reading.
-    for (const deployment of deploymentsCarrying(pr, deployments, componentKey)) {
+    for (const deployment of carriers.get(pr) ?? []) {
       const key = dimensionKey(deployment.dimensions);
       const bucket = samplesByKey.get(key) ?? { dimensions: deployment.dimensions, samples: [] };
       bucket.samples.push({

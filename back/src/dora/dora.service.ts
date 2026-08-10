@@ -31,6 +31,7 @@ import { TrackersService } from '../trackers/trackers.service';
 import { TicketRulesService } from '../ticket-rules/ticket-rules.service';
 import { SettingsService } from '../settings/settings.service';
 import {
+  carriedBy,
   componentMismatches,
   deploymentFrequency,
   changeFailureRate,
@@ -372,14 +373,15 @@ export class DoraService {
     const incidentEvents = events.incidentEvents.filter((i) => within(i.openedAt, period));
     const { failureSource, sourceId, componentAttribute } = context;
 
+    // Which deployment carried which merged request, indexed once: the failure
+    // attribution, the deploy time and the mismatch report all read it, and
+    // each of them used to correlate on its own — over the same events, and
+    // again for every trend slice and every replayed day.
+    const carriers = carriedBy(prEvents, deploymentEvents, componentAttribute);
+
     // A shared ticket between an incident and a merged pull request says which
     // deployment broke what — the question the failure rate actually asks.
-    const linked = incidentsByDeployment(
-      incidentEvents,
-      prEvents,
-      deploymentEvents,
-      componentAttribute,
-    );
+    const linked = incidentsByDeployment(incidentEvents, prEvents, carriers);
 
     // What is left divides by deployments, so a slice with no deployment
     // produces no rate at all. Saying so beats letting numbers go missing.
@@ -394,7 +396,14 @@ export class DoraService {
     // The other way a slice goes missing, and the only one the component test
     // can cause: both sides name a deployable and they disagree. Named here
     // because the metric it empties says nothing at all about why.
-    const mismatched = componentMismatches(prEvents, deploymentEvents, componentAttribute);
+    const mismatched = componentMismatches(
+      prEvents,
+      carriers,
+      // What repository and time alone would have paired. Only worth computing
+      // where a deployable is designated — otherwise it is the same map.
+      componentAttribute ? carriedBy(prEvents, deploymentEvents, null) : carriers,
+      componentAttribute,
+    );
     if (mismatched.length > 0 && !context.quiet) {
       this.logger.warn(
         `${mismatched.length} repo/${componentAttribute} pair(s) have merged pull requests ` +
@@ -410,7 +419,7 @@ export class DoraService {
       ...changeFailureRate(deploymentEvents, incidentEvents, failureSource, linked),
       ...mttr(deploymentEvents, incidentEvents, failureSource, linked),
       ...leadTimeBreakdown(prEvents),
-      ...deployTime(prEvents, deploymentEvents, componentAttribute),
+      ...deployTime(prEvents, carriers),
     ];
   }
 

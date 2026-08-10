@@ -104,7 +104,7 @@ component deployed first after the merge — not a loose upper bound but a
 measurement of something else.
 
 `componentAttribute` (a setting, null by default) names the dimension that
-designates a deployable. `deploymentsCarrying` then also requires the two sides
+designates a deployable. The correlation then also requires the two sides
 to agree on it — **when both state it**. Where either is silent it falls back to
 repo and time, which is what makes this safe to leave half-configured and safe
 to ship to installs that never touch it: the presence of the attribute *is* the
@@ -126,6 +126,27 @@ the front-end release rather than against whatever shipped next.
 > `deploy_time` empties for that repo. `componentMismatches` reports exactly
 > those pairs — the ones repo-and-time would have matched — and the service logs
 > them, for the same reason the orphan incident combinations below are logged.
+
+### One correlation, indexed once
+
+`carriedBy` pairs every merged request with its landings in one go, and the
+three readings that need it — `deploy_time`, the blame attribution, the mismatch
+report — read that one map. Each of them used to correlate on its own, and each
+correlation walked every deployment for every pull request: four passes of
+`O(requests × deployments)`, redone for every slice of a trend and every day of
+a replay, over events read once and unchanged between them.
+
+Deployments are indexed instead, per repository and environment, sorted by date,
+so the pairing is a binary search. Where a deployable is designated each
+environment is indexed a second time by the value stated, plus the releases
+stating none — the silence rule above, read as two lookups rather than a walk
+past the releases of components a request has nothing to do with. That last part
+is what keeps a monorepo from falling back to a scan exactly where the setting
+exists to help.
+
+Measured on 2 000 merged requests against 5 000 deployments over twenty repos: a
+single computation went from 742 ms to 9 ms, and a ninety-day replay from 16.0 s
+to 0.26 s.
 
 `deploy_time` is grouped by the **deployment's** dimensions where the other
 three use the pull request's: how long a change takes to arrive is a property of
