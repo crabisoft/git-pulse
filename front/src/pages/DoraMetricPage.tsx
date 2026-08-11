@@ -20,7 +20,15 @@ import type {
   Page,
 } from '@repo/shared';
 import { api, type DoraQuery } from '../api';
-import { formatDate, formatValue, humanizeDuration, SampleDetails, SampleStatus } from '../doraFormat';
+import {
+  cadenceFor,
+  formatDate,
+  formatRate,
+  formatValue,
+  humanizeDuration,
+  SampleDetails,
+  SampleStatus,
+} from '../doraFormat';
 import { toSearchParams } from '../doraQuery';
 import { useCancellableLoad } from '../hooks';
 import { doraCodec, useUrlQuery } from '../urlQuery';
@@ -224,7 +232,13 @@ function MetricTrend({
     );
   }
 
-  const axisValue = (value: number) => formatValue({ unit, value });
+  // One cadence for the whole axis, picked from the points it has to carry —
+  // and the tooltip reads off the same scale. A rate humanised tick by tick
+  // mixes `/w` and `/d` on one axis, where the same height means two different
+  // things a gridline apart.
+  const cadence = unit === 'per_day' ? cadenceFor(series.points.map((point) => point.value)) : null;
+  const axisValue = (value: number) =>
+    cadence ? formatRate(value, cadence) : formatValue({ unit, value });
 
   return (
     <div className="chart">
