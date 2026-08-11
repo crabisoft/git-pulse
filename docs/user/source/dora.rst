@@ -101,6 +101,32 @@ Under each value, *N events* is the population the figure rests on. A median
 over four events and one over four hundred are both medians; only one of them
 is worth acting on.
 
+How a filtered figure is put together
+-------------------------------------
+
+A metric is computed per dimension **combination** — one value for
+``{type: Prod, client: acme}``, another for ``{type: Prod, client: globex}`` —
+and a filter usually leaves several standing. Recomposing them into the single
+figure on the card follows the metric, not a single rule:
+
+- **Deployment frequency adds up.** Two a day on one combination and three a
+  day on another is five a day: they cover the same period, so averaging would
+  answer a question nobody asked.
+- **Lead time, MTTR and the four segments are a median over every event
+  retained**, all combinations pooled — not an average of their medians, which
+  would be neither.
+- **Change failure rate is weighted by volume**, which amounts to *total
+  failures ÷ total deployments*. A combination measured on three deployments
+  never weighs as much as one measured on three hundred.
+
+A combination that does not carry the filtered key at all is left out rather
+than kept: filter on ``client=acme`` and a pull request nothing could classify
+by client leaves the figure.
+
+Nothing is read back from storage here. Every change of period or of slice
+recomputes the metrics from the events themselves, which is also why the bounds
+are applied in one press.
+
 One metric in detail
 ====================
 
@@ -110,8 +136,13 @@ different number, and a detail page that disagreed with the card it was opened
 from would be worse than no detail page.
 
 The same filter bar sits on the detail page, so a scope can be narrowed without
-walking back to the list: the reading, its chart and its events all follow.
-What is picked here is what the breadcrumb returns to.
+walking back to the list: the reading, its chart and its events all follow, and
+the figure is recomposed exactly as the card's was. What is picked here is what
+the breadcrumb returns to.
+
+When the filter still leaves several combinations, the page says so under the
+value — *across N dimension combinations* — so a figure is never read as being
+about one slice while the events below it come from across the lot.
 
 .. figure:: images/dora-metric.png
    :width: 1000px
@@ -120,21 +151,34 @@ What is picked here is what the breadcrumb returns to.
 
    How it moved, then what it is made of.
 
-**The trend** comes from the historised readings, not from a recomputation. It
-is bucketed by hour, by day or by week depending on the span, and each point is
-the **last reading of its bucket**. The page names the bucketing under the
+**The trend** comes from the historised readings, not from a recomputation:
+each point is a reading taken at the time, over the window configured then. One
+point per day, the last reading of that day — the page names it under the
 chart, so a flat line is never mistaken for missing history.
 
-Two messages are not failures:
+Which is why the last point and the figure above it need not be the same
+number, and neither is wrong. The figure is recomputed now and weighted by the
+events behind each combination; a stored reading records a value and not how
+many events it rested on, so the line can only weigh its combinations evenly.
+Read the chart for the movement and the figure for the value.
 
-- *No history yet* — the scheduled collection has not run for this metric.
-  Readings are historised as they are taken; nothing back-fills them.
+Filtering narrows the chart too, to the stored combinations the filter selects.
+Two messages are then not failures:
+
+- *No history yet* — nothing has been historised for this metric under this
+  slice: either the scheduled collection has not run at all, or it never ran
+  while that slice existed. Readings are historised as they are taken and
+  nothing back-fills them, so the figure above stays perfectly computable
+  meanwhile — the events are still there, the past readings are not.
 - *Only one reading* — a trend needs two.
 
-**Contributing events** is the population itself, paged by the server: the pull
-requests behind a lead time, the deployments behind a failure rate, the failure
-and the recovery behind an MTTR. Each row carries its date, its duration and
-its repository, and links back to the platform.
+**Contributing events** is the population itself — the one the figure was
+computed on, under the same period and the same slice — paged by the server and
+newest first: the pull requests behind a lead time, the deployments behind a
+failure rate, the failure and the recovery behind an MTTR. Each row carries its
+date, its duration and its repository, and links back to the platform. Changing
+a filter returns to the first page: an offset into another population points at
+nothing.
 
 .. note::
 
