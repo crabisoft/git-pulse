@@ -69,6 +69,48 @@ And the four segments lead time splits into:
    It is also grouped by where the change landed: filter on ``type=Prod`` to
    get the delay to production rather than to the first environment reached.
 
+The figure and the history are two different things
+===================================================
+
+Each card carries both — a value, and a line under it — and they answer two
+different questions. Reading one for the other is the misinterpretation this
+page can produce, so it is worth thirty seconds.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 30 70
+
+   * - On a card
+     - What it is
+   * - **The value**
+     - The metric itself, recomputed from the events at every read, over
+       exactly the period and the slice the filter bar asks for. Nothing is
+       read back from storage: a classification rule corrected a minute ago is
+       already in it. It reaches as far back as what was collected.
+   * - **The line under it**
+     - The **history**: the readings the scheduled collection stored as it
+       took them, one point per day. Each point measures the collection's own
+       window on the day it was taken — not the period you picked — and no
+       later correction rewrites it. It starts the day this install began
+       collecting.
+
+So the value tells you *where you stand*, and the line *which way it is going*.
+A fresh install shows a correct figure over ninety days beside five days of
+curve, and neither of the two is wrong.
+
+.. note::
+
+   Widening the period is therefore only half of what it takes to see a long
+   evolution: the curve also needs readings to have been taken over that span.
+   **Replay the metric history** in :ref:`settings-sources` rewrites them from
+   the raw data already stored, over a depth you choose and without re-reading
+   the platform. It is also the only way to push a corrected rule into the
+   past — the figures follow a rule change immediately, the history never does.
+
+The overview page works the other way round: its sparklines are cut from the
+period being reported on rather than from the stored readings, because there
+the subject is the period. See :doc:`overview`.
+
 The period
 ==========
 

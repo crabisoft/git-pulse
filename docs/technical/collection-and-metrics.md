@@ -188,7 +188,11 @@ on screen.
 (`back/src/dora/aggregate.ts`). A reading that spans several combinations says
 so on the detail page.
 
-No metric on screen is ever read back from `MetricSnapshot`.
+**No figure on screen is ever read back from `MetricSnapshot`.** Every value is
+this computation, over the period asked for. What *is* read back from the table
+is the history itself — the curves whose subject is how a metric moved — and §7
+says exactly which. The two are never mixed in one number: a chart drawn from
+snapshots sits beside a value that was recomputed, and the page says so.
 
 ## 7. Where each figure on screen comes from
 
@@ -324,10 +328,13 @@ with the last — how the period went — where it used to compare two overlappi
 rolling windows that shared eleven twelfths of their data, which is why it
 barely ever moved.
 
-> The DORA page's own block sparklines still come from `MetricSnapshot`, and
-> still answer over the collection's window rather than the selected period.
-> They are the one place left where a line and the figure above it are read two
-> different ways.
+> The DORA page's own block sparklines, and the metric page's chart, still come
+> from `MetricSnapshot`. The selected period does bound them — it decides which
+> stored readings are shown — but each of those readings measures the
+> **collection's** window on the day it was taken, not the period asked for. So
+> a line there and the figure above it are still two different readings, which
+> is deliberate: that page is where the history itself is the subject. The
+> overview, whose subject is the period, cuts its lines from the period.
 
 ## 11. What the overview's period governs
 
