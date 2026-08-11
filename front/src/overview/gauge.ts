@@ -20,21 +20,6 @@ const BAND_DEGREES = 45;
  */
 const SATURATION = 2;
 
-/**
- * The value the scale is expressed in.
- *
- * Deployment frequency is computed as a count over the window, while the
- * published bands are per day — dividing the window out is what makes the two
- * comparable. Everything else is already in the unit the bands use.
- */
-export function toTierValue(metric: DoraMetric, value: number, windowDays: number | null): number {
-  if (metric !== 'deployment_frequency') return value;
-  // No window to divide by — explicit bounds were asked for and the API could
-  // not name a length. The raw count is the honest fallback; it reads as a
-  // busier scale, never as a better tier than deserved.
-  return windowDays && windowDays > 0 ? value / windowDays : value;
-}
-
 export function tierOf(metric: DoraMetric, tierValue: number): DoraTier | null {
   return doraTier(metric, tierValue);
 }

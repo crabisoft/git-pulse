@@ -309,12 +309,13 @@ Three rules decide what a point is:
   readings and one spike. A week draws seven points, a quarter twelve.
 - **Slices are disjoint and cover the whole period.** Each starts a millisecond
   after the last ends — a period includes both its bounds, so an event landing
-  on a seam would otherwise be counted twice. Summing the points therefore gives
-  the figure beside them, for a count.
-- **An empty slice is a zero for a count and a gap for anything else.** Nothing
-  deployed is genuinely zero deployments; nothing merged is not a lead time of
-  zero, it is the absence of one. The line steps over it rather than dropping
-  to the floor.
+  on a seam would otherwise be counted twice. Each point is a reading over its
+  own slice, so the deployment frequency averages to the figure beside it where
+  a count would have summed to it.
+- **An empty slice is a zero for a rate and a gap for anything else.** Nothing
+  deployed is genuinely zero deployments a day; nothing merged is not a lead
+  time of zero, it is the absence of one. The line steps over it rather than
+  dropping to the floor.
 
 Two consequences follow, and both are deliberate. The last point is the last
 *slice*, not the value beside it: the figure covers the whole period and the

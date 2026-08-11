@@ -1,4 +1,4 @@
-import type { DoraMetric, DoraResult, OverviewFlow } from '@repo/shared';
+import { addsUp, type DoraMetric, type DoraResult, type OverviewFlow } from '@repo/shared';
 import { foldMetric } from '../dora/aggregate';
 
 /**
@@ -34,9 +34,9 @@ export function flowsFrom(results: DoraResult[], slices: DoraResult[][]): Overvi
  *
  * A slice with no reading is not a zero for every metric, and treating it as
  * one would draw a cliff where there is only silence: nothing deployed is
- * genuinely zero deployments, while nothing merged is not a lead time of zero,
- * it is the absence of one. So counts fill the gap and the rest step over it —
- * which shortens the line rather than inventing a point on it.
+ * genuinely zero deployments a day, while nothing merged is not a lead time of
+ * zero, it is the absence of one. So whatever adds up fills the gap and the
+ * rest step over it — which shortens the line rather than inventing a point.
  */
 export function trendOf(
   metric: DoraMetric,
@@ -44,7 +44,7 @@ export function trendOf(
   slices: DoraResult[][],
 ): number[] {
   const points = slices.map((slice) => slice.find((r) => r.metric === metric) ?? null);
-  return unit === 'count'
+  return addsUp(unit)
     ? points.map((point) => point?.value ?? 0)
     : points.filter((point): point is DoraResult => point !== null).map((point) => point.value);
 }

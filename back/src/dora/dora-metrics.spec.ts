@@ -94,12 +94,41 @@ const restore = (source: FailureSource) => {
 };
 
 describe('deploymentFrequency', () => {
-  it('counts deployments per dimension combination', () => {
-    const results = deploymentFrequency([...deployments, deploy('2026-01-05T00:00:00Z', 'success', STAGING)]);
-    expect(results.map((r) => [r.dimensions.type, r.value])).toEqual([
-      ['Prod', 4],
-      ['Staging', 1],
+  // `deployments` holds three successes in prod and one failure.
+  const staged = [...deployments, deploy('2026-01-05T00:00:00Z', 'success', STAGING)];
+
+  it('answers a rate per day, per dimension combination', () => {
+    expect(deploymentFrequency(staged, 10).map((r) => [r.dimensions.type, r.value])).toEqual([
+      ['Prod', 0.3],
+      ['Staging', 0.1],
     ]);
+  });
+
+  it('states the unit the published scale is in', () => {
+    expect(deploymentFrequency(staged, 10)[0].unit).toBe('per_day');
+  });
+
+  it('answers the same cadence whatever window it is asked over', () => {
+    // The point of the rate. A count tripled when `doraWindowDays` went from
+    // 30 to 90, on a shop that had not changed a thing.
+    const thirty = deploymentFrequency(deployments, 30)[0].value;
+    const ninety = deploymentFrequency([...deployments, ...deployments, ...deployments], 90)[0];
+    expect(ninety.value).toBeCloseTo(thirty, 10);
+  });
+
+  it('leaves out the deployments that delivered nothing', () => {
+    // A failure carried no change, and a status that could not be read is not
+    // evidence of one. The failure rate keeps counting both — it asks how many
+    // of the attempts went wrong, which is a different question.
+    const [result] = deploymentFrequency(
+      [...deployments, deploy('2026-01-06T00:00:00Z', 'other')],
+      10,
+    );
+    expect(result.sampleSize).toBe(3);
+  });
+
+  it('emits nothing when there is no span to be a rate over', () => {
+    expect(deploymentFrequency(deployments, 0)).toEqual([]);
   });
 });
 

@@ -1355,9 +1355,8 @@ export const DORA_TIERS: readonly DoraTier[] = ['low', 'medium', 'high', 'elite'
 
 /**
  * Band edges, best-first, in the unit the metric is computed in — seconds for
- * durations, a 0..1 ratio for the failure rate, deployments **per day** for the
- * frequency (the metric counts them over a window, so the window length has to
- * be divided out before this is read).
+ * durations, a 0..1 ratio for the failure rate, deployments per day for the
+ * frequency, which is what that metric is measured in.
  *
  * Three numbers per metric: below the first is `elite`, below the second
  * `high`, below the third `medium`, and anything else `low`. The frequency
@@ -1396,12 +1395,32 @@ export function doraTier(metric: DoraMetric, value: number): DoraTier | null {
   return 'low';
 }
 
+/**
+ * Whether readings of this unit are summed when several are folded into one,
+ * rather than averaged over the events behind them.
+ *
+ * A rate adds up over **dimension combinations**, which all cover the same
+ * period: two deployments a day to production and three to staging is five a
+ * day, where averaging would answer "two and a half" to a question nobody
+ * asked. Durations and ratios are the other case.
+ *
+ * Not over consecutive **periods**, which nothing here does: eight daily rates
+ * do not sum to the rate over the week, they average to it.
+ *
+ * Stated once because three readers need it — the fold behind a filtered
+ * value, the fold behind a historised series, and the trend that decides
+ * whether a silent slice is a zero — and three answers would eventually differ.
+ */
+export function addsUp(unit: DoraResult['unit']): boolean {
+  return unit === 'per_day';
+}
+
 /** A computed DORA metric for one dimension combination. */
 export interface DoraResult {
   metric: DoraMetric;
-  /** count for frequency, seconds for durations, 0..1 ratio for CFR. */
+  /** deployments per day for frequency, seconds for durations, 0..1 ratio for CFR. */
   value: number;
-  unit: 'count' | 'seconds' | 'ratio';
+  unit: 'per_day' | 'seconds' | 'ratio';
   dimensions: Record<string, string>;
   /** Number of events the value is derived from. */
   sampleSize: number;
@@ -1923,9 +1942,9 @@ export interface DashboardLive {
  */
 export interface OverviewFlow {
   metric: DoraMetric;
-  /** count for frequency, seconds for durations, 0..1 ratio for CFR. */
+  /** deployments per day for frequency, seconds for durations, 0..1 ratio for CFR. */
   value: number;
-  unit: 'count' | 'seconds' | 'ratio';
+  unit: 'per_day' | 'seconds' | 'ratio';
   sampleSize: number;
   /** Bucketed history behind the sparkline, oldest first. Empty until snapshots exist. */
   trend: number[];

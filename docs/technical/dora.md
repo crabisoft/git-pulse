@@ -224,6 +224,43 @@ writes no row, and the trend steps over the gap rather than dropping to the
 floor. Only the metrics that genuinely count something — deployment frequency,
 and the failure rate over a slice that did deploy — report a real zero.
 
+## Deployment frequency is a rate
+
+**Successful deployments per day**, not a count over the window.
+
+A count is only readable beside the window it was taken over, and a historised
+one has no window attached: nothing on a `MetricSnapshot` records the
+`doraWindowDays` in force when it was written. Raising that setting from 30 to
+90 tripled the whole series without a single extra deployment, and the DORA
+scale — published per day — could only be applied by whoever still remembered
+the length to divide by. That division lived in one place on the front, so the
+overview gauge was rated correctly and the metric list, which shows the same
+figure, was not on the same scale at all.
+
+The span comes from the period's own bounds rather than `windowDays`, because a
+period given as explicit dates carries no window and every trend slice is
+exactly that.
+
+**Successes only.** A deployment that failed delivered nothing — the same reason
+the correlation refuses to let one carry a change. One whose status could not be
+read is not evidence of anything either. The failure rate keeps both in its
+denominator: it asks how many of the deployments we attempted went wrong, which
+is a different question.
+
+> Rates add up across **dimension combinations**, which all cover the same
+> period — two a day to production and three to staging is five a day — and
+> `addsUp` is where that rule is stated, for the three readers that need it.
+> They do not add up across consecutive **periods**: eight daily rates average
+> to the rate over the week rather than summing to it, which is why the trend
+> never sums its points.
+
+Existing snapshots hold counts. The migration divides them by the window
+configured at upgrade time — right for every install that never changed it, and
+no worse than the count for the ones that did. Failed deployments cannot be
+subtracted after the fact, the rows not saying how many there were, so an install
+that wants the history exact should
+`POST /api/sources/:id/dora/rebuild`, which replays it from the events.
+
 ## Metric trends
 
 Clicking a metric opens `/dora/:slug/:metric`, which shows how it moved and then

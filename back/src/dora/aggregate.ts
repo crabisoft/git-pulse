@@ -1,4 +1,4 @@
-import type { DoraMetric, DoraResult } from '@repo/shared';
+import { addsUp, type DoraMetric, type DoraResult } from '@repo/shared';
 import { median, type MeasuredResult } from './dora-metrics';
 
 /**
@@ -45,8 +45,8 @@ export function foldMetric(results: (DoraResult | MeasuredResult)[]): DoraResult
 }
 
 /**
- * Counts add up. A ratio is pooled — weighting by the events it was measured on
- * is what `Σ incidents / Σ deployments` amounts to.
+ * Counts and rates add up — see `addsUp`. A ratio is pooled: weighting by the
+ * events it was measured on is what `Σ incidents / Σ deployments` amounts to.
  *
  * A duration is a **median of everything measured**, not a mean of the medians:
  * the page names a median, and averaging medians is neither one. It needs the
@@ -59,7 +59,7 @@ function foldValue(
   sampleSize: number,
   population: number[],
 ): number {
-  if (unit === 'count') return results.reduce((total, r) => total + r.value, 0);
+  if (addsUp(unit)) return results.reduce((total, r) => total + r.value, 0);
   if (unit === 'seconds' && population.length > 0) return median(population);
   return weightedMean(results, sampleSize);
 }

@@ -31,8 +31,8 @@ describe('foldMetric', () => {
     // four: a frequency that fell when a second environment appeared would be
     // reporting the opposite of what happened.
     const folded = foldMetric([
-      result('deployment_frequency', 4, 4, 'count'),
-      result('deployment_frequency', 4, 4, 'count'),
+      result('deployment_frequency', 4, 4, 'per_day'),
+      result('deployment_frequency', 4, 4, 'per_day'),
     ]);
     expect(folded).toMatchObject({ value: 8, sampleSize: 8 });
   });

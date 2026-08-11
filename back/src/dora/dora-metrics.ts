@@ -56,16 +56,38 @@ export interface MergedPrEvent {
   dimensions: Record<string, string>;
 }
 
-/** Deployment count per dimension combination over the collected window. */
-export function deploymentFrequency(deployments: DeploymentEvent[]): DoraResult[] {
-  return [...groupByDimensions(deployments)].map(([, items]) => ({
-    metric: 'deployment_frequency',
-    value: items.length,
-    unit: 'count',
-    dimensions: items[0].dimensions,
-    sampleSize: items.length,
-    samples: takeRecent(items.map(deploymentSample)),
-  }));
+/**
+ * Successful deployments **per day**, per dimension combination.
+ *
+ * A rate rather than a count over the window, because a count is only readable
+ * beside the window it was taken over — and a historised one has no window
+ * attached at all. Raising `doraWindowDays` from 30 to 90 used to triple the
+ * whole series without a single extra deployment, and the DORA scale, which is
+ * published per day, could only be applied by whoever still remembered the
+ * length to divide by.
+ *
+ * Successes only. A deployment that failed delivered nothing — the same reason
+ * the correlation refuses to let one carry a change — and one whose status
+ * could not be read is not evidence of anything. The failure rate keeps
+ * counting both in its denominator, which is a different question: how many of
+ * the deployments we attempted went wrong.
+ */
+export function deploymentFrequency(deployments: DeploymentEvent[], days: number): DoraResult[] {
+  // No span to divide by, no rate. It takes an explicit period whose bounds are
+  // the same instant, and answering with the raw count would be the reading the
+  // whole metric is moving away from.
+  if (days <= 0) return [];
+
+  return [...groupByDimensions(deployments.filter((d) => d.status === 'success'))].map(
+    ([, items]) => ({
+      metric: 'deployment_frequency',
+      value: items.length / days,
+      unit: 'per_day',
+      dimensions: items[0].dimensions,
+      sampleSize: items.length,
+      samples: takeRecent(items.map(deploymentSample)),
+    }),
+  );
 }
 
 /**

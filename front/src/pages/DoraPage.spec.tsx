@@ -26,7 +26,7 @@ function result(over: Partial<DoraResult> = {}): DoraResult {
 
 function report(over: Partial<DoraReport> = {}): DoraReport {
   return {
-    results: [result(), result({ metric: 'deployment_frequency', value: 126, unit: 'count' })],
+    results: [result(), result({ metric: 'deployment_frequency', value: 4.2, unit: 'per_day' })],
     repos: ['acme/api'],
     dimensions: { client: ['acme', 'globex'], type: ['prod', 'preprod'] },
     period: { from: '2026-07-01T00:00:00Z', to: '2026-07-31T00:00:00Z', windowDays: 30 },

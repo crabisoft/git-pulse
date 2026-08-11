@@ -32,7 +32,7 @@ describe('toFlow', () => {
   it('reads a rising deployment frequency as progress', () => {
     const flow = toFlow(
       'deployment_frequency',
-      [result('deployment_frequency', 4.2, 42, 'count')],
+      [result('deployment_frequency', 4.2, 42, 'per_day')],
       [2, 3, 4.2],
     );
     expect(flow?.improving).toBe(true);
@@ -75,11 +75,11 @@ describe('trendOf', () => {
     // Nothing deployed that week is genuinely zero deployments, and a line
     // that stepped over it would hide the quiet week entirely.
     const slices = [
-      [result('deployment_frequency', 12, 12, 'count')],
+      [result('deployment_frequency', 12, 12, 'per_day')],
       [],
-      [result('deployment_frequency', 8, 8, 'count')],
+      [result('deployment_frequency', 8, 8, 'per_day')],
     ];
-    expect(trendOf('deployment_frequency', 'count', slices)).toEqual([12, 0, 8]);
+    expect(trendOf('deployment_frequency', 'per_day', slices)).toEqual([12, 0, 8]);
   });
 
   it('steps over a slice that measured no duration rather than calling it zero', () => {
@@ -98,10 +98,10 @@ describe('trendOf', () => {
 describe('flowsFrom', () => {
   it('gives each metric the movement of its own slices', () => {
     const flows = flowsFrom(
-      [result('deployment_frequency', 20, 20, 'count'), result('mttr', 900, 2)],
+      [result('deployment_frequency', 20, 20, 'per_day'), result('mttr', 900, 2)],
       [
-        [result('deployment_frequency', 12, 12, 'count'), result('mttr', 1800, 1)],
-        [result('deployment_frequency', 8, 8, 'count'), result('mttr', 900, 1)],
+        [result('deployment_frequency', 12, 12, 'per_day'), result('mttr', 1800, 1)],
+        [result('deployment_frequency', 8, 8, 'per_day'), result('mttr', 900, 1)],
       ],
     );
 

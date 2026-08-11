@@ -25,8 +25,10 @@ because the definitions are what make two installs comparable — or not.
    * - Metric
      - Measured as
    * - **Deployment frequency**
-     - Number of deployments over the window. A high frequency means smaller,
-       less risky batches
+     - Successful deployments **per day**. Shown as a cadence — ``4.2/d``,
+       ``1.4/w``, ``0.9/mo`` — so two windows of different lengths can be
+       compared, and so the figure sits on the published scale as it is. A high
+       frequency means smaller, less risky batches
    * - **Lead time**
      - Median time from a pull request's first commit to its merge — how long
        a change takes to be ready to ship
@@ -34,8 +36,8 @@ because the definitions are what make two installs comparable — or not.
      - Share of failed deployments among those **with a known status**.
        Undetermined ones are excluded rather than counted as successes
    * - **Time to restore (MTTR)**
-     - Median time between a failed deployment and the next successful one on
-       the same environment
+     - Median time between a failed deployment and the next successful one of
+       the **same repository** on the same environment
 
 And the four segments lead time splits into:
 

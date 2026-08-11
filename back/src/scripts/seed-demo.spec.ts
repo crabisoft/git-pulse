@@ -82,7 +82,8 @@ describe('the demo dataset', () => {
       (dep) => dep.at > latest - WINDOW * DAY && dep.at <= latest,
     );
     const frequency = global.find((s) => s.metric === 'deployment_frequency');
-    expect(frequency?.value).toBe(inWindow.length);
+    const delivered = inWindow.filter((dep) => dep.status === 'success').length;
+    expect(frequency?.value).toBeCloseTo(delivered / WINDOW, 10);
 
     const failed = inWindow.filter((dep) => dep.status === 'failed').length;
     const rate = global.find((s) => s.metric === 'change_failure_rate');

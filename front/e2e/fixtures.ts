@@ -440,10 +440,10 @@ export const OVERVIEW: OverviewReport = {
   flow: [
     {
       metric: 'deployment_frequency',
-      value: 63,
-      unit: 'count',
+      value: 2.1,
+      unit: 'per_day',
       sampleSize: 63,
-      trend: [38, 41, 44, 43, 49, 52, 58, 61, 63],
+      trend: [1.27, 1.37, 1.47, 1.43, 1.63, 1.73, 1.93, 2.03, 2.1],
       delta: 0.18,
       improving: true,
     },
@@ -528,14 +528,14 @@ const RESULT = (
   unit,
   dimensions: {},
   sampleSize,
-  samples: Array.from({ length: 5 }, (_, i) => SAMPLE(i, label, unit === 'count' ? null : value)),
+  samples: Array.from({ length: 5 }, (_, i) => SAMPLE(i, label, unit === 'per_day' ? null : value)),
   combinations: 4,
 });
 
 /** A `DoraReport`: one reading per metric, plus the filter vocabularies. */
 export const DORA: DoraReport = {
   results: [
-    RESULT('deployment_frequency', 63, 'count', 63, 'production'),
+    RESULT('deployment_frequency', 2.1, 'per_day', 63, 'production'),
     RESULT('lead_time', 97_200, 'seconds', 48, 'acme/checkout-service#1284'),
     RESULT('change_failure_rate', 0.11, 'ratio', 63, 'production'),
     RESULT('mttr', 5_400, 'seconds', 7, 'production'),

@@ -415,7 +415,10 @@ export class DoraService {
     }
 
     return [
-      ...deploymentFrequency(deploymentEvents),
+      // The span the frequency is a rate over, taken from the bounds rather
+      // than `windowDays`: a period given as explicit dates carries no window,
+      // and every trend slice is exactly that.
+      ...deploymentFrequency(deploymentEvents, daysBetween(period)),
       ...changeFailureRate(deploymentEvents, incidentEvents, failureSource, linked),
       ...mttr(deploymentEvents, incidentEvents, failureSource, linked),
       ...leadTimeBreakdown(prEvents),
@@ -775,6 +778,11 @@ function endOfDay(date: Date): Date {
   const day = new Date(date);
   day.setUTCHours(23, 59, 59, 999);
   return day;
+}
+
+/** Length of a resolved period in days, fractions included. */
+function daysBetween(period: ResolvedRange): number {
+  return (new Date(period.to).getTime() - new Date(period.from).getTime()) / 86_400_000;
 }
 
 function asMessage(e: unknown): string {

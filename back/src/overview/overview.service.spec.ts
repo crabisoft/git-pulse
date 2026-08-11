@@ -378,7 +378,7 @@ describe('OverviewService', () => {
     const count = (value: number) => ({
       metric: 'deployment_frequency' as const,
       value,
-      unit: 'count' as const,
+      unit: 'per_day' as const,
       dimensions: {},
       sampleSize: value,
       samples: [],

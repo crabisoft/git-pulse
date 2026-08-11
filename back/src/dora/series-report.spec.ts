@@ -54,10 +54,16 @@ function service(deployments: ReturnType<typeof deployment>[]) {
   return { dora, reader };
 }
 
-/** Deployment counts per slice — the one metric every fixture here produces. */
+/**
+ * Deployment rate per slice — the one metric every fixture here produces.
+ *
+ * Rounded, and every slice here is a day, so these read as deployments: a
+ * slice ends a millisecond before the next one starts, which leaves the rate
+ * a hair above the count it was measured from.
+ */
 function frequency(trend: Array<Array<{ metric: string; value: number }>>): number[] {
-  return trend.map(
-    (slice) => slice.find((r) => r.metric === 'deployment_frequency')?.value ?? 0,
+  return trend.map((slice) =>
+    Number((slice.find((r) => r.metric === 'deployment_frequency')?.value ?? 0).toFixed(6)),
   );
 }
 
@@ -126,8 +132,11 @@ describe('DoraService.reportOverTime', () => {
 
     const report = await dora.reportOverTime(SOURCE_ID, { windowDays: 8 }, 8);
 
-    const total = report.results.find((r) => r.metric === 'deployment_frequency')?.value;
-    expect(frequency(report.trend).reduce((a, b) => a + b, 0)).toBe(total);
+    const total = report.results.find((r) => r.metric === 'deployment_frequency')?.value ?? 0;
+    // Rates, so each side is brought back to deployments: eight slices of a
+    // day summed, against the period's own rate over its eight days. A landing
+    // on a seam would make one side nine.
+    expect(frequency(report.trend).reduce((a, b) => a + b, 0)).toBeCloseTo(total * 8, 5);
   });
 
   it('answers the same readings as the plain report', async () => {
