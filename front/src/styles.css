@@ -395,7 +395,6 @@ a.pill.attr:hover { border-color: var(--accent); }
 .metric-head h2 { margin: 0; }
 .back-link { font-size: .8rem; color: var(--muted); text-decoration: none; width: max-content; }
 .back-link:hover { color: var(--accent); text-decoration: underline; }
-.metric-head-dims { display: flex; align-items: center; gap: 8px; }
 .metric-current { display: flex; align-items: baseline; gap: 12px; margin-bottom: 12px; }
 .metric-current .dora-value { font-size: 1.6rem; }
 /* Recharts fills the width; the height is fixed so the table below does not

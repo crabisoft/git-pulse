@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { DataList } from '../DataList';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import {
   CartesianGrid,
   Line,
@@ -11,11 +11,20 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import type { DoraMetric, DoraResult, DoraSample, MetricSeries, Page } from '@repo/shared';
-import { api } from '../api';
+import type {
+  DoraMetric,
+  DoraReport,
+  DoraResult,
+  DoraSample,
+  MetricSeries,
+  Page,
+} from '@repo/shared';
+import { api, type DoraQuery } from '../api';
 import { formatDate, formatValue, humanizeDuration, SampleDetails, SampleStatus } from '../doraFormat';
-import { fromDoraParams, toSearchParams } from '../doraQuery';
-import { FILTER_DEBOUNCE_MS, useCancellableLoad, useDebounced } from '../hooks';
+import { toSearchParams } from '../doraQuery';
+import { useCancellableLoad } from '../hooks';
+import { doraCodec, useUrlQuery } from '../urlQuery';
+import { DimensionFilter, PeriodFilter } from '../Filters';
 import { HelpTip } from '../HelpTip';
 import { Pagination } from '../Pagination';
 import type { PageQuery } from '../api';
@@ -30,22 +39,26 @@ const PAGE_SIZE = 10;
  * The filters travel in the URL rather than being re-picked on arrival — a
  * value computed over another period or another slice is a different number,
  * and a detail that disagreed with the block it was opened from would be worse
- * than no detail. The trend comes from the historised snapshots and the events
- * from the report, which is why the page fetches both rather than being handed
- * a row.
+ * than no detail. They are also editable here, and the same bar the list shows:
+ * arriving with a question about one metric and having to walk back to the list
+ * to narrow it is the same click twice, and the answer that came back was the
+ * one the list already gave. Whatever is picked here travels back up the
+ * breadcrumb, which serialises the query it is holding.
+ *
+ * The trend comes from the historised snapshots and the events from the report,
+ * which is why the page fetches both rather than being handed a row.
  */
 export function DoraMetricPage({ sourceId, slug }: { sourceId: string; slug: string }) {
   const { t } = useTranslation();
   const { metric } = useParams<{ metric: string }>();
-  const [searchParams] = useSearchParams();
-  const [report, setReport] = useState<{ result: DoraResult | null; series: MetricSeries } | null>(
-    null,
-  );
+  // The report whole rather than the one reading pulled out of it: the filter
+  // bar needs the dimension vocabulary and the period the backend resolved,
+  // which are answers to the same request.
+  const [report, setReport] = useState<{ live: DoraReport; series: MetricSeries } | null>(null);
   const [page, setPage] = useState<PageQuery>({ limit: PAGE_SIZE, offset: 0 });
   const [events, setEvents] = useState<Page<DoraSample> | null>(null);
 
-  const query = useMemo(() => fromDoraParams(searchParams), [searchParams]);
-  const settled = useDebounced(query, FILTER_DEBOUNCE_MS);
+  const { query, setQuery, settled } = useUrlQuery(doraCodec);
 
   const load = useCallback(
     async (signal: AbortSignal) => {
@@ -70,11 +83,8 @@ export function DoraMetricPage({ sourceId, slug }: { sourceId: string; slug: str
           signal,
         ),
       ]);
-      setReport({
-        result: live.results.find((r) => r.metric === metric) ?? null,
-        // One metric asked for, one series back.
-        series: series[0],
-      });
+      // One metric asked for, one series back.
+      setReport({ live, series: series[0] });
     },
     [sourceId, metric, settled],
   );
@@ -105,9 +115,10 @@ export function DoraMetricPage({ sourceId, slug }: { sourceId: string; slug: str
     setPage((p) => ({ ...p, offset: 0 }));
   }, [settled, metric]);
 
+  const filter = (partial: Partial<DoraQuery>) => setQuery((q) => ({ ...q, ...partial }));
+
   const backTo = `/dora/${slug}?${toSearchParams(query)}`;
-  const dimensions = Object.entries(query.dimensions ?? {});
-  const result = report?.result ?? null;
+  const result = report?.live.results.find((r) => r.metric === metric) ?? null;
   const shown = events?.items ?? [];
 
   return (
@@ -121,19 +132,6 @@ export function DoraMetricPage({ sourceId, slug }: { sourceId: string; slug: str
             {t(`dora.metric.${metric}`)}
             <HelpTip text={t(`dora.help.${metric}`)} />
           </h2>
-          <div className="metric-head-dims">
-            {dimensions.length === 0 ? (
-              <span className="muted">{t('dora.global')}</span>
-            ) : (
-              <div className="pills">
-                {dimensions.map(([k, v]) => (
-                  <span key={k} className="pill attr">
-                    <b>{k}</b>={v}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
         <button className="btn" onClick={reload} disabled={loading}>
           {loading ? t('common.refreshing') : `↻ ${t('common.refresh')}`}
@@ -141,6 +139,25 @@ export function DoraMetricPage({ sourceId, slug }: { sourceId: string; slug: str
       </div>
 
       {error && <div className="banner error">{error}</div>}
+
+      {/* The list's own bar, controls and order included: the scope a reading
+          was taken over is stated the same way wherever it is read. */}
+      <div className="filters-row">
+        <PeriodFilter
+          value={{ from: query.from, to: query.to, windowDays: query.windowDays }}
+          effective={report?.live.period}
+          onChange={(next) => filter(next)}
+          disabled={loading}
+        />
+        {report && (
+          <DimensionFilter
+            vocabulary={report.live.dimensions}
+            value={query.dimensions ?? {}}
+            onChange={(dimensions) => filter({ dimensions })}
+            disabled={loading}
+          />
+        )}
+      </div>
 
       {result && (
         <section className="panel">

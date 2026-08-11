@@ -109,6 +109,10 @@ travel in the URL. A value computed over another period or another slice is a
 different number, and a detail page that disagreed with the card it was opened
 from would be worse than no detail page.
 
+The same filter bar sits on the detail page, so a scope can be narrowed without
+walking back to the list: the reading, its chart and its events all follow.
+What is picked here is what the breadcrumb returns to.
+
 .. figure:: images/dora-metric.png
    :width: 1000px
    :alt: One metric: a chart of the historised readings over the period, then

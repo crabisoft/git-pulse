@@ -554,7 +554,6 @@
     "truncated": "Read short on {{count}} listing(s) ({{repos}}): the platform ran out of pages before reaching the start of this period, so the figures below cover less than they say. Raise the API page cap in the settings, or narrow the period.",
     "title": "DORA metrics",
     "empty": "No data yet — configure environment rules and run a collection.",
-    "global": "global",
     "sample": "{{count}} events",
     "window": {
       "7": "7 days",

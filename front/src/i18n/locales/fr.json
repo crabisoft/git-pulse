@@ -554,7 +554,6 @@
     "truncated": "Lecture écourtée sur {{count}} listing(s) ({{repos}}) : la plateforme a épuisé ses pages avant d'atteindre le début de cette période, les chiffres ci-dessous couvrent donc moins qu'ils ne l'annoncent. Augmentez le plafond de pages dans les réglages, ou resserrez la période.",
     "title": "Métriques DORA",
     "empty": "Aucune donnée — configurez des règles d'environnement et lancez une collecte.",
-    "global": "global",
     "sample": "{{count}} événements",
     "window": {
       "7": "7 jours",

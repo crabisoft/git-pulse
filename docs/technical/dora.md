@@ -269,6 +269,13 @@ them: a value computed over another period is a different number, so the page
 reads exactly the report the list was showing rather than re-picking a period on
 arrival.
 
+They stay editable there, through the same `useUrlQuery(doraCodec)` the list
+uses and the same two controls — narrowing a scope from the detail otherwise
+costs a walk back to the list and a second opening of the block, for the reading
+that page was already about. The report is kept whole rather than reduced to the
+one result, because the bar reads the dimension vocabulary and the resolved
+period from it, and the breadcrumb serialises whatever the query then holds.
+
 This chart is about the history itself, so it comes from the historised
 snapshots through `GET /api/sources/:id/metrics/series`, **bucketed
 server-side** — unlike the overview's sparklines, which illustrate a period and
