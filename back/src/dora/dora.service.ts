@@ -130,7 +130,14 @@ export class DoraService {
     const { results, repos, period, truncated } = await this.build(sourceId, query, signal);
     const dimensions = collectDimensions(results);
     const sliced = results.filter((r) => matchesDimensions(r.dimensions, query.dimensions));
-    return { results: foldByMetric(sliced), repos, dimensions, period, truncated };
+    return {
+      results: foldByMetric(sliced),
+      repos,
+      dimensions,
+      dimensionsByMetric: collectDimensionsByMetric(results),
+      period,
+      truncated,
+    };
   }
 
   /**
@@ -170,6 +177,7 @@ export class DoraService {
       results: foldByMetric(sliced(results)),
       repos,
       dimensions: collectDimensions(results),
+      dimensionsByMetric: collectDimensionsByMetric(results),
       period,
       truncated,
       trend: slices.map((slice) => foldByMetric(sliced(slice))),
@@ -737,6 +745,30 @@ function collectDimensions(results: DoraResult[]): Record<string, string[]> {
       [...set].sort(),
     ]),
   );
+}
+
+/**
+ * The same vocabulary, split per metric.
+ *
+ * Which keys a metric can be sliced by is a property of the events it is
+ * computed from: a deployment is classified by the environment rules, a merged
+ * pull request by its own, and neither carries what the other was given. The
+ * union says a key exists; only this says which metrics it narrows and which it
+ * empties.
+ */
+function collectDimensionsByMetric(
+  results: DoraResult[],
+): Partial<Record<DoraMetric, Record<string, string[]>>> {
+  const byMetric = new Map<DoraMetric, DoraResult[]>();
+  for (const result of results) {
+    const bucket = byMetric.get(result.metric);
+    if (bucket) bucket.push(result);
+    else byMetric.set(result.metric, [result]);
+  }
+
+  const vocabulary: Partial<Record<DoraMetric, Record<string, string[]>>> = {};
+  for (const [metric, of] of byMetric) vocabulary[metric] = collectDimensions(of);
+  return vocabulary;
 }
 
 /** A result is kept only when it carries every requested key/value pair. */

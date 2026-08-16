@@ -13,6 +13,7 @@
  * an array — a view that throws renders as an empty picture, not as an error,
  * and both went out in the guide.
  */
+import { DORA_METRICS } from '@repo/shared';
 import type {
   AppSettings,
   AuthState,
@@ -532,6 +533,9 @@ const RESULT = (
   combinations: 4,
 });
 
+/** What the filter bar offers, on an install whose rules dimension everything. */
+const DORA_DIMENSIONS = { client: ['globex', 'northwind'], app: ['checkout', 'identity'] };
+
 /** A `DoraReport`: one reading per metric, plus the filter vocabularies. */
 export const DORA: DoraReport = {
   results: [
@@ -545,7 +549,10 @@ export const DORA: DoraReport = {
     RESULT('deploy_time', 5_400, 'seconds', 48, 'production'),
   ],
   repos: ['acme/checkout-service', 'acme/identity-provider'],
-  dimensions: { client: ['globex', 'northwind'], app: ['checkout', 'identity'] },
+  dimensions: DORA_DIMENSIONS,
+  // Every metric slices by both keys here: what a detail page needs to know
+  // before blaming an empty reading on the period rather than on the filter.
+  dimensionsByMetric: Object.fromEntries(DORA_METRICS.map((m) => [m, DORA_DIMENSIONS])),
   period: { from: '2025-07-01T00:00:00Z', to: '2025-07-31T00:00:00Z', windowDays: 30 },
   // The ordinary answer, and not optional: the page reads its length before it
   // draws anything, so a report without it renders nothing at all.

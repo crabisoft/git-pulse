@@ -33,6 +33,7 @@ function report(over: Partial<DoraReport> = {}): DoraReport {
     results: [result()],
     repos: ['acme/api'],
     dimensions: { client: ['acme', 'globex'], type: ['prod', 'preprod'] },
+    dimensionsByMetric: { deploy_time: { client: ['acme', 'globex'], type: ['prod', 'preprod'] } },
     period: { from: '2026-07-01T00:00:00Z', to: '2026-07-31T00:00:00Z', windowDays: 30 },
     truncated: [],
     ...over,
@@ -190,5 +191,60 @@ describe('the filters on a metric page', () => {
 
     expect(await screen.findByText('dora.detail.gone')).toBeInTheDocument();
     expect(screen.getByLabelText('client', { exact: false })).toBeInTheDocument();
+  });
+
+  it('says so when the picked key is one this metric is never sliced by', async () => {
+    // The dimensions of a metric are those of the events it is measured on, and
+    // the filter bar offers the union over every metric. Picking a key from
+    // another family empties the page exactly like an over-narrow combination
+    // does — and "no reading over this period" sends the reader off to widen a
+    // period that was never the problem.
+    vi.mocked(api.dora).mockResolvedValue(
+      report({ results: [], dimensionsByMetric: { deploy_time: { type: ['prod'] } } }),
+    );
+
+    renderPage('/dora/acme/deploy_time?dimension=client:acme');
+
+    const said = await screen.findByText(/dora\.detail\.notSliced/);
+    expect(said).toHaveTextContent('client');
+    expect(screen.queryByText('dora.detail.gone')).not.toBeInTheDocument();
+  });
+
+  it('says so for a value this metric never carried, on a key that does slice it', async () => {
+    // The bar offers the values seen anywhere on the report. `app` slices the
+    // deploy time here and `app=checkout` is a real value — of another metric.
+    // Reading that as "no reading over this period" sends the reader off to
+    // widen a period that was never the problem.
+    vi.mocked(api.dora).mockResolvedValue(
+      report({ results: [], dimensionsByMetric: { deploy_time: { app: ['identity'] } } }),
+    );
+
+    renderPage('/dora/acme/deploy_time?dimension=app:checkout');
+
+    expect(await screen.findByText(/dora\.detail\.notSliced/)).toHaveTextContent('app=checkout');
+  });
+
+  it('still renders against an API that answers without the per-metric vocabulary', async () => {
+    // A page deployed ahead of its API — or a dev server not restarted — used
+    // to throw here rather than render, which takes the whole route down over a
+    // sentence. The field is required of the API and read as if it were not.
+    vi.mocked(api.dora).mockResolvedValue(
+      report({ dimensionsByMetric: undefined as unknown as DoraReport['dimensionsByMetric'] }),
+    );
+
+    renderPage('/dora/acme/deploy_time?dimension=client:acme');
+
+    expect(await screen.findByText(/dora\.sample/)).toBeInTheDocument();
+  });
+
+  it('blames the period, not the filter, for a metric that has no reading at all', async () => {
+    // No vocabulary for the metric means no result to collect one from, filter
+    // or no filter: nothing was measured, and no widening of this key changes
+    // that.
+    vi.mocked(api.dora).mockResolvedValue(report({ results: [], dimensionsByMetric: {} }));
+
+    renderPage('/dora/acme/deploy_time?dimension=client:acme');
+
+    expect(await screen.findByText('dora.detail.gone')).toBeInTheDocument();
   });
 });

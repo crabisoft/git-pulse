@@ -600,6 +600,8 @@
       "title": "Contributing events",
       "noSample": "No event to detail.",
       "gone": "This metric no longer exists for that combination over the requested period.",
+      "notSliced_one": "No event behind {{metric}} is classified {{keys}}: what it is measured on is dimensioned by rules of its own, and none of them says that. Widen that filter to read it, or write a rule that does.",
+      "notSliced_other": "No event behind {{metric}} is classified {{keys}}: what it is measured on is dimensioned by rules of its own, and none of them says those. Widen those filters to read it, or write rules that do.",
       "openMetric": "Open the detail: {{metric}}",
       "folded": "across {{count}} dimension combinations"
     },

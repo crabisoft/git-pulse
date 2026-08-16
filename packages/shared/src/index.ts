@@ -1518,6 +1518,18 @@ export interface DoraReport {
   repos: string[];
   /** Dimension key → observed values, over the repo-scoped results. */
   dimensions: Record<string, string[]>;
+  /**
+   * The same vocabulary, per metric — collected before slicing, like the one
+   * above.
+   *
+   * A dimension is an attribute of the events a metric is computed from, and
+   * the families are classified by different rules: deployments by the
+   * environment ones, merged pull requests by their own. So a key only one
+   * family carries slices the other's metrics to nothing, and the union above
+   * cannot say which. A metric with no reading at all over the period has no
+   * entry, which is not the same thing and reads differently.
+   */
+  dimensionsByMetric: Partial<Record<DoraMetric, Record<string, string[]>>>;
   /** The period actually used, defaults resolved. */
   period: DoraPeriod;
   /**

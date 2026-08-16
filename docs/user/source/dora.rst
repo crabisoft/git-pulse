@@ -186,6 +186,21 @@ When the filter still leaves several combinations, the page says so under the
 value — *across N dimension combinations* — so a figure is never read as being
 about one slice while the events below it come from across the lot.
 
+When the filter leaves **nothing** standing, the page says which of the two
+reasons applies. A combination that was simply never deployed nor merged over
+the period is one thing; a key — or a value — that no event behind this metric
+ever carried is another, and the filter bar cannot tell them apart on its own:
+it offers every key, and every value, seen anywhere on the report.
+
+A dimension is an attribute of the **events a metric is measured on**, and the
+two families are classified by different rules: deployments by the environment
+rules of :ref:`settings-environments`, merged pull requests by the PR labels and
+PR titles tabs beside them. So filtering on a key only the environments carry —
+``type``, typically — leaves the lead time and its three segments with nothing
+at all, whatever the period. The page names the key rather than blaming the
+period, and the fix is a rule giving pull requests the same attribute, by label,
+by title or by repository name: see :ref:`monorepo-dimensions`.
+
 .. figure:: images/dora-metric.png
    :width: 1000px
    :alt: One metric: a chart of the historised readings over the period, then

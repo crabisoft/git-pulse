@@ -129,6 +129,28 @@ export function DoraMetricPage({ sourceId, slug }: { sourceId: string; slug: str
   const result = report?.live.results.find((r) => r.metric === metric) ?? null;
   const shown = events?.items ?? [];
 
+  // Which of the picked pairs no event behind this metric ever carried — see
+  // `DoraReport.dimensionsByMetric`, which states what it *can* be sliced by,
+  // collected before the slice. Filtering on one empties the page just as an
+  // over-narrow combination does, and the two want opposite answers: widen the
+  // filter, or write a rule that dimensions these events.
+  //
+  // The pair and not the key alone: `app` may well slice the lead time while
+  // `app=checkout` never appears on a merged request, which is the same dead
+  // end reached one step further in.
+  //
+  // Optional to the last step on purpose: an API older than this page answers
+  // without the field at all, and reading through it would throw where the
+  // worst this may cost is a sentence that says "gone" instead of naming a
+  // pair. A metric with no entry has no reading over the period either, filter
+  // or no filter, which the other sentence already covers.
+  const sliceable = report?.live.dimensionsByMetric?.[metric as DoraMetric];
+  const neverCarried = sliceable
+    ? Object.entries(settled.dimensions ?? {}).filter(
+        ([key, value]) => !sliceable[key]?.includes(value),
+      )
+    : [];
+
   return (
     <div>
       <div className="page-head">
@@ -202,7 +224,17 @@ export function DoraMetricPage({ sourceId, slug }: { sourceId: string; slug: str
         </section>
       )}
 
-      {!loading && !result && !error && <p className="muted">{t('dora.detail.gone')}</p>}
+      {!loading && !result && !error && (
+        <p className="muted">
+          {neverCarried.length > 0
+            ? t('dora.detail.notSliced', {
+                count: neverCarried.length,
+                keys: neverCarried.map(([key, value]) => `${key}=${value}`).join(', '),
+                metric: t(`dora.metric.${metric}`),
+              })
+            : t('dora.detail.gone')}
+        </p>
+      )}
     </div>
   );
 }
