@@ -417,6 +417,7 @@
     "collect": {
       "ingest": "Ingestion failed, the snapshot was taken off what was already stored: {{error}}",
       "dora": "DORA snapshot failed: {{error}}",
+      "versions": "The versions in place could not be read: {{error}}",
       "changelogs": "Deployment changelogs could not be archived: {{error}}",
       "changelogsPartial": "{{count}} deployment(s) could not be archived — their contents will be lost once they age out of the store.",
       "refreshInFlight": "This source is already being re-read ({{state}}). Wait for that run to finish before asking for another.",
@@ -434,7 +435,7 @@
       "groupMissing": "The pattern captures no group named “{{group}}”.",
       "httpStatus": "The endpoint answered {{status}}.",
       "invalidUrl": "“{{url}}” is not a readable address.",
-      "noAttribute": "The environment carries no attribute “{{name}}”, which the URL needs.",
+      "noAttribute": "The environment carries no attribute “{{key}}”, which the URL needs.",
       "noEnvironmentUrl": "The platform published no address for this environment, and the URL is built from one.",
       "noMatch": "The pattern “{{pattern}}” matches nothing in the response.",
       "noRef": "The deployment states no ref, which the URL needs.",
@@ -450,7 +451,7 @@
       "timeout": "The endpoint did not answer in time.",
       "unknownPlaceholder": "The URL uses the placeholder “{{name}}”, which is not one of the values a deployment carries.",
       "unparsable": "The response is not readable as {{format}}: {{detail}}",
-      "unreachable": "The endpoint could not be reached: {{reason}}",
+      "unreachable": "The endpoint could not be reached: {{detail}}",
       "unsupportedScheme": "Only http and https addresses are read."
     },
     "versionRule": {

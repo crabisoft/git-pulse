@@ -417,6 +417,7 @@
     "collect": {
       "ingest": "Ingestion échouée, le relevé a été pris sur ce qui était déjà stocké : {{error}}",
       "dora": "Relevé DORA échoué : {{error}}",
+      "versions": "Les versions en place n'ont pas pu être lues : {{error}}",
       "changelogs": "Archivage des changelogs de déploiement échoué : {{error}}",
       "changelogsPartial": "{{count}} déploiement(s) n'ont pas pu être archivés — leur contenu sera perdu dès qu'ils sortiront du magasin.",
       "refreshInFlight": "Cette source est déjà en cours de relecture ({{state}}). Attendez la fin de ce passage avant d'en demander un autre.",
@@ -434,7 +435,7 @@
       "groupMissing": "Le motif ne capture aucun groupe nommé « {{group}} ».",
       "httpStatus": "L'endpoint a répondu {{status}}.",
       "invalidUrl": "« {{url}} » n'est pas une adresse lisible.",
-      "noAttribute": "L'environnement ne porte aucun attribut « {{name}} », dont l'URL a besoin.",
+      "noAttribute": "L'environnement ne porte aucun attribut « {{key}} », dont l'URL a besoin.",
       "noEnvironmentUrl": "La plateforme n'a publié aucune adresse pour cet environnement, et l'URL en dépend.",
       "noMatch": "Le motif « {{pattern}} » ne correspond à rien dans la réponse.",
       "noRef": "Le déploiement n'indique aucune référence, dont l'URL a besoin.",
@@ -450,7 +451,7 @@
       "timeout": "L'endpoint n'a pas répondu à temps.",
       "unknownPlaceholder": "L'URL utilise l'espace réservé « {{name}} », qui ne fait pas partie des valeurs portées par un déploiement.",
       "unparsable": "La réponse n'est pas lisible en {{format}} : {{detail}}",
-      "unreachable": "L'endpoint n'a pas pu être joint : {{reason}}",
+      "unreachable": "L'endpoint n'a pas pu être joint : {{detail}}",
       "unsupportedScheme": "Seules les adresses http et https sont lues."
     },
     "versionRule": {
