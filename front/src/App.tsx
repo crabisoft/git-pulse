@@ -5,7 +5,6 @@ import {
   Navigate,
   Route,
   Routes,
-  generatePath,
   matchPath,
   useLocation,
   useNavigate,
@@ -24,6 +23,7 @@ import { api, apiErrorInfo } from './api';
 import { useAuth } from './auth';
 import { apply as applyDisplay, effective, watchSystem } from './display';
 import { useWallMode } from './wall';
+import { samePageOn, slugOf } from './sourceRoutes';
 import { SECTION_PATHS, SettingsPage, type SettingsSection } from './pages/SettingsPage';
 import { OverviewPage } from './pages/OverviewPage';
 import { DoraPage } from './pages/DoraPage';
@@ -61,34 +61,6 @@ const SETTINGS_SECTIONS: SettingsSection[] = [
 ];
 
 /**
- * Routes the topbar picker drives. Switching source keeps you on the page you
- * were reading, so the pattern is needed as well as the slug.
- *
- * No settings route appears here: settings is an application-wide module.
- * Classification rules are a shared catalogue and ticket rules belong to their
- * tracker, so nothing under Settings is scoped to a source at all.
- */
-const SOURCE_ROUTES = [
-  '/dashboard/:slug',
-  '/dora/:slug/:metric',
-  '/dora/:slug',
-  '/deployments/:slug/changes',
-  '/deployments/:slug',
-  '/changelogs/:slug',
-  '/release-notes/:slug',
-];
-
-/** The source slug the current URL points at, or null on the source-less pages. */
-function useRouteSlug(): { pattern: string; slug: string } | null {
-  const { pathname } = useLocation();
-  for (const pattern of SOURCE_ROUTES) {
-    const slug = matchPath(pattern, pathname)?.params.slug;
-    if (slug) return { pattern, slug };
-  }
-  return null;
-}
-
-/**
  * Decides what may be rendered at all before anything mounts, so no page fires
  * a request the session cannot make. The shell below only ever runs once the
  * caller is allowed in — as a visitor when the dashboard is public, otherwise
@@ -124,17 +96,17 @@ function AppShell() {
   const { state, signOut } = useAuth();
   const isAdmin = state?.user?.role === 'admin';
   const navigate = useNavigate();
-  const { pathname } = useLocation();
+  const { pathname, search } = useLocation();
   const [sources, setSources] = useState<SourcePublic[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const route = useRouteSlug();
+  const routeSlug = slugOf(pathname);
   /** Kept so the nav links still carry a source while on a source-less page. */
   const [lastSlug, setLastSlug] = useState<string | null>(null);
   // Never point the picker or the nav links at a source that no longer exists.
-  const candidate = route?.slug ?? lastSlug;
+  const candidate = routeSlug ?? lastSlug;
   /**
    * What opens when the address names no source, and when nothing was read
    * this session: the favourite, and the first source when none was marked.
@@ -236,15 +208,16 @@ function AppShell() {
   );
 
   useEffect(() => {
-    if (route) setLastSlug(route.slug);
-  }, [route?.slug]);
+    if (routeSlug) setLastSlug(routeSlug);
+  }, [routeSlug]);
 
   // An unknown slug is handled where it is read, in SourcePage — no effect here.
 
   /** Same page, other source — or just remembered when the page has no source. */
   const changeSource = (slug: string) => {
     setLastSlug(slug);
-    if (route) navigate(generatePath(route.pattern, { slug }));
+    const next = samePageOn(pathname, slug, search);
+    if (next) navigate(next);
   };
 
   // A screen nobody is standing at: the shell steps out of the way, and what
