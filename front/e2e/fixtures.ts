@@ -602,20 +602,43 @@ export const METRIC_SNAPSHOTS: Page<MetricSnapshotPublic> = {
   page: { total: 88, limit: 200, offset: 0, hasMore: false },
 };
 
-/** A `MetricSeries`: the trend a metric sub-page plots. */
-export const METRIC_SERIES: MetricSeries = {
-  metric: 'lead_time',
-  dimensions: {},
-  bucket: 'day',
-  points: [
-    190_000, 186_000, 174_000, 171_000, 168_000, 159_000, 150_000, 148_000, 141_000, 133_000,
-    120_000, 118_000, 111_000, 108_000, 104_000, 99_000, 97_200,
-  ].map((value, i) => ({
-    at: `2025-07-${(15 + i).toString().padStart(2, '0')}T00:00:00Z`,
-    value,
-  })),
-  snapshotCount: 412,
+/**
+ * Lead time day by day, denser than the sparkline's eleven points: the metric
+ * page draws a chart with an axis where the grid draws a thumbnail.
+ */
+const LEAD_TIME_TREND = [
+  190_000, 186_000, 174_000, 171_000, 168_000, 159_000, 150_000, 148_000, 141_000, 133_000, 120_000,
+  118_000, 111_000, 108_000, 104_000, 99_000, 97_200,
+];
+
+/** A `MetricSeries`: one metric's trend, oldest first, ending the day of `NOW`. */
+const SERIES = (metric: string): MetricSeries => {
+  const values = metric === 'lead_time' ? LEAD_TIME_TREND : (HISTORY[metric] ?? []);
+  return {
+    metric,
+    dimensions: {},
+    bucket: 'day',
+    points: values.map((value, i) => ({
+      // Counted back from the last day rather than forward from a fixed one,
+      // so a series of any length ends where the report's period does.
+      at: `2025-07-${(31 - (values.length - 1 - i)).toString().padStart(2, '0')}T00:00:00Z`,
+      value,
+    })),
+    snapshotCount: values.length * 24,
+  };
 };
+
+/**
+ * What the series endpoint answers: one series per metric asked for, in the
+ * order asked.
+ *
+ * Read off the query rather than fixed, because that order is the whole of
+ * what the callers rely on — the DORA grid keys its sparklines by metric name,
+ * and a metric page plots the first series back. A constant answered every
+ * metric page with whichever metric happened to be first in it.
+ */
+export const METRIC_SERIES = (url: string): MetricSeries[] =>
+  new URL(url).searchParams.getAll('metric').map(SERIES);
 
 /**
  * Incidents over the journal's window, which is the delivery stream's whole
@@ -890,11 +913,17 @@ export const RELEASE_NOTES: ReleaseNotes = {
 };
 
 /**
+ * What a route answers: a body, or — where the shape of the answer depends on
+ * what was asked for — a function of the request URL.
+ */
+export type Answer = unknown | ((url: string) => unknown);
+
+/**
  * Every route the screens touch, most specific first — the collections hang off
  * `/sources/:id/…`, so a pattern for `sources` would swallow them if it came
  * before theirs.
  */
-export const ROUTES: Array<[RegExp, unknown]> = [
+export const ROUTES: Array<[RegExp, Answer]> = [
   [/\/api\/auth\/me$/, AUTH],
   [/\/api\/settings(\?|$)/, SETTINGS],
   [/\/api\/overview\//, OVERVIEW],
@@ -929,3 +958,16 @@ export const ROUTES: Array<[RegExp, unknown]> = [
   [/\/api\/jobs/, JOBS],
   [/\/api\/users/, { items: [USER], page: { total: 1, limit: 25, offset: 0 } }],
 ];
+
+/**
+ * The body a stubbed request is answered with: the first pattern that matches
+ * it, and the empty page for anything else — an unlisted route reads as a page
+ * with nothing in it rather than as a failed request.
+ *
+ * `extra` comes first, for a suite that answers one route differently.
+ */
+export function answer(url: string, extra: Array<[RegExp, Answer]> = []): unknown {
+  const match = [...extra, ...ROUTES].find(([pattern]) => pattern.test(url));
+  const body = match ? match[1] : EMPTY_PAGE;
+  return typeof body === 'function' ? (body as (url: string) => unknown)(url) : body;
+}

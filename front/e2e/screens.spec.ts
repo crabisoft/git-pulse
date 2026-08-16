@@ -1,5 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
-import { ROUTES, EMPTY_PAGE } from './fixtures';
+import { answer } from './fixtures';
 
 /**
  * What the pages actually look like, at the widths they are actually read at.
@@ -60,12 +60,10 @@ const PAGES: Array<{
 /** Answers every API call from the fixtures, so a screen never waits on a network. */
 async function stubApi(page: Page) {
   await page.route('**/api/**', async (route) => {
-    const url = route.request().url();
-    const match = ROUTES.find(([pattern]) => pattern.test(url));
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(match ? match[1] : EMPTY_PAGE),
+      body: JSON.stringify(answer(route.request().url())),
     });
   });
 }
