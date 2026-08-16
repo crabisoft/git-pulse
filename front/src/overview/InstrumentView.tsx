@@ -4,7 +4,7 @@ import { Sparkline } from '../Sparkline';
 import { formatValue } from '../doraFormat';
 import { FilterField } from '../Filters';
 import { Gauge } from './Gauge';
-import { tierOf, toTierValue } from './gauge';
+import { tierOf } from './gauge';
 import { pivotEnvironments } from './pivot';
 import {
   Delta,
@@ -53,7 +53,7 @@ export function InstrumentView({
         ) : (
           <div className="gauges">
             {report.flow.map((flow) => (
-              <GaugeCard key={flow.metric} flow={flow} windowDays={report.period.windowDays} />
+              <GaugeCard key={flow.metric} flow={flow} />
             ))}
           </div>
         )}
@@ -108,9 +108,11 @@ export function InstrumentView({
 }
 
 /** One metric, as a position on the published scale plus the figure itself. */
-function GaugeCard({ flow, windowDays }: { flow: OverviewFlow; windowDays: number | null }) {
+function GaugeCard({ flow }: { flow: OverviewFlow }) {
   const { t } = useTranslation();
-  const tierValue = toTierValue(flow.metric, flow.value, windowDays);
+  // Every metric is already computed in the unit its band is published in —
+  // the frequency included, since it became a rate per day.
+  const tierValue = flow.value;
   const tier = tierOf(flow.metric, tierValue);
 
   return (

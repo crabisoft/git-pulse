@@ -917,11 +917,15 @@ export const api = {
         }),
       { signal },
     ),
-  /** One metric over a period, folded over the filter and bucketed by day. */
+  /**
+   * The given metrics over a period, each folded over the filter and bucketed
+   * by day. One series per metric asked for, in the order asked — a metric with
+   * no history answers with no points rather than being left out.
+   */
   metricSeries: (
     sourceId: string,
     query: {
-      metric: string;
+      metrics: string[];
       dimensions?: Record<string, string>;
       from?: string;
       to?: string;
@@ -930,10 +934,10 @@ export const api = {
     },
     signal?: AbortSignal,
   ) =>
-    request<MetricSeries>(
+    request<MetricSeries[]>(
       `/sources/${sourceId}/metrics/series` +
         qs({
-          metric: query.metric,
+          metric: query.metrics,
           dimension: Object.entries(query.dimensions ?? {}).map(([k, v]) => `${k}:${v}`),
           from: query.from,
           to: query.to,

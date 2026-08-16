@@ -104,7 +104,7 @@ component deployed first after the merge — not a loose upper bound but a
 measurement of something else.
 
 `componentAttribute` (a setting, null by default) names the dimension that
-designates a deployable. `deploymentsCarrying` then also requires the two sides
+designates a deployable. The correlation then also requires the two sides
 to agree on it — **when both state it**. Where either is silent it falls back to
 repo and time, which is what makes this safe to leave half-configured and safe
 to ship to installs that never touch it: the presence of the attribute *is* the
@@ -127,6 +127,27 @@ the front-end release rather than against whatever shipped next.
 > those pairs — the ones repo-and-time would have matched — and the service logs
 > them, for the same reason the orphan incident combinations below are logged.
 
+### One correlation, indexed once
+
+`carriedBy` pairs every merged request with its landings in one go, and the
+three readings that need it — `deploy_time`, the blame attribution, the mismatch
+report — read that one map. Each of them used to correlate on its own, and each
+correlation walked every deployment for every pull request: four passes of
+`O(requests × deployments)`, redone for every slice of a trend and every day of
+a replay, over events read once and unchanged between them.
+
+Deployments are indexed instead, per repository and environment, sorted by date,
+so the pairing is a binary search. Where a deployable is designated each
+environment is indexed a second time by the value stated, plus the releases
+stating none — the silence rule above, read as two lookups rather than a walk
+past the releases of components a request has nothing to do with. That last part
+is what keeps a monorepo from falling back to a scan exactly where the setting
+exists to help.
+
+Measured on 2 000 merged requests against 5 000 deployments over twenty repos: a
+single computation went from 742 ms to 9 ms, and a ninety-day replay from 16.0 s
+to 0.26 s.
+
 `deploy_time` is grouped by the **deployment's** dimensions where the other
 three use the pull request's: how long a change takes to arrive is a property of
 where it lands, so filtering on `type=Prod` answers "time to production" with no
@@ -139,7 +160,7 @@ failure rate** and **MTTR**:
 
 | Value | Rate numerator | MTTR |
 |---|---|---|
-| `pipelines` (default) | failed deployments | failure → next successful deployment in the same env |
+| `pipelines` (default) | failed deployments | failure → next successful deployment of the same repo in the same env |
 | `incidents` | incidents opened | opened → resolved |
 | `both` | either | median over the union of both |
 
@@ -182,6 +203,64 @@ Under `both` the rate may exceed 100% when incidents outnumber deployments in a
 slice — deliberately unclamped, since a ceiling would only hide a misconfigured
 label filter or misaligned dimensions.
 
+**Repo and environment**, not the environment alone. Two repos deploying to a
+name they both call `prod` interleave, and pairing on the name lets one repo's
+release close the other's failure: a ten-minute restore of something nobody
+fixed. A restore is the same deployable recovering.
+
+## No measurement is not a zero
+
+Every duration is a median, and the median of nothing is zero — which is not
+what "nothing was measured" means. A zero survives the fold, gets persisted by
+the scheduled snapshot as a genuine reading, draws a point on the trend, and
+lands in the **elite** band of the tier scale: a restore time nobody could
+measure would read as the best recovery on the scale.
+
+So a slice with no event behind it produces **no reading at all** — no MTTR
+where nothing failed, no `pickup_time` where the platform exposes no review, no
+`coding_time` where no commit date came back. Every reader already handles the
+absence: the DORA page draws no card for a metric with no result, `snapshot`
+writes no row, and the trend steps over the gap rather than dropping to the
+floor. Only the metrics that genuinely count something — deployment frequency,
+and the failure rate over a slice that did deploy — report a real zero.
+
+## Deployment frequency is a rate
+
+**Successful deployments per day**, not a count over the window.
+
+A count is only readable beside the window it was taken over, and a historised
+one has no window attached: nothing on a `MetricSnapshot` records the
+`doraWindowDays` in force when it was written. Raising that setting from 30 to
+90 tripled the whole series without a single extra deployment, and the DORA
+scale — published per day — could only be applied by whoever still remembered
+the length to divide by. That division lived in one place on the front, so the
+overview gauge was rated correctly and the metric list, which shows the same
+figure, was not on the same scale at all.
+
+The span comes from the period's own bounds rather than `windowDays`, because a
+period given as explicit dates carries no window and every trend slice is
+exactly that.
+
+**Successes only.** A deployment that failed delivered nothing — the same reason
+the correlation refuses to let one carry a change. One whose status could not be
+read is not evidence of anything either. The failure rate keeps both in its
+denominator: it asks how many of the deployments we attempted went wrong, which
+is a different question.
+
+> Rates add up across **dimension combinations**, which all cover the same
+> period — two a day to production and three to staging is five a day — and
+> `addsUp` is where that rule is stated, for the three readers that need it.
+> They do not add up across consecutive **periods**: eight daily rates average
+> to the rate over the week rather than summing to it, which is why the trend
+> never sums its points.
+
+Existing snapshots hold counts. The migration divides them by the window
+configured at upgrade time — right for every install that never changed it, and
+no worse than the count for the ones that did. Failed deployments cannot be
+subtracted after the fact, the rows not saying how many there were, so an install
+that wants the history exact should
+`POST /api/sources/:id/dora/rebuild`, which replays it from the events.
+
 ## Metric trends
 
 Clicking a metric opens `/dora/:slug/:metric`, which shows how it moved and then
@@ -190,11 +269,30 @@ them: a value computed over another period is a different number, so the page
 reads exactly the report the list was showing rather than re-picking a period on
 arrival.
 
+They stay editable there, through the same `useUrlQuery(doraCodec)` the list
+uses and the same two controls — narrowing a scope from the detail otherwise
+costs a walk back to the list and a second opening of the block, for the reading
+that page was already about. The report is kept whole rather than reduced to the
+one result, because the bar reads the dimension vocabulary and the resolved
+period from it, and the breadcrumb serialises whatever the query then holds.
+
 This chart is about the history itself, so it comes from the historised
 snapshots through `GET /api/sources/:id/metrics/series`, **bucketed
 server-side** — unlike the overview's sparklines, which illustrate a period and
 are therefore cut from it (see
 [Trends over the period](collection-and-metrics.md#10-trends-over-the-period)).
+
+The metric list's sparklines read the same route, which is why `metric` is
+repeatable: eight cards, eight lines, one query over the table they all share.
+Every metric asked for answers, empty points included, so a caller can line the
+series up against its cards without telling "no history" from "not asked for".
+
+They used to be folded in the browser instead, from the raw snapshot list —
+which appended every combination satisfying the filter end to end. Three
+combinations gave three values for one day, drawn as three moments of a line
+that never moved, and none of it was bounded by the period the value beside it
+was computed over. Folding a series is one rule, `foldTrend` holds it, and it
+holds it once.
 
 The collection runs every few minutes, so a year of raw snapshots is tens of
 thousands of rows — more than a page window carries and more than a plot can

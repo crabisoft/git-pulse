@@ -31,6 +31,7 @@ import { TrackersService } from '../trackers/trackers.service';
 import { TicketRulesService } from '../ticket-rules/ticket-rules.service';
 import { SettingsService } from '../settings/settings.service';
 import {
+  carriedBy,
   componentMismatches,
   deploymentFrequency,
   changeFailureRate,
@@ -129,7 +130,14 @@ export class DoraService {
     const { results, repos, period, truncated } = await this.build(sourceId, query, signal);
     const dimensions = collectDimensions(results);
     const sliced = results.filter((r) => matchesDimensions(r.dimensions, query.dimensions));
-    return { results: foldByMetric(sliced), repos, dimensions, period, truncated };
+    return {
+      results: foldByMetric(sliced),
+      repos,
+      dimensions,
+      dimensionsByMetric: collectDimensionsByMetric(results),
+      period,
+      truncated,
+    };
   }
 
   /**
@@ -169,6 +177,7 @@ export class DoraService {
       results: foldByMetric(sliced(results)),
       repos,
       dimensions: collectDimensions(results),
+      dimensionsByMetric: collectDimensionsByMetric(results),
       period,
       truncated,
       trend: slices.map((slice) => foldByMetric(sliced(slice))),
@@ -372,14 +381,15 @@ export class DoraService {
     const incidentEvents = events.incidentEvents.filter((i) => within(i.openedAt, period));
     const { failureSource, sourceId, componentAttribute } = context;
 
+    // Which deployment carried which merged request, indexed once: the failure
+    // attribution, the deploy time and the mismatch report all read it, and
+    // each of them used to correlate on its own — over the same events, and
+    // again for every trend slice and every replayed day.
+    const carriers = carriedBy(prEvents, deploymentEvents, componentAttribute);
+
     // A shared ticket between an incident and a merged pull request says which
     // deployment broke what — the question the failure rate actually asks.
-    const linked = incidentsByDeployment(
-      incidentEvents,
-      prEvents,
-      deploymentEvents,
-      componentAttribute,
-    );
+    const linked = incidentsByDeployment(incidentEvents, prEvents, carriers);
 
     // What is left divides by deployments, so a slice with no deployment
     // produces no rate at all. Saying so beats letting numbers go missing.
@@ -394,7 +404,14 @@ export class DoraService {
     // The other way a slice goes missing, and the only one the component test
     // can cause: both sides name a deployable and they disagree. Named here
     // because the metric it empties says nothing at all about why.
-    const mismatched = componentMismatches(prEvents, deploymentEvents, componentAttribute);
+    const mismatched = componentMismatches(
+      prEvents,
+      carriers,
+      // What repository and time alone would have paired. Only worth computing
+      // where a deployable is designated — otherwise it is the same map.
+      componentAttribute ? carriedBy(prEvents, deploymentEvents, null) : carriers,
+      componentAttribute,
+    );
     if (mismatched.length > 0 && !context.quiet) {
       this.logger.warn(
         `${mismatched.length} repo/${componentAttribute} pair(s) have merged pull requests ` +
@@ -406,11 +423,14 @@ export class DoraService {
     }
 
     return [
-      ...deploymentFrequency(deploymentEvents),
+      // The span the frequency is a rate over, taken from the bounds rather
+      // than `windowDays`: a period given as explicit dates carries no window,
+      // and every trend slice is exactly that.
+      ...deploymentFrequency(deploymentEvents, daysBetween(period)),
       ...changeFailureRate(deploymentEvents, incidentEvents, failureSource, linked),
       ...mttr(deploymentEvents, incidentEvents, failureSource, linked),
       ...leadTimeBreakdown(prEvents),
-      ...deployTime(prEvents, deploymentEvents, componentAttribute),
+      ...deployTime(prEvents, carriers),
     ];
   }
 
@@ -727,6 +747,30 @@ function collectDimensions(results: DoraResult[]): Record<string, string[]> {
   );
 }
 
+/**
+ * The same vocabulary, split per metric.
+ *
+ * Which keys a metric can be sliced by is a property of the events it is
+ * computed from: a deployment is classified by the environment rules, a merged
+ * pull request by its own, and neither carries what the other was given. The
+ * union says a key exists; only this says which metrics it narrows and which it
+ * empties.
+ */
+function collectDimensionsByMetric(
+  results: DoraResult[],
+): Partial<Record<DoraMetric, Record<string, string[]>>> {
+  const byMetric = new Map<DoraMetric, DoraResult[]>();
+  for (const result of results) {
+    const bucket = byMetric.get(result.metric);
+    if (bucket) bucket.push(result);
+    else byMetric.set(result.metric, [result]);
+  }
+
+  const vocabulary: Partial<Record<DoraMetric, Record<string, string[]>>> = {};
+  for (const [metric, of] of byMetric) vocabulary[metric] = collectDimensions(of);
+  return vocabulary;
+}
+
 /** A result is kept only when it carries every requested key/value pair. */
 function matchesDimensions(
   dimensions: Record<string, string>,
@@ -766,6 +810,11 @@ function endOfDay(date: Date): Date {
   const day = new Date(date);
   day.setUTCHours(23, 59, 59, 999);
   return day;
+}
+
+/** Length of a resolved period in days, fractions included. */
+function daysBetween(period: ResolvedRange): number {
+  return (new Date(period.to).getTime() - new Date(period.from).getTime()) / 86_400_000;
 }
 
 function asMessage(e: unknown): string {

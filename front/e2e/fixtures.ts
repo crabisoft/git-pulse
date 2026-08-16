@@ -13,6 +13,7 @@
  * an array — a view that throws renders as an empty picture, not as an error,
  * and both went out in the guide.
  */
+import { DORA_METRICS } from '@repo/shared';
 import type {
   AppSettings,
   AuthState,
@@ -440,10 +441,10 @@ export const OVERVIEW: OverviewReport = {
   flow: [
     {
       metric: 'deployment_frequency',
-      value: 63,
-      unit: 'count',
+      value: 2.1,
+      unit: 'per_day',
       sampleSize: 63,
-      trend: [38, 41, 44, 43, 49, 52, 58, 61, 63],
+      trend: [1.27, 1.37, 1.47, 1.43, 1.63, 1.73, 1.93, 2.03, 2.1],
       delta: 0.18,
       improving: true,
     },
@@ -528,14 +529,17 @@ const RESULT = (
   unit,
   dimensions: {},
   sampleSize,
-  samples: Array.from({ length: 5 }, (_, i) => SAMPLE(i, label, unit === 'count' ? null : value)),
+  samples: Array.from({ length: 5 }, (_, i) => SAMPLE(i, label, unit === 'per_day' ? null : value)),
   combinations: 4,
 });
+
+/** What the filter bar offers, on an install whose rules dimension everything. */
+const DORA_DIMENSIONS = { client: ['globex', 'northwind'], app: ['checkout', 'identity'] };
 
 /** A `DoraReport`: one reading per metric, plus the filter vocabularies. */
 export const DORA: DoraReport = {
   results: [
-    RESULT('deployment_frequency', 63, 'count', 63, 'production'),
+    RESULT('deployment_frequency', 2.1, 'per_day', 63, 'production'),
     RESULT('lead_time', 97_200, 'seconds', 48, 'acme/checkout-service#1284'),
     RESULT('change_failure_rate', 0.11, 'ratio', 63, 'production'),
     RESULT('mttr', 5_400, 'seconds', 7, 'production'),
@@ -545,7 +549,10 @@ export const DORA: DoraReport = {
     RESULT('deploy_time', 5_400, 'seconds', 48, 'production'),
   ],
   repos: ['acme/checkout-service', 'acme/identity-provider'],
-  dimensions: { client: ['globex', 'northwind'], app: ['checkout', 'identity'] },
+  dimensions: DORA_DIMENSIONS,
+  // Every metric slices by both keys here: what a detail page needs to know
+  // before blaming an empty reading on the period rather than on the filter.
+  dimensionsByMetric: Object.fromEntries(DORA_METRICS.map((m) => [m, DORA_DIMENSIONS])),
   period: { from: '2025-07-01T00:00:00Z', to: '2025-07-31T00:00:00Z', windowDays: 30 },
   // The ordinary answer, and not optional: the page reads its length before it
   // draws anything, so a report without it renders nothing at all.
@@ -602,20 +609,43 @@ export const METRIC_SNAPSHOTS: Page<MetricSnapshotPublic> = {
   page: { total: 88, limit: 200, offset: 0, hasMore: false },
 };
 
-/** A `MetricSeries`: the trend a metric sub-page plots. */
-export const METRIC_SERIES: MetricSeries = {
-  metric: 'lead_time',
-  dimensions: {},
-  bucket: 'day',
-  points: [
-    190_000, 186_000, 174_000, 171_000, 168_000, 159_000, 150_000, 148_000, 141_000, 133_000,
-    120_000, 118_000, 111_000, 108_000, 104_000, 99_000, 97_200,
-  ].map((value, i) => ({
-    at: `2025-07-${(15 + i).toString().padStart(2, '0')}T00:00:00Z`,
-    value,
-  })),
-  snapshotCount: 412,
+/**
+ * Lead time day by day, denser than the sparkline's eleven points: the metric
+ * page draws a chart with an axis where the grid draws a thumbnail.
+ */
+const LEAD_TIME_TREND = [
+  190_000, 186_000, 174_000, 171_000, 168_000, 159_000, 150_000, 148_000, 141_000, 133_000, 120_000,
+  118_000, 111_000, 108_000, 104_000, 99_000, 97_200,
+];
+
+/** A `MetricSeries`: one metric's trend, oldest first, ending the day of `NOW`. */
+const SERIES = (metric: string): MetricSeries => {
+  const values = metric === 'lead_time' ? LEAD_TIME_TREND : (HISTORY[metric] ?? []);
+  return {
+    metric,
+    dimensions: {},
+    bucket: 'day',
+    points: values.map((value, i) => ({
+      // Counted back from the last day rather than forward from a fixed one,
+      // so a series of any length ends where the report's period does.
+      at: `2025-07-${(31 - (values.length - 1 - i)).toString().padStart(2, '0')}T00:00:00Z`,
+      value,
+    })),
+    snapshotCount: values.length * 24,
+  };
 };
+
+/**
+ * What the series endpoint answers: one series per metric asked for, in the
+ * order asked.
+ *
+ * Read off the query rather than fixed, because that order is the whole of
+ * what the callers rely on — the DORA grid keys its sparklines by metric name,
+ * and a metric page plots the first series back. A constant answered every
+ * metric page with whichever metric happened to be first in it.
+ */
+export const METRIC_SERIES = (url: string): MetricSeries[] =>
+  new URL(url).searchParams.getAll('metric').map(SERIES);
 
 /**
  * Incidents over the journal's window, which is the delivery stream's whole
@@ -890,11 +920,17 @@ export const RELEASE_NOTES: ReleaseNotes = {
 };
 
 /**
+ * What a route answers: a body, or — where the shape of the answer depends on
+ * what was asked for — a function of the request URL.
+ */
+export type Answer = unknown | ((url: string) => unknown);
+
+/**
  * Every route the screens touch, most specific first — the collections hang off
  * `/sources/:id/…`, so a pattern for `sources` would swallow them if it came
  * before theirs.
  */
-export const ROUTES: Array<[RegExp, unknown]> = [
+export const ROUTES: Array<[RegExp, Answer]> = [
   [/\/api\/auth\/me$/, AUTH],
   [/\/api\/settings(\?|$)/, SETTINGS],
   [/\/api\/overview\//, OVERVIEW],
@@ -929,3 +965,16 @@ export const ROUTES: Array<[RegExp, unknown]> = [
   [/\/api\/jobs/, JOBS],
   [/\/api\/users/, { items: [USER], page: { total: 1, limit: 25, offset: 0 } }],
 ];
+
+/**
+ * The body a stubbed request is answered with: the first pattern that matches
+ * it, and the empty page for anything else — an unlisted route reads as a page
+ * with nothing in it rather than as a failed request.
+ *
+ * `extra` comes first, for a suite that answers one route differently.
+ */
+export function answer(url: string, extra: Array<[RegExp, Answer]> = []): unknown {
+  const match = [...extra, ...ROUTES].find(([pattern]) => pattern.test(url));
+  const body = match ? match[1] : EMPTY_PAGE;
+  return typeof body === 'function' ? (body as (url: string) => unknown)(url) : body;
+}

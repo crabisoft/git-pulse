@@ -56,16 +56,38 @@ export interface MergedPrEvent {
   dimensions: Record<string, string>;
 }
 
-/** Deployment count per dimension combination over the collected window. */
-export function deploymentFrequency(deployments: DeploymentEvent[]): DoraResult[] {
-  return [...groupByDimensions(deployments)].map(([, items]) => ({
-    metric: 'deployment_frequency',
-    value: items.length,
-    unit: 'count',
-    dimensions: items[0].dimensions,
-    sampleSize: items.length,
-    samples: takeRecent(items.map(deploymentSample)),
-  }));
+/**
+ * Successful deployments **per day**, per dimension combination.
+ *
+ * A rate rather than a count over the window, because a count is only readable
+ * beside the window it was taken over — and a historised one has no window
+ * attached at all. Raising `doraWindowDays` from 30 to 90 used to triple the
+ * whole series without a single extra deployment, and the DORA scale, which is
+ * published per day, could only be applied by whoever still remembered the
+ * length to divide by.
+ *
+ * Successes only. A deployment that failed delivered nothing — the same reason
+ * the correlation refuses to let one carry a change — and one whose status
+ * could not be read is not evidence of anything. The failure rate keeps
+ * counting both in its denominator, which is a different question: how many of
+ * the deployments we attempted went wrong.
+ */
+export function deploymentFrequency(deployments: DeploymentEvent[], days: number): DoraResult[] {
+  // No span to divide by, no rate. It takes an explicit period whose bounds are
+  // the same instant, and answering with the raw count would be the reading the
+  // whole metric is moving away from.
+  if (days <= 0) return [];
+
+  return [...groupByDimensions(deployments.filter((d) => d.status === 'success'))].map(
+    ([, items]) => ({
+      metric: 'deployment_frequency',
+      value: items.length / days,
+      unit: 'per_day',
+      dimensions: items[0].dimensions,
+      sampleSize: items.length,
+      samples: takeRecent(items.map(deploymentSample)),
+    }),
+  );
 }
 
 /**
@@ -85,12 +107,11 @@ export function deploymentFrequency(deployments: DeploymentEvent[]): DoraResult[
 export function incidentsByDeployment(
   incidents: IncidentEvent[],
   prs: MergedPrEvent[],
-  deployments: DeploymentEvent[],
-  componentKey: string | null = null,
+  carriers: Carriers,
 ): Map<DeploymentEvent, IncidentEvent[]> {
   const carrier = new Map<string, DeploymentEvent>();
   for (const pr of prs) {
-    const deployment = deploymentCarrying(pr, deployments, componentKey);
+    const deployment = deploymentCarrying(pr, carriers);
     if (!deployment) continue;
     for (const ticket of pr.tickets) carrier.set(ticketKey(ticket), deployment);
   }
@@ -179,11 +200,14 @@ export function orphanIncidentDimensions(
 /**
  * Median time to restore, per dimension combination. Two ways to measure it,
  * combined when `source` is `both`:
- *   pipelines — a failed deployment until the next success in the same environment
+ *   pipelines — a failed deployment until the next success of the same
+ *               deployable, meaning the same repository *and* environment
  *   incidents — an incident from opened to resolved
  *
  * Unlike the failure rate this needs no deployments at all, so a slice known
  * only through its incidents still yields a value.
+ *
+ * A slice with nothing to measure yields none: see `measured`.
  */
 export function mttr(
   deployments: DeploymentEvent[],
@@ -200,23 +224,26 @@ export function mttr(
       : groupByDimensions(incidents.filter((i) => !attributed.has(i)));
 
   const keys = new Set([...deploysByDimensions.keys(), ...incidentsByDimensions.keys()]);
-  return [...keys].map((key) => {
+  return [...keys].flatMap((key) => {
     const deploys: DeploymentEvent[] = deploysByDimensions.get(key) ?? [];
     const related: IncidentEvent[] =
       source === 'pipelines'
         ? []
         : [...deploys.flatMap((d) => linked.get(d) ?? []), ...(incidentsByDimensions.get(key) ?? [])];
-    const restores: number[] = [];
     const samples: DoraSample[] = [];
 
-    for (const [, envItems] of groupBy(deploys, (d) => d.environment)) {
+    // Repository *and* environment. On the environment alone, two repos
+    // shipping to a shared name interleave, and one repo's success closes
+    // another's failure: `portal-api` breaks production, `portal-front` deploys
+    // ten minutes later, and the pair reads as a ten-minute restore of
+    // something nobody fixed. A restore is the same deployable recovering.
+    for (const [, envItems] of groupBy(deploys, (d) => `${d.repo}\u0000${d.environment}`)) {
       const sorted = [...envItems].sort(byCreatedAt);
       for (let i = 0; i < sorted.length; i++) {
         if (sorted[i].status !== 'failed') continue;
         const next = sorted.slice(i + 1).find((d) => d.status === 'success');
         if (!next) continue;
         const durationSec = seconds(sorted[i].createdAt, next.createdAt);
-        restores.push(durationSec);
         samples.push({
           label: sorted[i].environment,
           at: sorted[i].createdAt,
@@ -232,21 +259,27 @@ export function mttr(
       // median toward zero rather than upward, so it is left out entirely.
       if (!incident.resolvedAt) continue;
       const durationSec = clamp(seconds(incident.openedAt, incident.resolvedAt));
-      restores.push(durationSec);
       samples.push({ ...incidentSample(incident), value: durationSec });
     }
 
-    return {
-      metric: 'mttr',
-      value: median(restores),
-      unit: 'seconds',
-      dimensions: (deploys[0] ?? related[0]).dimensions,
-      sampleSize: restores.length,
-      samples: takeRecent(samples),
-      population: samples,
-    };
+    return measured('mttr', (deploys[0] ?? related[0]).dimensions, samples);
   });
 }
+
+/**
+ * Every merged request paired with the deployments that carried it — one per
+ * environment the change reached, and no entry at all for a request that
+ * reached nowhere.
+ *
+ * Computed once and read by the three things that need it: `deployTime`
+ * measures each landing, `deploymentCarrying` takes the first of them for
+ * blame, and `componentMismatches` compares it against the same correlation
+ * run without the component test. Each of those used to walk every deployment
+ * for every pull request on its own — four passes of `O(requests ×
+ * deployments)` per computation, and a computation happens once per trend
+ * slice and once per replayed day.
+ */
+export type Carriers = Map<MergedPrEvent, DeploymentEvent[]>;
 
 /**
  * The first deployment to carry a merged pull request **to each environment**.
@@ -269,21 +302,39 @@ export function mttr(
  * touched the front with whichever component happened to deploy first — an
  * upper bound on nothing, since it measures another component's release.
  */
-export function deploymentsCarrying(
-  pr: MergedPrEvent,
+export function carriedBy(
+  prs: MergedPrEvent[],
   deployments: DeploymentEvent[],
   componentKey: string | null = null,
-): DeploymentEvent[] {
-  const mergedAt = msOf(pr.mergedAt);
-  const earliest = new Map<string, DeploymentEvent>();
-  for (const d of deployments) {
-    if (d.repo !== pr.repo || d.status !== 'success') continue;
-    if (msOf(d.createdAt) < mergedAt) continue;
-    if (!sameComponent(componentKey, pr.dimensions, d.dimensions)) continue;
-    const held = earliest.get(d.environment);
-    if (!held || msOf(d.createdAt) < msOf(held.createdAt)) earliest.set(d.environment, d);
+): Carriers {
+  const timeline = successTimeline(deployments, componentKey);
+  const carriers: Carriers = new Map();
+
+  for (const pr of prs) {
+    const environments = timeline.get(pr.repo);
+    if (!environments) continue;
+    const mergedAt = msOf(pr.mergedAt);
+    const component = componentKey ? pr.dimensions[componentKey] : undefined;
+    const landings: DeploymentEvent[] = [];
+
+    for (const environment of environments.values()) {
+      const landing =
+        component === undefined
+          ? // Nothing to narrow on: the whole environment, as it always was.
+            firstAfter(environment.all, mergedAt)
+          : // The releases of that component, and those naming none — the
+            // silence rule of `sameComponent`, read as a lookup rather than
+            // walked past.
+            earlier(
+              firstAfter(environment.byComponent.get(component) ?? [], mergedAt),
+              firstAfter(environment.silent, mergedAt),
+            );
+      if (landing) landings.push(landing.deployment);
+    }
+
+    if (landings.length > 0) carriers.set(pr, landings);
   }
-  return [...earliest.values()];
+  return carriers;
 }
 
 /**
@@ -312,6 +363,103 @@ function sameComponent(
   return left === right;
 }
 
+/** A deployment with its date already parsed — the loops below only compare. */
+interface TimedDeployment {
+  at: number;
+  deployment: DeploymentEvent;
+}
+
+/** One environment of one repository, in the orders the correlation reads. */
+interface EnvironmentTimeline {
+  /** Every success, oldest first. What a request with no component to state reads. */
+  all: TimedDeployment[];
+  /** Successes stating a deployable, per value, oldest first. */
+  byComponent: Map<string, TimedDeployment[]>;
+  /** Successes stating none: by the silence rule they pair with any request. */
+  silent: TimedDeployment[];
+}
+
+/**
+ * Successful deployments indexed for the one question the correlation asks:
+ * what did this repository first ship to each of its environments after a
+ * given instant.
+ *
+ * Sorted per repository and environment, so that question is a binary search
+ * instead of a walk over every deployment. It was walked once per pull request
+ * and per caller before, which a trend redoes for each of its slices and a
+ * replay for each of its ninety days — over events read once and never
+ * changing between them.
+ *
+ * The component lists are the second half of it. Scanning forward from the
+ * merge until a matching deployable turns up is linear again exactly where the
+ * setting exists to help — a monorepo, where a component's own releases are
+ * sparse among the others. Indexing each environment a second time by the value
+ * stated, plus the successes stating none, turns `sameComponent` into two
+ * lookups. Built only when a deployable is designated: without one, nothing
+ * states a component and the extra maps would index nothing.
+ */
+function successTimeline(
+  deployments: DeploymentEvent[],
+  componentKey: string | null,
+): Map<string, Map<string, EnvironmentTimeline>> {
+  const byRepo = new Map<string, Map<string, EnvironmentTimeline>>();
+
+  for (const deployment of deployments) {
+    if (deployment.status !== 'success') continue;
+    let environments = byRepo.get(deployment.repo);
+    if (!environments) byRepo.set(deployment.repo, (environments = new Map()));
+    let timeline = environments.get(deployment.environment);
+    if (!timeline) {
+      environments.set(
+        deployment.environment,
+        (timeline = { all: [], byComponent: new Map(), silent: [] }),
+      );
+    }
+
+    const timed = { at: msOf(deployment.createdAt), deployment };
+    timeline.all.push(timed);
+    if (!componentKey) continue;
+    const component = deployment.dimensions[componentKey];
+    if (component === undefined) timeline.silent.push(timed);
+    else {
+      const stated = timeline.byComponent.get(component);
+      if (stated) stated.push(timed);
+      else timeline.byComponent.set(component, [timed]);
+    }
+  }
+
+  for (const environments of byRepo.values()) {
+    for (const timeline of environments.values()) {
+      timeline.all.sort(byTime);
+      timeline.silent.sort(byTime);
+      for (const stated of timeline.byComponent.values()) stated.sort(byTime);
+    }
+  }
+  return byRepo;
+}
+
+function byTime(a: TimedDeployment, b: TimedDeployment): number {
+  return a.at - b.at;
+}
+
+/** The oldest deployment of a sorted run that is not older than `at`. */
+function firstAfter(sorted: TimedDeployment[], at: number): TimedDeployment | null {
+  let low = 0;
+  let high = sorted.length;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    if (sorted[mid].at < at) low = mid + 1;
+    else high = mid;
+  }
+  return sorted[low] ?? null;
+}
+
+function earlier(a: TimedDeployment | null, b: TimedDeployment | null): TimedDeployment | null {
+  if (!a) return b;
+  if (!b) return a;
+  return a.at <= b.at ? a : b;
+}
+
 /**
  * Repo and component of every request the component test left with nothing,
  * where repository and time alone would have found a deployment.
@@ -325,7 +473,9 @@ function sameComponent(
  */
 export function componentMismatches(
   prs: MergedPrEvent[],
-  deployments: DeploymentEvent[],
+  carriers: Carriers,
+  /** The same correlation with the component test off: repository and time. */
+  byRepoAndTime: Carriers,
   componentKey: string | null,
 ): Array<{ repo: string; component: string }> {
   if (!componentKey) return [];
@@ -333,9 +483,9 @@ export function componentMismatches(
   for (const pr of prs) {
     const component = pr.dimensions[componentKey];
     if (component === undefined) continue;
-    if (deploymentsCarrying(pr, deployments, componentKey).length > 0) continue;
-    if (deploymentsCarrying(pr, deployments).length === 0) continue;
-    found.set(`${pr.repo} ${component}`, { repo: pr.repo, component });
+    if (carriers.has(pr)) continue;
+    if (!byRepoAndTime.has(pr)) continue;
+    found.set(`${pr.repo}\u0000${component}`, { repo: pr.repo, component });
   }
   return [...found.values()];
 }
@@ -344,15 +494,11 @@ export function componentMismatches(
  * The very first place a change landed, whichever environment that was.
  *
  * What blame attribution needs — an incident is tied to the deployment that
- * put the change in the world — as opposed to `deploymentsCarrying`, which
+ * put the change in the world — as opposed to the correlation itself, which
  * measures each destination separately.
  */
-export function deploymentCarrying(
-  pr: MergedPrEvent,
-  deployments: DeploymentEvent[],
-  componentKey: string | null = null,
-): DeploymentEvent | null {
-  return deploymentsCarrying(pr, deployments, componentKey).reduce<DeploymentEvent | null>(
+export function deploymentCarrying(pr: MergedPrEvent, carriers: Carriers): DeploymentEvent | null {
+  return (carriers.get(pr) ?? []).reduce<DeploymentEvent | null>(
     (earliest, d) => (!earliest || msOf(d.createdAt) < msOf(earliest.createdAt) ? d : earliest),
     null,
   );
@@ -365,6 +511,10 @@ export function deploymentCarrying(
  *   review = first review → merge
  *   lead   = first commit → merge
  * All medians, in seconds.
+ *
+ * A segment nothing could be measured on is absent rather than zero — a
+ * platform with no review object leaves `pickup_time` and `review_time`
+ * unanswered, not instant. See `measured`.
  */
 export function leadTimeBreakdown(prs: MergedPrEvent[]): DoraResult[] {
   return [...groupByDimensions(prs)].flatMap(([, items]) => {
@@ -383,23 +533,11 @@ export function leadTimeBreakdown(prs: MergedPrEvent[]): DoraResult[] {
       }
     }
     const dims = items[0].dimensions;
-    const point = (metric: DoraMetric, samples: DoraSample[]): MeasuredResult => {
-      const values = samples.map((s) => s.value ?? 0);
-      return {
-        metric,
-        value: median(values),
-        unit: 'seconds',
-        dimensions: dims,
-        sampleSize: samples.length,
-        samples: takeRecent(samples),
-        population: samples,
-      };
-    };
     return [
-      point('coding_time', coding),
-      point('pickup_time', pickup),
-      point('review_time', review),
-      point('lead_time', lead),
+      ...measured('coding_time', dims, coding),
+      ...measured('pickup_time', dims, pickup),
+      ...measured('review_time', dims, review),
+      ...measured('lead_time', dims, lead),
     ];
   });
 }
@@ -411,22 +549,18 @@ export function leadTimeBreakdown(prs: MergedPrEvent[]): DoraResult[] {
  * how long a change takes to reach somewhere is a property of where it lands,
  * so slicing on `type=Prod` answers "time to production" with no extra setting.
  * Which only holds because each destination is measured on its own — see
- * `deploymentsCarrying`. A pull request that lands in two environments
+ * `carriedBy`. A pull request that lands in two environments
  * contributes a sample to each, so the sample sizes here count landings rather
  * than pull requests.
  */
-export function deployTime(
-  prs: MergedPrEvent[],
-  deployments: DeploymentEvent[],
-  componentKey: string | null = null,
-): DoraResult[] {
+export function deployTime(prs: MergedPrEvent[], carriers: Carriers): DoraResult[] {
   const samplesByKey = new Map<string, { dimensions: Record<string, string>; samples: DoraSample[] }>();
 
   for (const pr of prs) {
     // One sample per environment the change reached: a pull request that goes
     // to pre-production and then to production took two different times, and
     // both are worth a reading.
-    for (const deployment of deploymentsCarrying(pr, deployments, componentKey)) {
+    for (const deployment of carriers.get(pr) ?? []) {
       const key = dimensionKey(deployment.dimensions);
       const bucket = samplesByKey.get(key) ?? { dimensions: deployment.dimensions, samples: [] };
       bucket.samples.push({
@@ -441,21 +575,42 @@ export function deployTime(
     }
   }
 
-  return [...samplesByKey.values()].map(({ dimensions, samples }) => {
-    const values = samples.map((s) => s.value ?? 0);
-    return {
-      metric: 'deploy_time' as DoraMetric,
-      value: median(values),
-      unit: 'seconds' as const,
+  return [...samplesByKey.values()].flatMap(({ dimensions, samples }) =>
+    measured('deploy_time', dimensions, samples),
+  );
+}
+
+// ─── helpers ─────────────────────────────────────────────────────────
+
+/**
+ * A duration reading over the events it was measured on — or no reading at all.
+ *
+ * The empty case is why this exists. `median([])` is 0, and zero is not the
+ * absence of a measurement: it folds in with the real slices, the scheduled
+ * snapshot persists it as a genuine reading, the trend draws a point on it, and
+ * `doraTier` ranks it **elite** — a restore time nobody could measure reading
+ * as the best recovery on the scale. A slice with nothing to measure therefore
+ * produces nothing, which every reader already handles: a metric with no result
+ * gets no card, no snapshot row, and no point on its line.
+ */
+function measured(
+  metric: DoraMetric,
+  dimensions: Record<string, string>,
+  samples: DoraSample[],
+): MeasuredResult[] {
+  if (samples.length === 0) return [];
+  return [
+    {
+      metric,
+      value: median(samples.map((s) => s.value ?? 0)),
+      unit: 'seconds',
       dimensions,
       sampleSize: samples.length,
       samples: takeRecent(samples),
       population: samples,
-    };
-  });
+    },
+  ];
 }
-
-// ─── helpers ─────────────────────────────────────────────────────────
 
 /** Two references mean the same ticket when tracker and key agree. */
 function ticketKey(ticket: TicketRef): string {

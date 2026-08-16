@@ -7,7 +7,7 @@ import { DoraPage } from './DoraPage';
 
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
-  api: { dora: vi.fn(), metrics: vi.fn() },
+  api: { dora: vi.fn(), metricSeries: vi.fn() },
 }));
 
 const { api } = await import('../api');
@@ -26,9 +26,10 @@ function result(over: Partial<DoraResult> = {}): DoraResult {
 
 function report(over: Partial<DoraReport> = {}): DoraReport {
   return {
-    results: [result(), result({ metric: 'deployment_frequency', value: 126, unit: 'count' })],
+    results: [result(), result({ metric: 'deployment_frequency', value: 4.2, unit: 'per_day' })],
     repos: ['acme/api'],
     dimensions: { client: ['acme', 'globex'], type: ['prod', 'preprod'] },
+    dimensionsByMetric: {},
     period: { from: '2026-07-01T00:00:00Z', to: '2026-07-31T00:00:00Z', windowDays: 30 },
     truncated: [],
     ...over,
@@ -45,11 +46,8 @@ function renderPage() {
 
 beforeEach(() => {
   vi.mocked(api.dora).mockReset();
-  vi.mocked(api.metrics).mockReset();
-  vi.mocked(api.metrics).mockResolvedValue({
-    items: [],
-    page: { total: 0, limit: 200, offset: 0, hasMore: false },
-  });
+  vi.mocked(api.metricSeries).mockReset();
+  vi.mocked(api.metricSeries).mockResolvedValue([]);
 });
 
 describe('DoraPage', () => {
@@ -127,5 +125,72 @@ describe('DoraPage', () => {
     const client = screen.getByLabelText('client', { exact: false });
     await userEvent.selectOptions(client, 'acme');
     expect(within(client).getByRole('option', { name: 'globex' })).toBeInTheDocument();
+  });
+});
+
+/**
+ * The line beside each value.
+ *
+ * It used to be folded here, from the raw snapshot list: every combination
+ * matching the filter was appended end to end, so three combinations gave three
+ * values for one day, drawn as three moments of a line that never moved. And it
+ * read the whole table, ignoring the period the value beside it was computed
+ * over. The server folds and bounds it now, with the code the metric page's own
+ * chart already used.
+ */
+describe('the sparkline beside each value', () => {
+  const series = (metric: string, points: number[]) => ({
+    metric,
+    dimensions: {},
+    bucket: 'day' as const,
+    snapshotCount: points.length,
+    points: points.map((value, i) => ({ at: `2026-07-2${i}T00:00:00.000Z`, value })),
+  });
+
+  const cardOf = (metric: string) => screen.getByText(`dora.metric.${metric}`).closest('section')!;
+
+  it('asks for every metric of the list at once', async () => {
+    vi.mocked(api.dora).mockResolvedValue(report());
+    renderPage();
+    await waitFor(() => expect(screen.getByText('dora.metric.lead_time')).toBeInTheDocument());
+
+    expect(api.metricSeries).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(api.metricSeries).mock.calls[0][1].metrics).toContain('lead_time');
+  });
+
+  it('reads it over the slice the values are computed on', async () => {
+    // A line drawn over every combination beside a value narrowed to one is
+    // two readings with nothing in common.
+    vi.mocked(api.dora).mockResolvedValue(report());
+    renderPage();
+    await waitFor(() => expect(screen.getByText('dora.metric.lead_time')).toBeInTheDocument());
+
+    await userEvent.selectOptions(screen.getByLabelText('client', { exact: false }), 'acme');
+
+    await waitFor(() =>
+      expect(vi.mocked(api.metricSeries).mock.calls.at(-1)?.[1]).toMatchObject({
+        dimensions: { client: 'acme' },
+      }),
+    );
+  });
+
+  it('plots one point per bucket the server folded', async () => {
+    vi.mocked(api.dora).mockResolvedValue(report());
+    vi.mocked(api.metricSeries).mockResolvedValue([series('lead_time', [10, 30, 20])]);
+    renderPage();
+    await waitFor(() => expect(screen.getByText('dora.metric.lead_time')).toBeInTheDocument());
+
+    const line = cardOf('lead_time').querySelector('.spark-line')!;
+    expect(line.getAttribute('points')!.split(' ')).toHaveLength(3);
+  });
+
+  it('draws nothing for a metric the history says nothing about', async () => {
+    vi.mocked(api.dora).mockResolvedValue(report());
+    vi.mocked(api.metricSeries).mockResolvedValue([series('lead_time', [])]);
+    renderPage();
+    await waitFor(() => expect(screen.getByText('dora.metric.lead_time')).toBeInTheDocument());
+
+    expect(cardOf('lead_time').querySelector('.spark-line')).toBeNull();
+    expect(within(cardOf('lead_time')).getByText('—')).toBeInTheDocument();
   });
 });

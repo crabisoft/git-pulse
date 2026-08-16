@@ -1,5 +1,5 @@
 import { test, type Page } from '@playwright/test';
-import { DORA_TRUNCATED, ROUTES, EMPTY_PAGE, NOW } from './fixtures';
+import { answer, DORA_TRUNCATED, NOW, type Answer } from './fixtures';
 
 /**
  * The screenshots the user guide shows.
@@ -155,15 +155,12 @@ const SHOTS: Shot[] = [
   { name: 'account', path: '/account', ready: '.account-head' },
 ];
 
-async function stubApi(page: Page, extra: Array<[RegExp, unknown]> = []) {
-  const routes = [...extra, ...ROUTES];
+async function stubApi(page: Page, extra: Array<[RegExp, Answer]> = []) {
   await page.route('**/api/**', async (route) => {
-    const url = route.request().url();
-    const match = routes.find(([pattern]) => pattern.test(url));
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(match ? match[1] : EMPTY_PAGE),
+      body: JSON.stringify(answer(route.request().url(), extra)),
     });
   });
 }

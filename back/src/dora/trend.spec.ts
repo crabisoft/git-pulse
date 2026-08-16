@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { foldTrend, matchesFilter, unitOf, type SnapshotRow } from './trend';
 
 /** The specs are about the folding, not about the day the point is stamped with. */
-const values = (rows: SnapshotRow[], unit: 'count' | 'ratio' | 'seconds') =>
+const values = (rows: SnapshotRow[], unit: 'per_day' | 'ratio' | 'seconds') =>
   foldTrend(rows, unit).map((point) => point.value);
 
 function row(at: string, value: number, dimensions: Record<string, string> = {}): SnapshotRow {
@@ -45,14 +45,14 @@ describe('foldTrend', () => {
     expect(trend).toEqual([1, 5]);
   });
 
-  it('adds the combinations up for a count', () => {
-    // Two clients deploying four times each is eight deployments that day.
+  it('adds the combinations up for a rate', () => {
+    // Two clients at four a day each is eight deployments a day.
     const trend = values(
       [
         row('2026-07-28T22:00:00Z', 4, { client: 'acme' }),
         row('2026-07-28T22:00:00Z', 4, { client: 'globex' }),
       ],
-      'count',
+      'per_day',
     );
     expect(trend).toEqual([8]);
   });
@@ -78,21 +78,21 @@ describe('foldTrend', () => {
         row('2026-07-28T11:00:00Z', 4, { client: 'acme', app: 'web' }),
         row('2026-07-28T12:00:00Z', 4, { client: 'globex', app: 'api' }),
       ],
-      'count',
+      'per_day',
     );
     expect(trend).toEqual([12]);
   });
 
   it('has no trend to draw from no snapshot', () => {
-    expect(values([], 'count')).toEqual([]);
+    expect(values([], 'per_day')).toEqual([]);
   });
 });
 
 describe('unitOf', () => {
-  it('knows a count from a duration from a ratio', () => {
+  it('knows a rate from a duration from a ratio', () => {
     // A series is read from a table that stores a number and nothing else, and
-    // folding a count is not folding a duration.
-    expect(unitOf('deployment_frequency')).toBe('count');
+    // folding a rate is not folding a duration.
+    expect(unitOf('deployment_frequency')).toBe('per_day');
     expect(unitOf('change_failure_rate')).toBe('ratio');
     expect(unitOf('lead_time')).toBe('seconds');
   });

@@ -1,4 +1,4 @@
-import type { DoraMetric, DoraResult, MetricPoint } from '@repo/shared';
+import { addsUp, type DoraMetric, type DoraResult, type MetricPoint } from '@repo/shared';
 
 /** A historized reading, as the snapshot table holds it. */
 export interface SnapshotRow {
@@ -50,7 +50,7 @@ export function foldTrend(rows: SnapshotRow[], unit: DoraResult['unit']): Metric
  * else — and folding a count is not folding a duration.
  */
 export function unitOf(metric: DoraMetric | string): DoraResult['unit'] {
-  if (metric === 'deployment_frequency') return 'count';
+  if (metric === 'deployment_frequency') return 'per_day';
   if (metric === 'change_failure_rate') return 'ratio';
   return 'seconds';
 }
@@ -64,7 +64,7 @@ export function matchesFilter(
 }
 
 function fold(values: number[], unit: DoraResult['unit']): number {
-  if (unit === 'count') return values.reduce((total, v) => total + v, 0);
+  if (addsUp(unit)) return values.reduce((total, v) => total + v, 0);
   return values.reduce((total, v) => total + v, 0) / values.length;
 }
 

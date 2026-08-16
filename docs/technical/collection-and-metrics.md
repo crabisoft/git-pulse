@@ -188,14 +188,18 @@ on screen.
 (`back/src/dora/aggregate.ts`). A reading that spans several combinations says
 so on the detail page.
 
-No metric on screen is ever read back from `MetricSnapshot`.
+**No figure on screen is ever read back from `MetricSnapshot`.** Every value is
+this computation, over the period asked for. What *is* read back from the table
+is the history itself — the curves whose subject is how a metric moved — and §7
+says exactly which. The two are never mixed in one number: a chart drawn from
+snapshots sits beside a value that was recomputed, and the page says so.
 
 ## 7. Where each figure on screen comes from
 
 | Screen / block | Source | Stored? |
 |---|---|---|
 | DORA page — the values | recomputed (`/dora`) | no |
-| DORA page — the sparklines | `MetricSnapshot` | **yes** |
+| DORA page — the sparklines | `MetricSnapshot` (`/metrics/series`) | **yes** |
 | Sub-page — the headline value | recomputed (`/dora`) | no |
 | Sub-page — the chart | `MetricSnapshot` (`/metrics/series`) | **yes** |
 | Sub-page — the event list | recomputed (`/dora/samples`), paginated | no |
@@ -309,12 +313,13 @@ Three rules decide what a point is:
   readings and one spike. A week draws seven points, a quarter twelve.
 - **Slices are disjoint and cover the whole period.** Each starts a millisecond
   after the last ends — a period includes both its bounds, so an event landing
-  on a seam would otherwise be counted twice. Summing the points therefore gives
-  the figure beside them, for a count.
-- **An empty slice is a zero for a count and a gap for anything else.** Nothing
-  deployed is genuinely zero deployments; nothing merged is not a lead time of
-  zero, it is the absence of one. The line steps over it rather than dropping
-  to the floor.
+  on a seam would otherwise be counted twice. Each point is a reading over its
+  own slice, so the deployment frequency averages to the figure beside it where
+  a count would have summed to it.
+- **An empty slice is a zero for a rate and a gap for anything else.** Nothing
+  deployed is genuinely zero deployments a day; nothing merged is not a lead
+  time of zero, it is the absence of one. The line steps over it rather than
+  dropping to the floor.
 
 Two consequences follow, and both are deliberate. The last point is the last
 *slice*, not the value beside it: the figure covers the whole period and the
@@ -323,10 +328,13 @@ with the last — how the period went — where it used to compare two overlappi
 rolling windows that shared eleven twelfths of their data, which is why it
 barely ever moved.
 
-> The DORA page's own block sparklines still come from `MetricSnapshot`, and
-> still answer over the collection's window rather than the selected period.
-> They are the one place left where a line and the figure above it are read two
-> different ways.
+> The DORA page's own block sparklines, and the metric page's chart, still come
+> from `MetricSnapshot`. The selected period does bound them — it decides which
+> stored readings are shown — but each of those readings measures the
+> **collection's** window on the day it was taken, not the period asked for. So
+> a line there and the figure above it are still two different readings, which
+> is deliberate: that page is where the history itself is the subject. The
+> overview, whose subject is the period, cuts its lines from the period.
 
 ## 11. What the overview's period governs
 

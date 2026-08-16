@@ -404,7 +404,9 @@ export function generateDemo(now: number): DemoData {
         snapshots.push({ metric, value, dimensions: combo, capturedAt: at });
       };
 
-      push('deployment_frequency', deps.length);
+      // Per day, like the computation writes it — successes only, since a
+      // failed deployment delivered nothing.
+      push('deployment_frequency', deps.filter((dep) => dep.status === 'success').length / WINDOW);
       push('change_failure_rate', failures.length / deps.length);
       push('mttr', median(restores));
       push('lead_time', median(prs.map((pr) => (pr.deployedAt! - pr.firstCommitAt!) / 1000)));

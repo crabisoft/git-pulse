@@ -1,24 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { doraTier } from '@repo/shared';
-import { gaugeAngle, tierOf, toTierValue } from './gauge';
+import { gaugeAngle, tierOf } from './gauge';
 
-describe('toTierValue', () => {
-  it('turns a deployment count into the per-day rate the bands are published in', () => {
-    // The metric counts deployments over the window; the report's scale is
-    // per day. Reading one against the other would rate a quiet month elite.
-    expect(toTierValue('deployment_frequency', 60, 30)).toBe(2);
-  });
-
-  it('leaves a duration in the unit it was computed in', () => {
-    expect(toTierValue('lead_time', 3600, 30)).toBe(3600);
-  });
-
-  it('falls back to the raw count when the period named no length', () => {
-    // Explicit bounds were asked for. The raw count reads as a busier scale,
-    // never as a better tier than deserved.
-    expect(toTierValue('deployment_frequency', 60, null)).toBe(60);
-  });
-});
+// The conversion that used to live here is gone: the frequency is computed as
+// a rate per day, which is the unit the bands are published in, so there is
+// nothing left to divide out and no window the front has to remember.
 
 describe('tierOf', () => {
   it('rates a daily deployment cadence at the top', () => {

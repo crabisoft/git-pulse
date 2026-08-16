@@ -1,5 +1,5 @@
 import { test, type Page } from '@playwright/test';
-import { ROUTES, EMPTY_PAGE, NOW } from './fixtures';
+import { answer, NOW } from './fixtures';
 
 /**
  * The screenshots the documentation shows, taken from the real application.
@@ -26,12 +26,10 @@ const SHOTS = [
 
 async function stubApi(page: Page) {
   await page.route('**/api/**', async (route) => {
-    const url = route.request().url();
-    const match = ROUTES.find(([pattern]) => pattern.test(url));
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify(match ? match[1] : EMPTY_PAGE),
+      body: JSON.stringify(answer(route.request().url())),
     });
   });
 }

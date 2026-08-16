@@ -73,8 +73,8 @@ function report(over: Partial<OverviewReport> = {}): OverviewReport {
     flow: [
       {
         metric: 'deployment_frequency',
-        value: 126,
-        unit: 'count',
+        value: 4.2,
+        unit: 'per_day',
         sampleSize: 126,
         trend: [2, 3, 4.2],
         delta: 0.18,

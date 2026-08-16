@@ -554,7 +554,6 @@
     "truncated": "Read short on {{count}} listing(s) ({{repos}}): the platform ran out of pages before reaching the start of this period, so the figures below cover less than they say. Raise the API page cap in the settings, or narrow the period.",
     "title": "DORA metrics",
     "empty": "No data yet — configure environment rules and run a collection.",
-    "global": "global",
     "sample": "{{count}} events",
     "window": {
       "7": "7 days",
@@ -601,6 +600,8 @@
       "title": "Contributing events",
       "noSample": "No event to detail.",
       "gone": "This metric no longer exists for that combination over the requested period.",
+      "notSliced_one": "No event behind {{metric}} is classified {{keys}}: what it is measured on is dimensioned by rules of its own, and none of them says that. Widen that filter to read it, or write a rule that does.",
+      "notSliced_other": "No event behind {{metric}} is classified {{keys}}: what it is measured on is dimensioned by rules of its own, and none of them says those. Widen those filters to read it, or write rules that do.",
       "openMetric": "Open the detail: {{metric}}",
       "folded": "across {{count}} dimension combinations"
     },

@@ -1,5 +1,7 @@
 import { Transform, Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsInt,
   IsISO8601,
@@ -21,11 +23,24 @@ function toList({ value }: { value: unknown }): string[] | undefined {
     .filter(Boolean);
 }
 
-/** One metric over a period, sliced by whatever the reader filtered on. */
+/** Metrics over a period, sliced by whatever the reader filtered on. */
 export class MetricSeriesDto {
-  @IsString()
-  @MinLength(1)
-  metric!: string;
+  /**
+   * Repeatable, or comma-separated. Plural because the metric list draws a
+   * line beside every one of its cards: eight round trips for eight lines the
+   * same query already selects together is a page load nobody needs.
+   *
+   * Capped so a hand-written query string cannot ask for an unbounded `IN`.
+   * Above the eight DORA metrics, since the snapshot table holds more than
+   * them, and far below anything a page would plot.
+   */
+  @Transform(toList)
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(20)
+  @IsString({ each: true })
+  @MinLength(1, { each: true })
+  metric!: string[];
 
   /**
    * Slices as the DORA endpoint does, `key:value`. A partial filter keeps every
