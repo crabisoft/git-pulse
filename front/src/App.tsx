@@ -33,6 +33,7 @@ import { DeploymentChangesPage } from './pages/DeploymentChangesPage';
 import { ChangelogsPage } from './pages/ChangelogsPage';
 import { LoginPage } from './pages/LoginPage';
 import { AccountMenu } from './AccountMenu';
+import { ErrorBoundary } from './ErrorBoundary';
 import { MainNav } from './MainNav';
 import { ThemeToggle } from './ThemeToggle';
 import { AccountPage } from './pages/AccountPage';
@@ -275,155 +276,160 @@ function AppShell() {
       <main className={module === 'settings' ? 'content flush' : 'content'}>
         {error && <div className="banner error">{error}</div>}
 
-        <Routes>
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        {/* Around the pages and inside the shell: a page that throws must not
+            take the navigation with it, since navigating away is the reader's
+            way out. Keyed on the path, so leaving a broken page clears it. */}
+        <ErrorBoundary resetKey={pathname}>
+          <Routes>
+            <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-          <Route
-            path="/dashboard"
-            element={<FirstSource base="/dashboard" sources={sources} loaded={loaded} />}
-          />
-          <Route
-            path="/dashboard/:slug"
-            element={
-              <SourcePage sources={sources} loaded={loaded} base="/dashboard">
-                {(source) => (
-                  <OverviewPage
-                    key={source.id}
-                    sourceId={source.id}
-                    slug={source.slug}
-                    staleHours={settings?.stalePrHours ?? null}
-                    direction={display.direction}
-                    onDirectionChange={(direction) => void changeDisplay({ direction })}
-                  />
-                )}
-              </SourcePage>
-            }
-          />
-
-          <Route
-            path="/dora"
-            element={<FirstSource base="/dora" sources={sources} loaded={loaded} />}
-          />
-          <Route
-            path="/dora/:slug"
-            element={
-              <SourcePage sources={sources} loaded={loaded} base="/dora">
-                {(source) => (
-                  <DoraPage key={source.id} sourceId={source.id} slug={source.slug} />
-                )}
-              </SourcePage>
-            }
-          />
-          <Route
-            path="/dora/:slug/:metric"
-            element={
-              <SourcePage sources={sources} loaded={loaded} base="/dora">
-                {(source) => (
-                  <Suspense fallback={null}>
-                    <DoraMetricPage key={source.id} sourceId={source.id} slug={source.slug} />
-                  </Suspense>
-                )}
-              </SourcePage>
-            }
-          />
-
-          <Route
-            path="/deployments"
-            element={<FirstSource base="/deployments" sources={sources} loaded={loaded} />}
-          />
-          <Route
-            path="/deployments/:slug"
-            element={
-              <SourcePage sources={sources} loaded={loaded} base="/deployments">
-                {(source) => (
-                  <DeploymentsPage key={source.id} sourceId={source.id} slug={source.slug} />
-                )}
-              </SourcePage>
-            }
-          />
-
-          {/* Its own URL, so "look at what went out" is a link somebody can
-              send — and one that survives a refresh. */}
-          <Route
-            path="/deployments/:slug/changes"
-            element={
-              <SourcePage sources={sources} loaded={loaded} base="/deployments">
-                {(source) => (
-                  <DeploymentChangesPage
-                    key={source.id}
-                    sourceId={source.id}
-                    slug={source.slug}
-                  />
-                )}
-              </SourcePage>
-            }
-          />
-
-          {/* Its own section rather than a tab of the deployments page: what it
-              lists outlives the window that page reports over, and most of it
-              describes environments that no longer exist. */}
-          <Route
-            path="/changelogs"
-            element={<FirstSource base="/changelogs" sources={sources} loaded={loaded} />}
-          />
-          <Route
-            path="/changelogs/:slug"
-            element={
-              <SourcePage sources={sources} loaded={loaded} base="/changelogs">
-                {(source) => <ChangelogsPage key={source.id} sourceId={source.id} />}
-              </SourcePage>
-            }
-          />
-
-          <Route
-            path="/release-notes"
-            element={<FirstSource base="/release-notes" sources={sources} loaded={loaded} />}
-          />
-          <Route
-            path="/release-notes/:slug"
-            element={
-              <SourcePage sources={sources} loaded={loaded} base="/release-notes">
-                {(source) => <ReleaseNotesPage key={source.id} sourceId={source.id} />}
-              </SourcePage>
-            }
-          />
-
-          {/* Reached by hand once signed in; otherwise the shell shows instead. */}
-          <Route
-            path="/login"
-            element={state?.user ? <Navigate to="/dashboard" replace /> : <LoginPage setup={false} />}
-          />
-          <Route
-            path="/account"
-            element={
-              state?.user ? <AccountPage user={state.user} /> : <Navigate to="/login" replace />
-            }
-          />
-
-          <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
-          {SETTINGS_SECTIONS.map((section) => (
             <Route
-              key={section}
-              path={SECTION_PATHS[section]}
+              path="/dashboard"
+              element={<FirstSource base="/dashboard" sources={sources} loaded={loaded} />}
+            />
+            <Route
+              path="/dashboard/:slug"
               element={
-                isAdmin ? (
-                  <SettingsPage
-                    section={section}
-                    sources={sources}
-                    settings={settings}
-                    onSourcesChange={refresh}
-                    onSettingsChange={setSettings}
-                  />
-                ) : (
-                  // A hidden tab is not protection: the URL is still typeable.
-                  <AdminOnly />
-                )
+                <SourcePage sources={sources} loaded={loaded} base="/dashboard">
+                  {(source) => (
+                    <OverviewPage
+                      key={source.id}
+                      sourceId={source.id}
+                      slug={source.slug}
+                      staleHours={settings?.stalePrHours ?? null}
+                      direction={display.direction}
+                      onDirectionChange={(direction) => void changeDisplay({ direction })}
+                    />
+                  )}
+                </SourcePage>
               }
             />
-          ))}
 
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
-        </Routes>
+            <Route
+              path="/dora"
+              element={<FirstSource base="/dora" sources={sources} loaded={loaded} />}
+            />
+            <Route
+              path="/dora/:slug"
+              element={
+                <SourcePage sources={sources} loaded={loaded} base="/dora">
+                  {(source) => (
+                    <DoraPage key={source.id} sourceId={source.id} slug={source.slug} />
+                  )}
+                </SourcePage>
+              }
+            />
+            <Route
+              path="/dora/:slug/:metric"
+              element={
+                <SourcePage sources={sources} loaded={loaded} base="/dora">
+                  {(source) => (
+                    <Suspense fallback={null}>
+                      <DoraMetricPage key={source.id} sourceId={source.id} slug={source.slug} />
+                    </Suspense>
+                  )}
+                </SourcePage>
+              }
+            />
+
+            <Route
+              path="/deployments"
+              element={<FirstSource base="/deployments" sources={sources} loaded={loaded} />}
+            />
+            <Route
+              path="/deployments/:slug"
+              element={
+                <SourcePage sources={sources} loaded={loaded} base="/deployments">
+                  {(source) => (
+                    <DeploymentsPage key={source.id} sourceId={source.id} slug={source.slug} />
+                  )}
+                </SourcePage>
+              }
+            />
+
+            {/* Its own URL, so "look at what went out" is a link somebody can
+                send — and one that survives a refresh. */}
+            <Route
+              path="/deployments/:slug/changes"
+              element={
+                <SourcePage sources={sources} loaded={loaded} base="/deployments">
+                  {(source) => (
+                    <DeploymentChangesPage
+                      key={source.id}
+                      sourceId={source.id}
+                      slug={source.slug}
+                    />
+                  )}
+                </SourcePage>
+              }
+            />
+
+            {/* Its own section rather than a tab of the deployments page: what it
+                lists outlives the window that page reports over, and most of it
+                describes environments that no longer exist. */}
+            <Route
+              path="/changelogs"
+              element={<FirstSource base="/changelogs" sources={sources} loaded={loaded} />}
+            />
+            <Route
+              path="/changelogs/:slug"
+              element={
+                <SourcePage sources={sources} loaded={loaded} base="/changelogs">
+                  {(source) => <ChangelogsPage key={source.id} sourceId={source.id} />}
+                </SourcePage>
+              }
+            />
+
+            <Route
+              path="/release-notes"
+              element={<FirstSource base="/release-notes" sources={sources} loaded={loaded} />}
+            />
+            <Route
+              path="/release-notes/:slug"
+              element={
+                <SourcePage sources={sources} loaded={loaded} base="/release-notes">
+                  {(source) => <ReleaseNotesPage key={source.id} sourceId={source.id} />}
+                </SourcePage>
+              }
+            />
+
+            {/* Reached by hand once signed in; otherwise the shell shows instead. */}
+            <Route
+              path="/login"
+              element={state?.user ? <Navigate to="/dashboard" replace /> : <LoginPage setup={false} />}
+            />
+            <Route
+              path="/account"
+              element={
+                state?.user ? <AccountPage user={state.user} /> : <Navigate to="/login" replace />
+              }
+            />
+
+            <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
+            {SETTINGS_SECTIONS.map((section) => (
+              <Route
+                key={section}
+                path={SECTION_PATHS[section]}
+                element={
+                  isAdmin ? (
+                    <SettingsPage
+                      section={section}
+                      sources={sources}
+                      settings={settings}
+                      onSourcesChange={refresh}
+                      onSettingsChange={setSettings}
+                    />
+                  ) : (
+                    // A hidden tab is not protection: the URL is still typeable.
+                    <AdminOnly />
+                  )
+                }
+              />
+            ))}
+
+            <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          </Routes>
+        </ErrorBoundary>
       </main>
     </div>
   );

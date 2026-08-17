@@ -1,7 +1,7 @@
 # The web application
 
-Routing, what a URL carries, and the two safeguards that keep an expensive
-screen from firing a request per keystroke.
+Routing, what a URL carries, what happens when a page throws, and the two
+safeguards that keep an expensive screen from firing a request per keystroke.
 
 ## Navigation
 
@@ -54,6 +54,30 @@ back to the first source, or to the empty state if none remain.
 > The slug follows the name: **renaming a source invalidates its older links**.
 > The fallback avoids a dead page, but the link no longer points at the same
 > source.
+
+## When a page throws
+
+React unmounts the **whole tree** on an uncaught render error: no message, no
+navigation, a white page. For a fault as small as a field a response did not
+carry, that is the entire application gone, and nothing on screen says so.
+
+`ErrorBoundary` sits in two places, and the pair is deliberate:
+
+| Where | Catches | Leaves standing |
+|---|---|---|
+| Inside the shell, around `<Routes>` | Anything a page renders | The header, the nav and the source picker — navigating away is the reader's way out |
+| In `main.tsx`, around the whole app | What happens before there is a shell: the sign-in screen, the reset link, the session itself | Nothing, so it offers a reload |
+
+The inner one is **keyed on the path** and forgets its error when that changes.
+Without it a boundary is worse than none: one broken page holds its message
+across every navigation, and only a reload gets out of it.
+
+What is shown says something broke *here*, offers to try again before offering a
+reload — a render that failed on a value since replaced succeeds on the second
+attempt, and a reload costs the session's whole state to find that out — and
+carries the message and component stack folded away, with a copy button. A
+reader who cannot act on a stack trace is not handed one; the person they
+forward it to needs exactly that.
 
 ## Request pacing
 

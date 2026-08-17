@@ -7,3 +7,14 @@
  * that made a spec's fate depend on another file's import list.
  */
 import 'reflect-metadata';
+import { Logger } from '@nestjs/common';
+
+/**
+ * The narration, silenced.
+ *
+ * The version readings describe every address they try at `debug`, which is
+ * what `LOG_LEVEL=debug` is for in a running API and pure noise in a suite that
+ * asserts on the values instead. Warnings and errors stay: a suite printing one
+ * is saying something.
+ */
+Logger.overrideLogger(['warn', 'error']);

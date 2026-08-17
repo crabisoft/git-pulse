@@ -25,6 +25,7 @@ import {
   type CodedMessage,
   type ConnectionTestResult,
   type VersionProbeOutcome,
+  type VersionProbeTrace,
   type WebhookSetup,
   type PageInfo,
   type TrackerPublic,
@@ -53,6 +54,7 @@ import { ConfirmDialog, Modal } from '../Modal';
 import { MultiSelect } from '../MultiSelect';
 import { Pagination } from '../Pagination';
 import { CoverageLine } from '../CoverageLine';
+import { ProbeTrace } from '../ProbeTrace';
 import { QuotaGauge } from '../QuotaGauge';
 
 interface FormState {
@@ -236,7 +238,7 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
   const [refreshing, setRefreshing] = useState<SourcePublic | null>(null);
   const [rebuilding, setRebuilding] = useState<SourcePublic | null>(null);
   /** Outcome of a manual version reading, per source. */
-  const [probed, setProbed] = useState<Record<string, ConnectionTestResult | 'pending'>>({});
+  const [probed, setProbed] = useState<Record<string, ProbeResult | 'pending'>>({});
   /** Queued re-reads being followed, per source. Dropped once they settle. */
   const [jobs, setJobs] = useState<Record<string, JobHandle>>({});
 
@@ -410,10 +412,12 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
       // and the row has to look different from one that worked.
       setProbed((cur) => ({
         ...cur,
-        [id]: { ok: outcome.probed > 0, message: probeMessage(outcome) },
+        [id]: { ok: outcome.probed > 0, message: probeMessage(outcome), trace: outcome.trace },
       }));
     } catch (err) {
-      setProbed((cur) => ({ ...cur, [id]: { ok: false, message: apiErrorInfo(err) } }));
+      // A run that never reached the API has nothing to show: the trace
+      // describes addresses tried, and none was.
+      setProbed((cur) => ({ ...cur, [id]: { ok: false, message: apiErrorInfo(err), trace: [] } }));
     }
     // It wrote readings, which is what the coverage line counts. It spends no
     // platform budget — these calls go to the customer's own applications —
@@ -593,11 +597,17 @@ export function SourcesPage({ onChange }: { onChange: () => Promise<void> }) {
                     </div>
                   )}
                   {ps && (
-                    <div className={`source-test ${ps === 'pending' ? '' : ps.ok ? 'ok' : 'err'}`}>
-                      {ps === 'pending'
-                        ? t('sources.probe.running')
-                        : `${ps.ok ? '✓' : '✗'} ${t(ps.message.code, ps.message.params)}`}
-                    </div>
+                    <>
+                      <div className={`source-test ${ps === 'pending' ? '' : ps.ok ? 'ok' : 'err'}`}>
+                        {ps === 'pending'
+                          ? t('sources.probe.running')
+                          : `${ps.ok ? '✓' : '✗'} ${t(ps.message.code, ps.message.params)}`}
+                      </div>
+                      {/* Under the sentence and folded: the figures answer the
+                          click, and the addresses answer the next question —
+                          which is only asked when the figures disappoint. */}
+                      {ps !== 'pending' && <ProbeTrace trace={ps.trace} />}
+                    </>
                   )}
                   {cs && (
                     <div className={`source-test ${cs === 'pending' ? '' : cs.ok ? 'ok' : 'err'}`}>
@@ -880,6 +890,11 @@ function RebuildDialog({
       <p className="field-note">{t('sources.rebuild.olderKept')}</p>
     </Modal>
   );
+}
+
+/** A manual reading's result, with the walk that produced it. */
+interface ProbeResult extends ConnectionTestResult {
+  trace: VersionProbeTrace[];
 }
 
 /**

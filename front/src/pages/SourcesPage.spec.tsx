@@ -42,7 +42,7 @@ function source(over: Partial<SourcePublic> = {}): SourcePublic {
 }
 
 function outcome(over: Partial<VersionProbeOutcome> = {}): VersionProbeOutcome {
-  return { probed: 0, skipped: 0, failed: 0, changed: 0, rules: 0, environments: 0, ...over };
+  return { probed: 0, skipped: 0, failed: 0, changed: 0, rules: 0, environments: 0, trace: [], ...over };
 }
 
 beforeEach(() => {
@@ -98,6 +98,51 @@ describe('reading the installed versions by hand', () => {
     await probe(outcome({ probed: 3, failed: 2, rules: 1, environments: 3 }));
 
     expect(await screen.findByText(/sources.probe.someFailed/)).toBeInTheDocument();
+  });
+
+  it('offers the addresses that were tried under the figures', async () => {
+    // The next question after a run that read nothing, and the reading filed
+    // against the environment keeps only one of the attempts.
+    await probe(
+      outcome({
+        probed: 1,
+        failed: 1,
+        rules: 1,
+        environments: 1,
+        trace: [
+          {
+            repo: 'acme/api',
+            environment: 'prod',
+            attempts: [
+              {
+                ruleId: 'vr-1',
+                rule: 'Actuator',
+                url: 'https://api.example.com/actuator/info',
+                httpStatus: 404,
+                status: 'unreachable',
+                version: null,
+                error: { code: 'errors.version.httpStatus', params: { status: 404 } },
+                tookMs: 83,
+                filed: true,
+              },
+            ],
+          },
+        ],
+      }),
+    );
+
+    expect(await screen.findByText(/sources.probe.trace.show/)).toBeInTheDocument();
+    expect(screen.getByText('https://api.example.com/actuator/info')).toBeInTheDocument();
+  });
+
+  it('offers no trace when the run itself failed', async () => {
+    vi.mocked(api.probeSourceVersions).mockRejectedValue(new Error('down'));
+    const user = userEvent.setup();
+    render(<SourcesPage onChange={vi.fn()} />);
+
+    await user.click(await screen.findByRole('button', { name: 'sources.probe.action' }));
+
+    expect(screen.queryByText(/sources.probe.trace.show/)).not.toBeInTheDocument();
   });
 
   it('does not send a second round of requests on a double click', async () => {

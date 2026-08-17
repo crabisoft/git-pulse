@@ -417,6 +417,7 @@
     "collect": {
       "ingest": "Ingestion échouée, le relevé a été pris sur ce qui était déjà stocké : {{error}}",
       "dora": "Relevé DORA échoué : {{error}}",
+      "versions": "Les versions en place n'ont pas pu être lues : {{error}}",
       "changelogs": "Archivage des changelogs de déploiement échoué : {{error}}",
       "changelogsPartial": "{{count}} déploiement(s) n'ont pas pu être archivés — leur contenu sera perdu dès qu'ils sortiront du magasin.",
       "refreshInFlight": "Cette source est déjà en cours de relecture ({{state}}). Attendez la fin de ce passage avant d'en demander un autre.",
@@ -434,7 +435,7 @@
       "groupMissing": "Le motif ne capture aucun groupe nommé « {{group}} ».",
       "httpStatus": "L'endpoint a répondu {{status}}.",
       "invalidUrl": "« {{url}} » n'est pas une adresse lisible.",
-      "noAttribute": "L'environnement ne porte aucun attribut « {{name}} », dont l'URL a besoin.",
+      "noAttribute": "L'environnement ne porte aucun attribut « {{key}} », dont l'URL a besoin.",
       "noEnvironmentUrl": "La plateforme n'a publié aucune adresse pour cet environnement, et l'URL en dépend.",
       "noMatch": "Le motif « {{pattern}} » ne correspond à rien dans la réponse.",
       "noRef": "Le déploiement n'indique aucune référence, dont l'URL a besoin.",
@@ -450,7 +451,7 @@
       "timeout": "L'endpoint n'a pas répondu à temps.",
       "unknownPlaceholder": "L'URL utilise l'espace réservé « {{name}} », qui ne fait pas partie des valeurs portées par un déploiement.",
       "unparsable": "La réponse n'est pas lisible en {{format}} : {{detail}}",
-      "unreachable": "L'endpoint n'a pas pu être joint : {{reason}}",
+      "unreachable": "L'endpoint n'a pas pu être joint : {{detail}}",
       "unsupportedScheme": "Seules les adresses http et https sont lues."
     },
     "versionRule": {
@@ -523,6 +524,13 @@
     "text": "Ajoutez une source pour afficher le tableau de bord live.",
     "cta": "Configurer une source",
     "textVisitor": "Aucune source n'a encore été configurée sur cette installation."
+  },
+  "crash": {
+    "title": "Cette page s’est interrompue",
+    "text": "Un élément qu’elle allait afficher n’a pas pu être rendu. Un rechargement suffit le plus souvent ; sinon, ce qui suit est ce qu’il faut signaler.",
+    "retry": "Réessayer",
+    "reload": "Recharger la page",
+    "detail": "Ce qui s’est passé"
   },
   "dashboard": {
     "filter": {
@@ -846,7 +854,16 @@
       "changed_one": "{{count}} environnement lu ; {{changed}} tourne désormais sur une autre version.",
       "changed_other": "{{count}} environnements lus ; {{changed}} tournent désormais sur une autre version.",
       "someFailed_one": "{{count}} environnement lu, dont {{failed}} n'a rien renvoyé d'exploitable.",
-      "someFailed_other": "{{count}} environnements lus, dont {{failed}} n'ont rien renvoyé d'exploitable."
+      "someFailed_other": "{{count}} environnements lus, dont {{failed}} n'ont rien renvoyé d'exploitable.",
+      "trace": {
+        "show_one": "Ce qui a été essayé sur {{count}} environnement",
+        "show_other": "Ce qui a été essayé sur {{count}} environnements",
+        "explain": "Une seule tentative par environnement devient la lecture — celle qui a répondu, ou celle qui est allée le plus loin si aucune n'a répondu. Les autres n'apparaissent qu'ici.",
+        "noRule": "Aucune règle ne revendique cet environnement.",
+        "noAddress": "pas d’adresse",
+        "took": "{{ms}} ms",
+        "filed": "retenue"
+      }
     }
   },
   "ticketRules": {
