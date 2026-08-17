@@ -126,6 +126,21 @@ npm run docker:up
 > ⚠️ **Master key**: persisted in the `master-key` volume. Losing it makes every
 > stored secret unrecoverable — back it up separately.
 
+### How much the API says
+
+`LOG_LEVEL` names one of `error < warn < log < debug < verbose` and means "this
+and everything above it"; the default is `log`. Set it in `.env.local` (or on
+the service, in the published stack) and restart the API:
+
+```bash
+echo 'LOG_LEVEL=debug' >> .docker/.env.local && npm run docker:dev
+```
+
+`debug` is what a misbehaving integration is diagnosed with — the version probe
+narrates [every address it tries](versions.md#in-the-logs) at that
+level. It is one line per rule per environment per collection cycle, so it is
+turned off again afterwards.
+
 ## Without Docker
 
 Prerequisites: Node 24+, a reachable PostgreSQL and Redis (see `.env`). The

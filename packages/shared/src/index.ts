@@ -871,6 +871,58 @@ export interface VersionProbeOutcome {
    * them to describe.
    */
   environments: number;
+  /**
+   * Every address the run tried, environment by environment.
+   *
+   * The counts above say a run failed; this says *where*. Only one attempt per
+   * environment survives as a reading — the one that answered, or the one that
+   * got furthest when none did — so the rule that was passed over, and the one
+   * that could not be addressed at all, leave no other trace. Those are the two
+   * an author is usually asking about.
+   *
+   * Ordered as the run walked it: environments as they were read, and inside
+   * each, the rules in the order they were tried.
+   */
+  trace: VersionProbeTrace[];
+}
+
+/** One environment's walk through the rules that claim it. */
+export interface VersionProbeTrace {
+  /** Empty for a declared environment, which belongs to no repo. */
+  repo: string;
+  environment: string;
+  /**
+   * Empty when no rule claimed the environment — which is not the same as a
+   * rule that claimed it and failed, and is the commonest reason a version
+   * never appears at all.
+   */
+  attempts: VersionProbeAttempt[];
+}
+
+/** One rule tried against one environment. */
+export interface VersionProbeAttempt {
+  ruleId: string;
+  /** The rule's name, so the trace reads without a second lookup. */
+  rule: string;
+  /**
+   * The address as requested, with any credentials in it removed — a trace is
+   * made to be pasted to somebody else. Null when the template could not be
+   * resolved, in which case `error` names the placeholder that stopped it.
+   */
+  url: string | null;
+  /** Null when no response arrived — a refusal, a timeout, a name that is not. */
+  httpStatus: number | null;
+  status: VersionProbeStatus;
+  version: string | null;
+  error: CodedMessage | null;
+  /** Wall clock of the request, and zero when none was made. */
+  tookMs: number;
+  /**
+   * Whether this is the attempt that became the environment's reading. Exactly
+   * one per environment that was walked, and it is not always the last: a walk
+   * that never settles keeps whichever attempt got furthest.
+   */
+  filed: boolean;
 }
 
 /**

@@ -525,6 +525,13 @@
     "cta": "Configurer une source",
     "textVisitor": "Aucune source n'a encore été configurée sur cette installation."
   },
+  "crash": {
+    "title": "Cette page s’est interrompue",
+    "text": "Un élément qu’elle allait afficher n’a pas pu être rendu. Un rechargement suffit le plus souvent ; sinon, ce qui suit est ce qu’il faut signaler.",
+    "retry": "Réessayer",
+    "reload": "Recharger la page",
+    "detail": "Ce qui s’est passé"
+  },
   "dashboard": {
     "filter": {
       "repos": "Dépôts",
@@ -847,7 +854,16 @@
       "changed_one": "{{count}} environnement lu ; {{changed}} tourne désormais sur une autre version.",
       "changed_other": "{{count}} environnements lus ; {{changed}} tournent désormais sur une autre version.",
       "someFailed_one": "{{count}} environnement lu, dont {{failed}} n'a rien renvoyé d'exploitable.",
-      "someFailed_other": "{{count}} environnements lus, dont {{failed}} n'ont rien renvoyé d'exploitable."
+      "someFailed_other": "{{count}} environnements lus, dont {{failed}} n'ont rien renvoyé d'exploitable.",
+      "trace": {
+        "show_one": "Ce qui a été essayé sur {{count}} environnement",
+        "show_other": "Ce qui a été essayé sur {{count}} environnements",
+        "explain": "Une seule tentative par environnement devient la lecture — celle qui a répondu, ou celle qui est allée le plus loin si aucune n'a répondu. Les autres n'apparaissent qu'ici.",
+        "noRule": "Aucune règle ne revendique cet environnement.",
+        "noAddress": "pas d’adresse",
+        "took": "{{ms}} ms",
+        "filed": "retenue"
+      }
     }
   },
   "ticketRules": {

@@ -686,6 +686,34 @@ textarea {
 .source-test.err { color: var(--crit); }
 .row-actions { display: flex; gap: 6px; flex-shrink: 0; }
 
+/* Every address a probing run tried. Folded away: a run that worked needs none
+   of it, and it is read once, by somebody who has just been disappointed. */
+.probe-trace { margin-top: 6px; font-size: .78rem; color: var(--muted); }
+.probe-trace summary { cursor: pointer; }
+.probe-trace > p { margin: 6px 0; max-width: 70ch; }
+.probe-trace > ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.probe-trace-env { color: var(--ink); }
+/* One attempt per line, the address taking whatever is left. It wraps rather
+   than scrolls: an address cut in half is exactly what is being looked at. */
+.probe-trace-attempt {
+  display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 10px;
+  padding: 2px 0 2px 10px; border-left: 2px solid var(--line);
+}
+.probe-trace-rule { min-width: 10ch; color: var(--ink); }
+.probe-trace-url { flex: 1; min-width: 24ch; overflow-wrap: anywhere; }
+.probe-trace-status { white-space: nowrap; }
+.probe-trace-outcome { flex-basis: 100%; }
+/* The one that became the reading, and the three ways of not being it. */
+.probe-trace-attempt.filed { border-left-color: var(--muted); }
+.probe-trace-attempt.ok .probe-trace-outcome { color: var(--good); font-family: var(--mono); }
+.probe-trace-attempt.unreachable .probe-trace-outcome,
+.probe-trace-attempt.noMatch .probe-trace-outcome { color: var(--warn); }
+.probe-trace-attempt.none { border-left-style: dashed; padding-left: 10px; }
+.probe-trace-attempt .pill {
+  flex-shrink: 0; font-size: .7rem;
+  background: var(--surface-2); color: var(--ink); border-color: var(--line);
+}
+
 /* What a source actually holds. Separated by middots rather than by a table:
    it is three figures read in passing, under the row that names the source. */
 .source-coverage {
@@ -810,6 +838,21 @@ textarea {
 .empty { text-align: center; padding: 60px 20px; }
 .empty h2 { margin: 0 0 8px; }
 .empty p { color: var(--muted); margin: 0 0 20px; }
+
+/* A page that stopped short. The empty state's shape, because what is left on
+   screen is the same thing — a page with nothing in it — and what differs is
+   that something went wrong rather than nothing existing yet. */
+.crashed p { margin: 0 auto 4px; max-width: 60ch; }
+.crashed .form-actions { justify-content: center; }
+/* Left-aligned inside a centred block: it is a stack trace, and reading one
+   down the middle of the page is not reading it. */
+.crash-detail { margin: 18px auto 0; max-width: 80ch; text-align: left; font-size: .8rem; }
+.crash-detail summary { cursor: pointer; color: var(--muted); }
+.crash-detail pre {
+  margin: 8px 0; padding: 10px; max-height: 40vh; overflow: auto;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius);
+}
 
 /* A switch reads as a sentence, so the label sits beside the box, not above it. */
 /* A field whose control is a set of checkboxes. It is the column a label is,

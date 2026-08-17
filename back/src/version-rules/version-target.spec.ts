@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  loggableUrl,
   preferring,
   probeUrl,
   rulesFor,
@@ -204,5 +205,25 @@ describe('probeUrl', () => {
       subject({ repo: 'group/sub/project' }),
     );
     expect(target).toMatchObject({ url: 'https://x.example.com/group/sub/project/version' });
+  });
+});
+
+describe('loggableUrl', () => {
+  it('keeps the address a reader has to recognise', () => {
+    expect(loggableUrl('https://api.example.com/actuator/info')).toBe(
+      'https://api.example.com/actuator/info',
+    );
+  });
+
+  it('strips credentials written into the template', () => {
+    // The one part of an address that must not travel to a log file or into
+    // the support ticket somebody pastes it in.
+    const written = loggableUrl('https://probe:s3cret@api.example.com/version');
+    expect(written).not.toContain('s3cret');
+    expect(written).toContain('https://api.example.com/version');
+  });
+
+  it('says so rather than printing an address it cannot read', () => {
+    expect(loggableUrl('{environmentUrl}/actuator/info')).toBe('<unreadable address>');
   });
 });

@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import type { VersionProbeOutcome } from '@repo/shared';
+import { Injectable, Logger } from '@nestjs/common';
+import type { VersionProbeOutcome, VersionProbeTrace } from '@repo/shared';
 import { resolvePeriod } from '../common/period';
 import { SettingsService } from '../settings/settings.service';
 import { DeploymentsService } from '../deployments/deployments.service';
@@ -15,7 +15,7 @@ import {
   withDeclared,
   type ProbeCandidate,
 } from './pending-probes';
-import { preferring, probeUrl, rulesFor, type ProbeSubject } from './version-target';
+import { loggableUrl, preferring, probeUrl, rulesFor, type ProbeSubject } from './version-target';
 import { probe } from './version-probe';
 import { blamesTheAddress, extractVersion } from './version-template';
 
@@ -87,6 +87,20 @@ export interface ProbeOptions {
  */
 @Injectable()
 export class VersionReadingsService {
+  /**
+   * Everything this class says is at `debug`, and deliberately so.
+   *
+   * A rule that reads nothing is configuration nobody can see from the outside:
+   * the row filed against the environment carries the *last* thing that went
+   * wrong, and the question being asked — why did my rule not fire — is usually
+   * about an address that was never tried. So the walk narrates itself, and
+   * `LOG_LEVEL=debug` is what turns it on for as long as somebody is looking.
+   *
+   * Off by default because it is one line per rule per environment per cycle:
+   * priceless for ten minutes, noise for the rest of the year.
+   */
+  private readonly logger = new Logger(VersionReadingsService.name);
+
   constructor(
     private readonly rules: VersionRulesService,
     private readonly store: VersionReadingStore,
@@ -109,7 +123,7 @@ export class VersionReadingsService {
   ): Promise<VersionProbeOutcome> {
     const rules = await this.rules.resolvedFor(sourceId);
     if (rules.length === 0) {
-      return { probed: 0, skipped: 0, failed: 0, changed: 0, rules: 0, environments: 0 };
+      return { probed: 0, skipped: 0, failed: 0, changed: 0, rules: 0, environments: 0, trace: [] };
     }
 
     const period = resolvePeriod({}, (await this.settings.get()).doraWindowDays);
@@ -142,6 +156,10 @@ export class VersionReadingsService {
       changed: 0,
       rules: rules.length,
       environments: candidates.length,
+      // Filled as the walk goes, so the environments read appear in the order
+      // they were read. What the batch cap deferred is counted in `skipped` and
+      // has no trace: nothing was tried, so there is nothing to say about it.
+      trace: [],
     };
 
     for (let i = 0; i < selection.targets.length; i += PROBE_CONCURRENCY) {
@@ -164,13 +182,30 @@ export class VersionReadingsService {
         ),
       );
       for (const result of results) {
-        if (result === null) outcome.skipped += 1;
+        outcome.trace.push(result.trace);
+        if (!result.read) outcome.skipped += 1;
         else {
           outcome.probed += 1;
           if (!result.ok) outcome.failed += 1;
           if (result.changed) outcome.changed += 1;
         }
       }
+    }
+
+    this.logger.debug(
+      `${sourceId}: ${outcome.rules} rule(s) over ${outcome.environments} environment(s) — ` +
+        `${outcome.probed} read, ${outcome.failed} failed, ` +
+        `${outcome.changed} changed, ${outcome.skipped} skipped`,
+    );
+    // The one thing said at the default level, because it is the shape of a
+    // misconfiguration rather than of an environment having a bad afternoon:
+    // every address tried, none of them answering. Once per source per cycle,
+    // and it names what to turn on to find out which addresses those were.
+    if (outcome.probed > 0 && outcome.failed === outcome.probed) {
+      this.logger.warn(
+        `${sourceId}: none of the ${outcome.probed} environment(s) read answered — ` +
+          `LOG_LEVEL=debug names every address tried`,
+      );
     }
 
     return outcome;
@@ -219,7 +254,7 @@ export class VersionReadingsService {
       readings.get(pairKey(repo, environment))?.ruleId,
       signal,
     );
-    return { read: result !== null, changed: result?.changed ?? false };
+    return { read: result.read, changed: result.changed };
   }
 
   /**
@@ -255,7 +290,7 @@ export class VersionReadingsService {
     rules: ResolvedVersionRule[],
     lastAnswered?: string | null,
     signal?: AbortSignal,
-  ): Promise<{ ok: boolean; changed: boolean } | null> {
+  ): Promise<EnvironmentReading> {
     const subject = {
       repo: target.repo,
       environment: target.environment,
@@ -264,12 +299,25 @@ export class VersionReadingsService {
       attributes: target.attributes,
     };
     const candidates = preferring(rulesFor(subject, rules), lastAnswered);
-    if (candidates.length === 0) return null;
+    if (candidates.length === 0) {
+      // Nothing is filed on this path, so the trace is all it leaves — and "no
+      // rule claims this environment" is the commonest reason a version never
+      // appears. The rule count is what tells a pattern that matches nothing
+      // from a source that opted into no rule at all.
+      this.logger.debug(`${where(subject)}: none of the ${rules.length} rule(s) claim it`);
+      return { read: false, ok: false, changed: false, trace: toTrace(target, [], null) };
+    }
+    this.logger.debug(
+      `${where(subject)}: trying ${candidates.length} of ${rules.length} rule(s) — ` +
+        `${candidates.map((rule) => rule.name).join(' → ')}`,
+    );
 
+    const attempts: Attempt[] = [];
     let settled: Attempt | null = null;
     let furthest: Attempt | null = null;
     for (const rule of candidates) {
       const attempt = await this.attempt(rule, subject, signal);
+      attempts.push(attempt);
       if (!attempt.tryAnother) {
         settled = attempt;
         break;
@@ -280,6 +328,16 @@ export class VersionReadingsService {
     // Non-null by construction: the loop either settles or keeps every attempt
     // it refused, and `candidates` is not empty.
     const outcome = (settled ?? furthest)!;
+    // Which of the attempts above became the row, since only one of them does —
+    // the one that settled, or the one that got furthest when none did. Without
+    // this line a reader has to replay `reach` in their head to know which of
+    // the failures they are looking at on the page.
+    this.logger.debug(
+      `${where(subject)}: filing ${outcome.status}` +
+        `${outcome.version === null ? '' : ` ${outcome.version}`}` +
+        `${settled ? '' : ' (nothing settled; furthest attempt kept)'}` +
+        ` from ${outcome.url === null ? 'no address' : loggableUrl(outcome.url)}`,
+    );
     const changed = await this.store.record(sourceId, {
       repo: target.repo,
       environment: target.environment,
@@ -301,7 +359,12 @@ export class VersionReadingsService {
 
     // `skipped` is the one outcome that reached no network, and the caller
     // counts it apart for that reason.
-    return outcome.status === 'skipped' ? null : { ok: outcome.status === 'ok', changed };
+    return {
+      read: outcome.status !== 'skipped',
+      ok: outcome.status === 'ok',
+      changed,
+      trace: toTrace(target, attempts, outcome),
+    };
   }
 
   /** One rule tried against one environment, filing nothing. */
@@ -314,24 +377,47 @@ export class VersionReadingsService {
     if (!address.ok) {
       // Nothing was asked, so nothing was learnt about the address: another
       // rule addressing the same environment differently may well resolve.
-      return { ruleId: rule.id, version: null, url: null, status: 'skipped', error: address.reason, tryAnother: true };
+      this.logger.debug(
+        `${where(subject)} · ${rule.name}: no address — ${address.reason.code} (${rule.urlTemplate})`,
+      );
+      return {
+        ruleId: rule.id,
+        rule: rule.name,
+        version: null,
+        url: null,
+        httpStatus: null,
+        tookMs: 0,
+        status: 'skipped',
+        error: address.reason,
+        tryAnother: true,
+      };
     }
 
+    // Wall clock rather than the probe's own accounting: what a reader is
+    // looking for here is the five seconds that mean a timeout, and DNS,
+    // connection and body all count towards it.
+    const started = Date.now();
     const response = await probe({
       url: address.url,
       headers: rule.headers,
       auth: rule.auth,
       signal,
     });
+    const tookMs = Date.now() - started;
+    this.logger.debug(
+      `${where(subject)} · ${rule.name}: GET ${loggableUrl(address.url)} → ` +
+        `${response.status ?? 'no response'} in ${tookMs}ms` +
+        `${response.reason ? ` — ${response.reason.code}` : ''}`,
+    );
+    const made = {
+      ruleId: rule.id,
+      rule: rule.name,
+      url: address.url,
+      httpStatus: response.status,
+      tookMs,
+    };
     if (!response.ok) {
-      return {
-        ruleId: rule.id,
-        version: null,
-        url: address.url,
-        status: 'unreachable',
-        error: response.reason,
-        tryAnother: true,
-      };
+      return { ...made, version: null, status: 'unreachable', error: response.reason, tryAnother: true };
     }
 
     const extracted = extractVersion(response.body, {
@@ -340,19 +426,21 @@ export class VersionReadingsService {
       pattern: rule.pattern,
     });
     if (extracted.ok) {
-      return {
-        ruleId: rule.id,
-        version: extracted.version,
-        url: address.url,
-        status: 'ok',
-        error: null,
-        tryAnother: false,
-      };
+      this.logger.debug(`${where(subject)} · ${rule.name}: read ${extracted.version}`);
+      return { ...made, version: extracted.version, status: 'ok', error: null, tryAnother: false };
     }
+    // The distinction `blamesTheAddress` draws, said out loud: the walk either
+    // moves on to the next address or stops here with a template to fix, and
+    // which of the two it did is not otherwise visible from the row.
+    const next = blamesTheAddress(extracted.reason)
+      ? 'wrong address; trying the next'
+      : 'right address, template to fix; stopping here';
+    this.logger.debug(
+      `${where(subject)} · ${rule.name}: read nothing — ${extracted.reason.code} (${next})`,
+    );
     return {
-      ruleId: rule.id,
+      ...made,
       version: null,
-      url: address.url,
       status: 'noMatch',
       error: extracted.reason,
       tryAnother: blamesTheAddress(extracted.reason),
@@ -360,11 +448,74 @@ export class VersionReadingsService {
   }
 }
 
+/**
+ * The environment a line is about, as short as it can be said.
+ *
+ * On every line rather than once per walk: four environments are read at a
+ * time, so their lines interleave, and a trace whose steps cannot be told apart
+ * is worse than none. A declared environment belongs to no repo and is named on
+ * its own, which is also how the store keys it.
+ */
+function where(subject: { repo: string; environment: string }): string {
+  return subject.repo ? `${subject.repo}/${subject.environment}` : subject.environment;
+}
+
+/**
+ * One environment's reading, as the run that asked for it needs it.
+ *
+ * `read` rather than a null: a walk that filed nothing still has a trace worth
+ * handing back — an environment no rule claims, or one whose every rule refused
+ * to resolve, is precisely what somebody who clicked *probe* and got nothing is
+ * trying to find out.
+ */
+interface EnvironmentReading {
+  /** Whether a request was made at all — `skipped` reaches no network. */
+  read: boolean;
+  ok: boolean;
+  changed: boolean;
+  trace: VersionProbeTrace;
+}
+
+/**
+ * The walk, as it is handed to whoever asked for the reading.
+ *
+ * The addresses are stripped of their credentials on the way out and nowhere
+ * else: the row keeps what was actually requested, since that is the reading's
+ * own record, while this is shown on a page and pasted into tickets.
+ */
+function toTrace(
+  target: ProbeCandidate,
+  attempts: Attempt[],
+  filed: Attempt | null,
+): VersionProbeTrace {
+  return {
+    repo: target.repo,
+    environment: target.environment,
+    attempts: attempts.map((attempt) => ({
+      ruleId: attempt.ruleId,
+      rule: attempt.rule,
+      url: attempt.url === null ? null : loggableUrl(attempt.url),
+      httpStatus: attempt.httpStatus,
+      status: attempt.status,
+      version: attempt.version,
+      error: attempt.error ?? null,
+      tookMs: attempt.tookMs,
+      filed: attempt === filed,
+    })),
+  };
+}
+
 /** What one rule made of one environment, before anything is filed. */
 interface Attempt {
   ruleId: string;
+  /** Carried beside the id so a trace reads without a second lookup. */
+  rule: string;
   version: string | null;
   url: string | null;
+  /** Null when no response arrived, and when no request was made. */
+  httpStatus: number | null;
+  /** Wall clock of the request, zero when none was made. */
+  tookMs: number;
   status: NewReading['status'];
   error: NewReading['error'];
   /** Whether the failure blames the address, leaving another worth trying. */

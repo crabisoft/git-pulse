@@ -166,6 +166,13 @@ them all again now. Its answer distinguishes three things that look identical
 from a distance: no rule attached to the source, rules attached but no
 environment collected yet for them to describe, and the readings themselves.
 
+Under that answer, **What was tried** unfolds the walk itself: every address the
+run requested, environment by environment, with what came back and how long it
+took. It is worth opening when a version does not appear, because the reading
+stored against an environment keeps only one attempt — the one that answered, or
+the one that got furthest when none did. The rule that was passed over, and the
+rule that could not be addressed at all, are visible nowhere else.
+
 .. note::
 
    These requests go to **your own applications**, not to GitHub or GitLab, so

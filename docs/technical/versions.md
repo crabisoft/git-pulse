@@ -361,6 +361,69 @@ Each row also carries **how long after the deployment it was read**. A version
 confirmed three seconds in says much less than one confirmed ten minutes in, and
 the reader is the only one who can weigh that.
 
+## Following one
+
+The row filed against an environment carries **one** attempt — the one that
+settled, or the one that got furthest when none did. That is the right thing to
+show beside a version and not enough to diagnose a rule that reads nothing: the
+question is usually about an address that was never tried, or one that was tried
+and passed over. So the walk is kept, twice over.
+
+### On the page
+
+`POST /api/sources/:id/versions/probe` answers with a `trace`: one entry per
+environment it walked, in the order it walked them, and inside each the rules in
+the order they were tried — the address as requested, the response status, the
+wall clock, what was read or the reason nothing was, and which single attempt
+became the reading. The Sources page unfolds it under the run's figures, so the
+question is answered where it is asked and nobody needs the API's logs to see
+where a rule went.
+
+An environment **no rule claims** is in the trace with no attempts, rather than
+absent: it is the commonest reason a version never appears, and it is filed
+nowhere. What the batch cap deferred has no entry at all — nothing was tried, so
+there is nothing to say about it.
+
+Addresses are stripped of their credentials on the way out and nowhere else: the
+stored reading keeps what was actually requested, since that is its own record,
+while this is read on a page and pasted into tickets. The secret a rule
+[authenticates with](#authentication) never appears either way — it travels as a
+header, and no header is carried.
+
+### In the logs
+
+The scheduled collection answers nobody, so the same walk narrates itself at
+`debug`:
+
+```
+[VersionReadingsService] acme/api/prod: trying 2 of 5 rule(s) — Actuator → version.json
+[VersionReadingsService] acme/api/prod · Actuator: GET https://api.acme.example.com/actuator/info → 404 in 83ms — errors.version.httpStatus
+[VersionReadingsService] acme/api/prod · version.json: GET https://api.acme.example.com/version.json → 200 in 41ms
+[VersionReadingsService] acme/api/prod · version.json: read 1.4.2
+[VersionReadingsService] acme/api/prod: filing ok 1.4.2 from https://api.acme.example.com/version.json
+```
+
+Set `LOG_LEVEL=debug` to see it — the levels are `error < warn < log < debug <
+verbose`, each including the ones before it, and the default is `log`. It is one
+line per rule per environment per cycle, which is priceless for ten minutes and
+noise for the rest of the year.
+
+What the lines answer, in the order the questions actually come up:
+
+| Line | Says |
+|---|---|
+| `none of the N rule(s) claim it` | The environment was read and no pattern matched. Nothing is filed on this path, so this is its only trace |
+| `trying N of M rule(s) — a → b` | Which rules claimed it, **in the order they will be tried** — the remembered one first, then by priority |
+| `no address — errors.version.noEnvironmentUrl (template)` | The rule claimed it and could not be addressed. The template is printed beside the placeholder that cost it |
+| `GET url → 404 in 83ms` | The request as it went on the wire, with the status and the wall clock. Five seconds means the timeout |
+| `read nothing — … (wrong address; trying the next)` | The body parsed as something else — the walk moves on |
+| `read nothing — … (right address, template to fix; stopping here)` | The body parsed as declared and the path did not resolve. Trying another address here would hide the template to fix |
+| `filing … from …` | Which of the attempts above became the row |
+
+One line is said at the default level, because it is the shape of a
+misconfiguration rather than of a bad afternoon: **every environment read, none
+answering**. It names the source and what to turn on.
+
 ## The routes
 
 | Route | What it does |
@@ -372,7 +435,7 @@ the reader is the only one who can weigh that.
 | `POST /api/version-rules/preview` | Run a candidate rule over a pasted body, or over one it reads |
 | `GET /api/sources/:id/versions` | What each environment was last seen running |
 | `GET /api/sources/:id/versions/history` | Every version one environment has run, newest first — takes `repo` and `environment` |
-| `POST /api/sources/:id/versions/probe` | Read them all again now, interval ignored |
+| `POST /api/sources/:id/versions/probe` | Read them all again now, interval ignored — answers with the [walk](#on-the-page) as well as the figures |
 
 Everything except `GET /api/sources/:id/versions` is **admin-only**. That is not
 uniformity for its own sake: `preview` reads an address it is given and hands

@@ -35,6 +35,9 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-dashboard}:${POSTGRES_PASSWORD:-dashboard}@db:5432/${POSTGRES_DB:-dashboard}?schema=public
       REDIS_URL: redis://redis:6379
       MASTER_KEY_FILE: ${MASTER_KEY_FILE:-/data/master.key}
+      # error < warn < log < debug < verbose, each including the ones before
+      # it. `debug` makes the version probe name every address it tries.
+      LOG_LEVEL: ${LOG_LEVEL:-}
     volumes:
       - ..:/app
       - back-node-modules:/app/node_modules

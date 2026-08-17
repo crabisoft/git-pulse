@@ -159,6 +159,35 @@ export function probeUrl(rule: VersionRuleLike, subject: ProbeSubject): ProbeTar
 }
 
 /**
+ * The address as it may be written down.
+ *
+ * Credentials inside a URL are the one part of it that must not reach a log
+ * file or a support ticket, and a template is admin-authored:
+ * `https://probe:token@host/version` is an ordinary way to write one, and the
+ * whole point of a trace is that somebody pastes it to somebody else.
+ *
+ * Everything else is kept as sent, normalisation included — the probe parses
+ * the address the same way a moment later, so what is shown is what actually
+ * went on the wire rather than what the template happened to spell.
+ *
+ * An address that will not parse is not shown at all. Nothing is lost by that:
+ * it is refused a moment later as `invalidUrl`, whose reason carries the
+ * template's own spelling, and a string that is not a URL is the one case where
+ * the credentials cannot be found and removed.
+ */
+export function loggableUrl(url: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return '<unreadable address>';
+  }
+  parsed.username = '';
+  parsed.password = '';
+  return parsed.toString();
+}
+
+/**
  * Told apart because the answers differ. An absent environment URL is a fact
  * about the platform and is fixed by addressing the environment another way; an
  * absent attribute is a classification rule that did not fire; an unknown name

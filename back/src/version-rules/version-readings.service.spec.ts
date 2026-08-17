@@ -396,3 +396,77 @@ describe('several addresses for one environment', () => {
     expect(outcome).toMatchObject({ probed: 0, skipped: 1 });
   });
 });
+
+describe('the trace a run hands back', () => {
+  beforeEach(() => {
+    vi.mocked(probe).mockReset();
+  });
+
+  it('names every address tried, in order, and which one became the reading', async () => {
+    // The whole point: the row keeps one attempt, and the rule that was passed
+    // over is exactly the one its author is asking about.
+    answering({ [STATIC]: { status: 200, body: '{"build":{"version":"1.4.2"}}' } });
+    const { service } = walking([
+      route('actuator', '/actuator/info', 10),
+      route('static', '/version.json', 50),
+    ]);
+
+    const { trace } = await service.probeSource('src-1', { force: true });
+
+    expect(trace).toHaveLength(1);
+    expect(trace[0]).toMatchObject({ repo: 'acme/api', environment: 'prod' });
+    expect(trace[0].attempts).toMatchObject([
+      { ruleId: 'actuator', url: ACTUATOR, status: 'unreachable', filed: false },
+      { ruleId: 'static', url: STATIC, status: 'ok', version: '1.4.2', filed: true },
+    ]);
+  });
+
+  it('carries the response status of an address that answered the wrong thing', async () => {
+    answering({ [ACTUATOR]: { status: 404, body: 'nope' } });
+    const { service } = walking([route('actuator', '/actuator/info', 10)]);
+
+    const { trace } = await service.probeSource('src-1', { force: true });
+
+    expect(trace[0].attempts[0]).toMatchObject({ httpStatus: 404, filed: true });
+  });
+
+  it('keeps a rule that could not be addressed, with the placeholder that stopped it', async () => {
+    // No request was made, so this attempt exists nowhere else — and "the rule
+    // is there and cannot reach the environment" is what an author has no
+    // other way of finding out.
+    const { service } = walking([
+      route('unaddressable', '', 5, { urlTemplate: 'https://x.example.com/{attr.client}' }),
+    ]);
+
+    const { trace } = await service.probeSource('src-1', { force: true });
+
+    expect(trace[0].attempts[0]).toMatchObject({
+      status: 'skipped',
+      url: null,
+      httpStatus: null,
+      error: { code: 'errors.version.noAttribute', params: { key: 'client' } },
+    });
+  });
+
+  it('says an environment no rule claims was walked, rather than leaving it out', async () => {
+    const { service } = walking([route('elsewhere', '/info', 10, { environment: '^rec$' })]);
+
+    const { trace } = await service.probeSource('src-1', { force: true });
+
+    expect(trace).toMatchObject([{ repo: 'acme/api', environment: 'prod', attempts: [] }]);
+  });
+
+  it('strips the credentials an address carries', async () => {
+    // A trace is made to be pasted to somebody else. The reading itself keeps
+    // the address as requested — that is its own record.
+    answering({});
+    const { service, store } = walking([
+      route('creds', '', 10, { urlTemplate: 'https://probe:s3cret@prod.example.com/version' }),
+    ]);
+
+    const { trace } = await service.probeSource('src-1', { force: true });
+
+    expect(trace[0].attempts[0].url).toBe('https://prod.example.com/version');
+    expect(filed(store).url).toBe('https://probe:s3cret@prod.example.com/version');
+  });
+});

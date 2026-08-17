@@ -1,6 +1,6 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, Logger } from '@nestjs/common';
+import { ValidationPipe, Logger, type LogLevel } from '@nestjs/common';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/all-exceptions.filter';
@@ -13,6 +13,28 @@ import { AllExceptionsFilter } from './common/all-exceptions.filter';
  */
 const BODY_LIMIT = process.env.BODY_LIMIT ?? '5mb';
 
+/**
+ * How much the API says about what it is doing, quietest first.
+ *
+ * `LOG_LEVEL` names one of them and means "this and everything above it", which
+ * is the spelling every other service in a stack uses. `debug` is what somebody
+ * looking into a probe that reads nothing turns on — the version readings
+ * narrate every address they try at that level — and it is off by default
+ * because a hundred environments narrate a hundred times per cycle.
+ *
+ * An unreadable value falls back to the default rather than silencing the API:
+ * a typo in an environment variable must not be the reason nobody saw the
+ * errors.
+ */
+const LEVELS: LogLevel[] = ['error', 'warn', 'log', 'debug', 'verbose'];
+const DEFAULT_LEVEL = LEVELS.indexOf('log');
+
+function logLevels(): LogLevel[] {
+  const wanted = process.env.LOG_LEVEL?.trim().toLowerCase() as LogLevel | undefined;
+  const depth = wanted && LEVELS.includes(wanted) ? LEVELS.indexOf(wanted) : DEFAULT_LEVEL;
+  return LEVELS.slice(0, depth + 1);
+}
+
 async function bootstrap() {
   // `rawBody` keeps the unparsed body alongside the parsed one. Webhook
   // signatures are computed over the bytes as sent, and re-serializing the
@@ -20,6 +42,7 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: false,
     rawBody: true,
+    logger: logLevels(),
   });
   app.useBodyParser('json', { limit: BODY_LIMIT });
 
